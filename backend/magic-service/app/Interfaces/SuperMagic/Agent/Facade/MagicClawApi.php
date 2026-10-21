@@ -325,7 +325,7 @@ class MagicClawApi extends AbstractApi
         $dataIsolation = DataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
         $dataIsolation->setThirdPartyOrganizationCode($authorization->getOrganizationCode());
 
-        $sandboxId = $this->agentAppService->restartSandbox($dataIsolation, (int) $topicId);
+        $sandboxId = $this->agentAppService->restartMagicClawSandbox($dataIsolation, (int) $topicId);
 
         return ['sandbox_id' => $sandboxId];
     }

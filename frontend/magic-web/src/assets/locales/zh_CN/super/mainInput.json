@@ -3,10 +3,8 @@
 		"actions": {
 			"mention": "提及",
 			"plugin": "连接器",
-			"skills": "技能",
 			"webSearch": "网页搜索"
 		},
-		"addButton": "添加",
 		"closeAriaLabel": "关闭添加到对话弹窗",
 		"media": {
 			"camera": "相机",
@@ -14,9 +12,6 @@
 			"photos": "相册"
 		},
 		"title": "添加到对话"
-	},
-	"analyzeData": {
-		"placeholder": "描述你想创建的网站。\n按 Enter 发送；Shift + Enter 换行"
 	},
 	"attachments": {
 		"removeAriaLabel": "移除 {{fileName}}"
@@ -37,11 +32,6 @@
 		"title": "对话设置"
 	},
 	"crewSelectModal": {
-		"empty": {
-			"all": "暂无可用数字员工",
-			"my": "暂无我的数字员工",
-			"official": "暂无官方数字员工"
-		},
 		"tab": {
 			"my": "我的",
 			"official": "官方"

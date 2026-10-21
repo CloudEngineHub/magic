@@ -238,6 +238,8 @@ use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationsPlatformRe
 use App\Domain\OrganizationEnvironment\Repository\MagicEnvironmentsRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsEnvironmentRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsPlatformRepository;
+use App\Domain\Permission\Gateway\OrganizationAdminSyncInterface;
+use App\Domain\Permission\Gateway\NullOrganizationAdminSync;
 use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
@@ -533,6 +535,7 @@ $dependencies = [
     // rerank
 
     // permission
+    OrganizationAdminSyncInterface::class => NullOrganizationAdminSync::class,
     OperationPermissionRepositoryInterface::class => OperationPermissionRepository::class,
     RoleRepositoryInterface::class => RoleRepository::class,
     OrganizationAdminRepositoryInterface::class => OrganizationAdminRepository::class,

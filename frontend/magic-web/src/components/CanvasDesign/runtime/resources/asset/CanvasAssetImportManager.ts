@@ -87,6 +87,18 @@ interface PreparedAssetMedia {
 	source: Exclude<CanvasAssetImportResult["source"], "existing-connection">
 }
 
+interface AssetMediaDownloadSource {
+	assetId: string
+	mediaType: CanvasAssetMediaType
+	fileUrl: string
+	fileName?: string
+}
+
+type AssetMediaPreparation =
+	| { assetId: string; prepared: PreparedAssetMedia }
+	| { assetId: string; pending: Promise<PreparedAssetMedia> }
+	| { assetId: string; source: AssetMediaDownloadSource }
+
 const FALLBACK_FILE_EXTENSIONS: Record<CanvasAssetMediaType, string> = {
 	image: "png",
 	video: "mp4",
@@ -227,6 +239,18 @@ function normalizeAssetIds(assetIds: readonly string[]): string[] {
 	return Array.from(new Set(assetIds.map((assetId) => assetId.trim()).filter(Boolean)))
 }
 
+function getImportPolicyKey(request: CanvasAssetImportCommonRequest): string {
+	// A frame import and a reference import can share the same asset, but they
+	// have different seed semantics. Keep concurrent promises isolated by the
+	// slot and media policy as well as the target element.
+	return [
+		request.targetElementId,
+		request.targetKind,
+		request.slot.kind,
+		Array.from(new Set(request.allowedMediaTypes)).sort().join(","),
+	].join("\u0000")
+}
+
 function validateImportRequest(request: CanvasAssetImportCommonRequest): void {
 	if (request.allowedMediaTypes.length === 0) {
 		throw new Error("No asset media type is allowed for this slot")
@@ -238,6 +262,14 @@ function validateImportRequest(request: CanvasAssetImportCommonRequest): void {
 			request.allowedMediaTypes.some((mediaType) => mediaType !== "image"))
 	) {
 		throw new Error("Image generator asset imports only support image references")
+	}
+
+	if (
+		request.targetKind === "video-generator" &&
+		request.slot.kind === "frame" &&
+		request.allowedMediaTypes.some((mediaType) => mediaType !== "image")
+	) {
+		throw new Error("Video frame asset imports only support image media")
 	}
 }
 
@@ -268,19 +300,26 @@ export class CanvasAssetImportManager {
 		request: CanvasAssetImportRequest,
 	): Promise<CanvasAssetImportResult> {
 		const assetId = request.assetId.trim()
-		const connectionKey = `${request.targetElementId}\u0000${request.targetKind}\u0000${assetId}`
-		const existingConnectionPromise = this.connectionPromises.get(connectionKey)
+		const connectionKey = `${getImportPolicyKey(request)}\u0000${assetId}`
+		// A session guard belongs to the caller, so sharing a guarded promise
+		// across two editor sessions could let a stale caller cancel a current one.
+		const existingConnectionPromise = request.isCurrent
+			? undefined
+			: this.connectionPromises.get(connectionKey)
 		if (existingConnectionPromise) {
 			const result = await existingConnectionPromise
 			return { ...result, source: "existing-connection" }
 		}
 
 		const connectionPromise = this.importAndConnectInternal(request)
-		this.connectionPromises.set(connectionKey, connectionPromise)
+		if (!request.isCurrent) this.connectionPromises.set(connectionKey, connectionPromise)
 		try {
 			return await connectionPromise
 		} finally {
-			if (this.connectionPromises.get(connectionKey) === connectionPromise) {
+			if (
+				!request.isCurrent &&
+				this.connectionPromises.get(connectionKey) === connectionPromise
+			) {
 				this.connectionPromises.delete(connectionKey)
 			}
 		}
@@ -322,22 +361,30 @@ export class CanvasAssetImportManager {
 	): Promise<CanvasAssetImportResult[]> {
 		const assetIds = normalizeAssetIds(request.assetIds)
 		if (assetIds.length === 0) throw new Error("At least one asset id is required")
+		if (request.slot.kind === "frame" && assetIds.length !== 1) {
+			throw new Error("A frame asset import accepts exactly one asset")
+		}
 
-		const connectionKey = [request.targetElementId, request.targetKind, ...assetIds].join(
-			"\u0000",
-		)
-		const existingConnectionPromise = this.batchConnectionPromises.get(connectionKey)
+		const connectionKey = [getImportPolicyKey(request), ...assetIds].join("\u0000")
+		// See the single-item path above: guarded calls must keep their own
+		// lifecycle instead of sharing a promise with another editor session.
+		const existingConnectionPromise = request.isCurrent
+			? undefined
+			: this.batchConnectionPromises.get(connectionKey)
 		if (existingConnectionPromise) {
 			const results = await existingConnectionPromise
 			return results.map((result) => ({ ...result, source: "existing-connection" }))
 		}
 
 		const connectionPromise = this.importAndConnectManyInternal({ ...request, assetIds })
-		this.batchConnectionPromises.set(connectionKey, connectionPromise)
+		if (!request.isCurrent) this.batchConnectionPromises.set(connectionKey, connectionPromise)
 		try {
 			return await connectionPromise
 		} finally {
-			if (this.batchConnectionPromises.get(connectionKey) === connectionPromise) {
+			if (
+				!request.isCurrent &&
+				this.batchConnectionPromises.get(connectionKey) === connectionPromise
+			) {
 				this.batchConnectionPromises.delete(connectionKey)
 			}
 		}
@@ -420,10 +467,9 @@ export class CanvasAssetImportManager {
 		validateImportRequest(request)
 		assertImportTarget(this.canvas, request.targetElementId, request.targetKind)
 
-		const preparedAssets = await Promise.all(
-			request.assetIds.map((assetId) =>
-				this.prepareAssetMedia(assetId, request.allowedMediaTypes),
-			),
+		const preparedAssets = await this.prepareAssetMediaBatch(
+			request.assetIds,
+			request.allowedMediaTypes,
 		)
 		if (this.destroyed) throw new Error("Canvas asset import manager destroyed")
 		if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
@@ -451,22 +497,84 @@ export class CanvasAssetImportManager {
 			pendingConnections.push(prepared)
 		}
 		if (pendingConnections.length === 0) {
-			const existingResults = request.assetIds.map((assetId) => {
+			if (request.isCurrent?.() === false) throw new Error("Asset import session is stale")
+			// Already-connected media is selected by the editor's explicit asset
+			// insertion (ensurePromptMention). Registering a seed here would insert a
+			// second mention under the path-derived file name, which still carries the
+			// extension and therefore splits a fresh element-name chip into text.
+			return request.assetIds.map((assetId) => {
 				const result = resultsByAssetId.get(assetId)
 				if (!result) throw new Error("Failed to resolve imported asset media connections")
 				return result
 			})
-			this.registerReferenceSeed(request, existingResults)
-			return existingResults
+		}
+		const previousSeed =
+			request.slot.kind === "reference"
+				? this.canvas.connectionAssociationSeedManager.peek(request.targetElementId)
+				: null
+		// `register` replaces the previous seed before allocating the new one. Keep
+		// an explicit restoration path for a mocked/host implementation that throws
+		// after that replacement, so a failed batch cannot consume an older seed.
+		const restorePreviousSeed = () => {
+			this.canvas.connectionAssociationSeedManager.remove(request.targetElementId)
+			if (!previousSeed) return
+			const { id: previousSeedId, ...seed } = previousSeed
+			void previousSeedId
+			this.canvas.connectionAssociationSeedManager.register(seed)
 		}
 
 		const createdElements: string[] = []
 		let createdConnectionIds: string[] = []
+		let registeredSeedId: string | null = null
+		const rollbackSeed = () => {
+			if (!registeredSeedId) return
+			const currentSeed = this.canvas.connectionAssociationSeedManager.peek(
+				request.targetElementId,
+			)
+			if (currentSeed?.id !== registeredSeedId) return
+			restorePreviousSeed()
+			registeredSeedId = null
+		}
+		const rollbackCreatedBatch = () => {
+			const rollback = () => {
+				const connectionIds = new Set(createdConnectionIds)
+				// A connection manager may report an invalid batch after partially
+				// inserting edges. Include any edge from this batch that was not in
+				// the success response before deleting the newly created elements.
+				this.canvas.connectionManager
+					.getUpstreamConnections(request.targetElementId)
+					.forEach((connection) => {
+						if (createdElements.includes(connection.sourceElementId)) {
+							connectionIds.add(connection.id)
+						}
+					})
+				if (connectionIds.size > 0) {
+					this.canvas.connectionManager.removeConnections([...connectionIds], {
+						emitChange: false,
+					})
+				}
+				createdElements.forEach((elementId) => {
+					if (this.canvas.elementManager.getElementData(elementId)) {
+						this.canvas.elementManager.delete(elementId)
+					}
+				})
+			}
+			// Rollback after the transaction must not create a second undo step.
+			this.canvas.historyManager.runTransaction(rollback, () => false)
+		}
 		const connectionResult = this.canvas.historyManager.runTransaction(
 			() => {
 				const rollback = () => {
-					if (createdConnectionIds.length > 0) {
-						this.canvas.connectionManager.removeConnections(createdConnectionIds, {
+					const connectionIds = new Set(createdConnectionIds)
+					this.canvas.connectionManager
+						.getUpstreamConnections(request.targetElementId)
+						.forEach((connection) => {
+							if (createdElements.includes(connection.sourceElementId)) {
+								connectionIds.add(connection.id)
+							}
+						})
+					if (connectionIds.size > 0) {
+						this.canvas.connectionManager.removeConnections([...connectionIds], {
 							emitChange: false,
 						})
 					}
@@ -478,6 +586,7 @@ export class CanvasAssetImportManager {
 				}
 
 				try {
+					if (request.isCurrent?.() === false) return null
 					for (const prepared of pendingConnections) {
 						const elementId = this.createMediaElement(prepared, request.targetElementId)
 						if (!elementId) {
@@ -495,12 +604,17 @@ export class CanvasAssetImportManager {
 					})
 					if (
 						connection.status !== "created" ||
-						connection.connectionIds.length !== createdElements.length
+						connection.connectionIds.length !== createdElements.length ||
+						connection.connectionIds.some((connectionId) => !connectionId)
 					) {
 						rollback()
 						return null
 					}
 					createdConnectionIds = connection.connectionIds
+					if (request.isCurrent?.() === false) {
+						rollback()
+						return null
+					}
 					return connection
 				} catch {
 					rollback()
@@ -512,6 +626,10 @@ export class CanvasAssetImportManager {
 
 		if (!connectionResult) {
 			throw new Error("Failed to create asset media connections")
+		}
+		if (request.isCurrent?.() === false) {
+			rollbackCreatedBatch()
+			throw new Error("Asset import session is stale")
 		}
 
 		pendingConnections.forEach((prepared, index) => {
@@ -530,11 +648,31 @@ export class CanvasAssetImportManager {
 
 		const results = request.assetIds.map((assetId) => resultsByAssetId.get(assetId))
 		if (results.some((result) => !result)) {
+			rollbackCreatedBatch()
 			throw new Error("Failed to resolve imported asset media connections")
 		}
 		const resolvedResults = results as CanvasAssetImportResult[]
 
-		this.registerReferenceSeed(request, resolvedResults)
+		try {
+			// Only newly created connections need the one-shot seed. Reused bindings
+			// are already inserted by the editor's explicit asset insertion.
+			registeredSeedId = this.registerReferenceSeed(
+				request,
+				resolvedResults.filter((result) => result.source !== "existing-connection"),
+			)
+		} catch (error) {
+			// `register` may remove the prior seed before throwing. The normal
+			// rollback only has an id after successful registration, so restore the
+			// captured seed explicitly on this failure path.
+			restorePreviousSeed()
+			rollbackCreatedBatch()
+			throw error
+		}
+		if (request.isCurrent?.() === false) {
+			rollbackSeed()
+			rollbackCreatedBatch()
+			throw new Error("Asset import session is stale")
+		}
 
 		return resolvedResults
 	}
@@ -542,10 +680,10 @@ export class CanvasAssetImportManager {
 	private registerReferenceSeed(
 		request: CanvasAssetImportCommonRequest,
 		results: CanvasAssetImportResult[],
-	): void {
-		if (request.slot.kind !== "reference" || results.length === 0) return
+	): string | null {
+		if (request.slot.kind !== "reference" || results.length === 0) return null
 
-		this.canvas.connectionAssociationSeedManager.register({
+		return this.canvas.connectionAssociationSeedManager.register({
 			targetElementId: request.targetElementId,
 			targetKind: request.targetKind,
 			rootElementIds: results.map((result) => result.elementId),
@@ -570,10 +708,18 @@ export class CanvasAssetImportManager {
 		assetId: string,
 		allowedMediaTypes: readonly CanvasAssetMediaType[],
 	): Promise<PreparedAssetMedia> {
+		const preparation = await this.resolveAssetMediaPreparation(assetId, allowedMediaTypes)
+		if ("prepared" in preparation) return preparation.prepared
+		if ("pending" in preparation) return preparation.pending
+		return this.downloadAndUpload(preparation.source)
+	}
+
+	private async resolveAssetMediaPreparation(
+		assetId: string,
+		allowedMediaTypes: readonly CanvasAssetMediaType[],
+	): Promise<AssetMediaPreparation> {
 		const existing = this.findBinding(assetId, allowedMediaTypes)
-		if (existing) {
-			return this.fromBinding(existing)
-		}
+		if (existing) return { assetId, prepared: this.fromBinding(existing) }
 
 		const resource = await this.canvas.assetResourceManager.getResource(assetId, {
 			forceRefresh: true,
@@ -585,7 +731,7 @@ export class CanvasAssetImportManager {
 
 		// 素材详情请求期间可能已有另一个入口完成落图，复用文件或上传前再扫描一次。
 		const refreshedBinding = this.findBinding(assetId, allowedMediaTypes)
-		if (refreshedBinding) return this.fromBinding(refreshedBinding)
+		if (refreshedBinding) return { assetId, prepared: this.fromBinding(refreshedBinding) }
 
 		for (const fileName of getAssetFileNameCandidates({
 			mediaType: resource.mediaType,
@@ -599,39 +745,172 @@ export class CanvasAssetImportManager {
 			if (!existingFile) continue
 			return {
 				assetId,
-				...existingFile,
-				dimensions: await resolveImportedMediaDimensions({
+				prepared: {
 					assetId,
-					mediaType: resource.mediaType,
-					fileUrl: resource.fileUrl,
-				}),
-				source: "existing-file",
+					...existingFile,
+					dimensions: await resolveImportedMediaDimensions({
+						assetId,
+						mediaType: resource.mediaType,
+						fileUrl: resource.fileUrl,
+					}),
+					source: "existing-file",
+				},
 			}
 		}
 
 		if (!resource.fileUrl) throw new Error("Asset file URL is unavailable")
 
 		const pending = this.importPromises.get(assetId)
-		if (pending) {
-			const prepared = await pending
-			if (!allowedMediaTypes.includes(prepared.mediaType)) {
-				throw new Error("Asset media type is not allowed for this slot")
-			}
-			return prepared
+		if (pending) return { assetId, pending }
+
+		return {
+			assetId,
+			source: {
+				assetId,
+				mediaType: resource.mediaType,
+				fileUrl: resource.fileUrl,
+				fileName: resource.fileName,
+			},
+		}
+	}
+
+	/**
+	 * Batch imports download assets in parallel, then upload each media directory once.
+	 * The result order stays aligned with the selected asset order for connection seeds.
+	 */
+	private async prepareAssetMediaBatch(
+		assetIds: readonly string[],
+		allowedMediaTypes: readonly CanvasAssetMediaType[],
+	): Promise<PreparedAssetMedia[]> {
+		const directResults = new Map<string, PreparedAssetMedia>()
+		const pendingResults = new Map<string, Promise<PreparedAssetMedia>>()
+		const downloadSourcesByIndex: Array<AssetMediaDownloadSource | undefined> = []
+
+		await Promise.all(
+			assetIds.map(async (assetId, index) => {
+				const preparation = await this.resolveAssetMediaPreparation(
+					assetId,
+					allowedMediaTypes,
+				)
+				if ("prepared" in preparation) {
+					directResults.set(assetId, preparation.prepared)
+					return
+				}
+				if ("pending" in preparation) {
+					pendingResults.set(assetId, preparation.pending)
+					return
+				}
+				downloadSourcesByIndex[index] = preparation.source
+			}),
+		)
+		const downloadSources = downloadSourcesByIndex.filter(
+			(source): source is AssetMediaDownloadSource => Boolean(source),
+		)
+
+		const groupedSources = new Map<CanvasAssetMediaType, AssetMediaDownloadSource[]>()
+		for (const source of downloadSources) {
+			const group = groupedSources.get(source.mediaType) ?? []
+			group.push(source)
+			groupedSources.set(source.mediaType, group)
+		}
+		const batchPendingResults = new Map<string, Promise<PreparedAssetMedia>>()
+		for (const sources of groupedSources.values()) {
+			const batchPromise = this.downloadAndUploadBatch(sources)
+			sources.forEach((source, index) => {
+				const pending = batchPromise.then((prepared) => {
+					const result = prepared[index]
+					if (!result) throw new Error("Asset upload result is missing")
+					return result
+				})
+				batchPendingResults.set(source.assetId, pending)
+				this.importPromises.set(source.assetId, pending)
+			})
 		}
 
-		const importPromise = this.downloadAndUpload({
-			assetId,
-			mediaType: resource.mediaType,
-			fileUrl: resource.fileUrl,
-			fileName: resource.fileName,
-		})
-		this.importPromises.set(assetId, importPromise)
 		try {
-			return await importPromise
+			await Promise.all([...batchPendingResults.values(), ...pendingResults.values()])
+			for (const [assetId, pending] of batchPendingResults) {
+				directResults.set(assetId, await pending)
+			}
+			for (const [assetId, pending] of pendingResults) {
+				directResults.set(assetId, await pending)
+			}
 		} finally {
-			if (this.importPromises.get(assetId) === importPromise) {
-				this.importPromises.delete(assetId)
+			for (const [assetId, pending] of batchPendingResults) {
+				if (this.importPromises.get(assetId) === pending)
+					this.importPromises.delete(assetId)
+			}
+		}
+
+		return assetIds.map((assetId) => {
+			const prepared = directResults.get(assetId)
+			if (!prepared) throw new Error("Failed to prepare asset media")
+			return prepared
+		})
+	}
+
+	private async downloadAndUploadBatch(
+		sources: readonly AssetMediaDownloadSource[],
+	): Promise<PreparedAssetMedia[]> {
+		const downloaded = await Promise.all(
+			sources.map(async (source) => {
+				const response = await fetch(source.fileUrl, { cache: "default" })
+				if (!response.ok)
+					throw new Error(`Failed to download asset media: ${response.status}`)
+				const blob = await response.blob()
+				if (blob.size === 0) throw new Error("Downloaded asset media is empty")
+
+				const mimeType = blob.type || FALLBACK_MIME_TYPES[source.mediaType]
+				const fileName = buildAssetFileName({ ...source, mimeType })
+				const file = new File([blob], fileName, { type: mimeType })
+				const dimensions = await resolveImportedMediaDimensions({
+					assetId: source.assetId,
+					mediaType: source.mediaType,
+					file,
+					fileUrl: source.fileUrl,
+				})
+				return { source, file, fileName, dimensions }
+			}),
+		)
+
+		const uploadResults = await this.canvas.canvasFileUploadManager.uploadDirect(
+			downloaded.map(({ file }) => file),
+			undefined,
+			undefined,
+			{ uploadSubDir: getAssetUploadSubDir(sources[0]?.mediaType ?? "image") },
+		)
+		if (uploadResults.length !== downloaded.length) {
+			throw new Error("Asset upload result count does not match input files")
+		}
+
+		return downloaded.map(({ source, fileName, dimensions }, index) => {
+			const uploadResult = uploadResults[index]
+			if (!uploadResult?.path) throw new Error("Asset upload returned no workspace path")
+			this.primeMediaCache(source.mediaType, uploadResult)
+			return {
+				assetId: source.assetId,
+				mediaType: source.mediaType,
+				workspacePath: uploadResult.path,
+				fileName: uploadResult.fileName || fileName,
+				dimensions,
+				source: "downloaded",
+			}
+		})
+	}
+
+	private async downloadAndUpload(
+		options: AssetMediaDownloadSource,
+	): Promise<PreparedAssetMedia> {
+		const pending = this.downloadAndUploadBatch([options]).then(([prepared]) => {
+			if (!prepared) throw new Error("Asset upload result is missing")
+			return prepared
+		})
+		this.importPromises.set(options.assetId, pending)
+		try {
+			return await pending
+		} finally {
+			if (this.importPromises.get(options.assetId) === pending) {
+				this.importPromises.delete(options.assetId)
 			}
 		}
 	}
@@ -648,45 +927,6 @@ export class CanvasAssetImportManager {
 			...binding,
 			dimensions: getRememberedAssetMediaDimensions(binding.assetId) ?? binding.dimensions,
 			source: "existing-binding",
-		}
-	}
-
-	private async downloadAndUpload(options: {
-		assetId: string
-		mediaType: CanvasAssetMediaType
-		fileUrl: string
-		fileName?: string
-	}): Promise<PreparedAssetMedia> {
-		const response = await fetch(options.fileUrl, { cache: "default" })
-		if (!response.ok) throw new Error(`Failed to download asset media: ${response.status}`)
-		const blob = await response.blob()
-		if (blob.size === 0) throw new Error("Downloaded asset media is empty")
-
-		const mimeType = blob.type || FALLBACK_MIME_TYPES[options.mediaType]
-		const fileName = buildAssetFileName({ ...options, mimeType })
-		const file = new File([blob], fileName, { type: mimeType })
-		const dimensions = await resolveImportedMediaDimensions({
-			assetId: options.assetId,
-			mediaType: options.mediaType,
-			file,
-			fileUrl: options.fileUrl,
-		})
-		const [uploadResult] = await this.canvas.canvasFileUploadManager.uploadDirect(
-			[file],
-			undefined,
-			undefined,
-			{ uploadSubDir: getAssetUploadSubDir(options.mediaType) },
-		)
-		if (!uploadResult?.path) throw new Error("Asset upload returned no workspace path")
-		this.primeMediaCache(options.mediaType, uploadResult)
-
-		return {
-			assetId: options.assetId,
-			mediaType: options.mediaType,
-			workspacePath: uploadResult.path,
-			fileName: uploadResult.fileName || fileName,
-			dimensions,
-			source: "downloaded",
 		}
 	}
 

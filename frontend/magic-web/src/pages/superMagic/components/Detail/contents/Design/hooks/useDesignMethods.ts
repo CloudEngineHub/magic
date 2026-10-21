@@ -235,6 +235,22 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			const response = await AssetsApi.getAssetCompliance(assetId)
 			return toCanvasAssetComplianceState(response)
 		}, [])
+	const getAssetComplianceStatuses: NonNullable<
+		CanvasDesignMethods["getAssetComplianceStatuses"]
+	> = useCallback(
+		async (assetIds: string[]): Promise<CanvasAssetComplianceState[]> => {
+			try {
+				const responses = await AssetsApi.batchGetAssetCompliance({ asset_ids: assetIds })
+				return responses.map(toCanvasAssetComplianceState)
+			} catch {
+				// Older deployments may not expose the batch endpoint yet. Preserve
+				// polling compatibility by falling back to the existing single-item API.
+				if (assetIds.length === 0) return []
+				return Promise.all(assetIds.map((assetId) => getAssetComplianceStatus(assetId)))
+			}
+		},
+		[getAssetComplianceStatus],
+	)
 
 	const getOrCreateImagesDir = useGetOrCreateImagesDir({
 		currentFile,
@@ -1012,6 +1028,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 			getAssetResourceInfo,
 			getAssetResourceInfos,
 			getAssetComplianceStatus,
+			getAssetComplianceStatuses,
 			openSaveAssetToLibraryDialog,
 			openSaveLocalAssetDialog,
 			openEditAssetDialog,
@@ -1079,6 +1096,7 @@ export function useDesignMethods(options: UseDesignMethodsOptions): CanvasDesign
 		getAssetResourceInfo,
 		getAssetResourceInfos,
 		getAssetComplianceStatus,
+		getAssetComplianceStatuses,
 		openSaveAssetToLibraryDialog,
 		openSaveLocalAssetDialog,
 		openEditAssetDialog,

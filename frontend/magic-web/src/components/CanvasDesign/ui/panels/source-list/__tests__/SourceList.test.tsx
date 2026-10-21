@@ -92,6 +92,36 @@ describe("SourceList selection", () => {
 })
 
 describe("SourceList preview", () => {
+	it("shows a non-interactive play indicator only for video resources", () => {
+		const { container } = renderSourceList(
+			<SourceList
+				options={[
+					{
+						kind: "slot",
+						label: "参考视频",
+						value: "reference-video",
+						slotIndex: 0,
+						resourcePath: "asset://reference-video",
+						resourceMediaType: "video",
+					},
+					{
+						kind: "slot",
+						label: "参考图片",
+						value: "reference-image",
+						slotIndex: 1,
+						resourcePath: "./images/reference.png",
+					},
+				]}
+			/>,
+		)
+
+		const videoIndicators = container.querySelectorAll(
+			'[data-testid="source-list-video-indicator"]',
+		)
+		expect(videoIndicators).toHaveLength(1)
+		expect(videoIndicators[0]).toHaveAttribute("aria-hidden", "true")
+	})
+
 	it("hides preview for a resource deleted from the attachment snapshot", () => {
 		renderSourceList(
 			<SourceList

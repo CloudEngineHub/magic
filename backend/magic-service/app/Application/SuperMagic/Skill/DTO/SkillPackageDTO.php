@@ -14,6 +14,8 @@ final readonly class SkillPackageDTO
         public string $packageName,
         public string $packageDescription,
         public ?string $skillCode = null,
+        public array $manifest = [],
+        public string $sha256 = '',
     ) {
     }
 }

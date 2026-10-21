@@ -1,5 +1,5 @@
 import { IDBFactory } from "fake-indexeddb"
-import { shadow } from "@/utils/shadow"
+import { shadow, shadowV2 } from "@/utils/shadow"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { enqueueOptimisticSave, FileSaveQueue, stringifySaveContent } from "../FileSaveQueue"
 import { createMemoryFileSavePersistence, IndexedDbFileSavePersistence } from "../persistence"
@@ -47,6 +47,21 @@ describe("FileSaveQueue", () => {
 			backoffMs: [1000, 3000, 8000],
 		})
 	}
+
+	it("恢复 V2 草稿时提供原文而不改写待提交载荷", async () => {
+		const content = shadowV2("저\u1000\ufeff")
+		const queue = createQueue()
+		queue.enqueue(
+			createJob({
+				content,
+				enableShadow: true,
+				persist: vi.fn().mockRejectedValue(new FileSavePermanentError("mock-error")),
+			}),
+		)
+		await vi.waitFor(() => expect(queue.getStatus("file-1")).toBe(FILE_SAVE_STATUS.Failed))
+		expect(queue.peekUnsyncedDraft("file-1")).toBe("저\u1000\ufeff")
+		expect((await persistence.get("file-1"))?.content).toBe(content)
+	})
 
 	it("coalesces to the latest content while a persist is in flight", async () => {
 		let resolveFirst: (() => void) | undefined

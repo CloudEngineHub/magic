@@ -68,6 +68,23 @@ def test_video_production_agent_points_to_existing_canvas_manager_references():
         assert (CANVAS_MANAGER_DIR / relative_path).is_file()
 
 
+def test_professional_video_reference_propagates_no_facial_expression_constraints():
+    """专业视频规则应将无表情约束贯穿分镜图和镜头视频提示词。"""
+    reference = (
+        CANVAS_MANAGER_DIR / "references" / "professional-video-production.md"
+    ).read_text(encoding="utf-8")
+
+    for phrase in (
+        "hard cross-stage visual constraint",
+        "saved storyboard",
+        "shot reference-image prompt",
+        "shot-video prompt",
+        "completely neutral, expressionless face",
+        "do not assume that a reference image is expressionless",
+    ):
+        assert phrase in reference
+
+
 def test_video_production_agent_mode_routes_to_new_agent():
     """视频制作模式仍然路由到 video-production.agent。"""
     assert AgentMode.VIDEO_PRODUCTION.value == "video-production"

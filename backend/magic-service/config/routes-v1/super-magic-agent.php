@@ -107,6 +107,7 @@ Router::addGroup('/api/v2/super-magic', static function () {
         Router::delete('/{code}/skills', [SuperMagicAgentApi::class, 'removeAgentSkills']);
 
         // 获取智能体协作者列表。
+        Router::post('/{code}/transfer', [SuperMagicAgentApi::class, 'transfer']);
         Router::get('/{code}/collaborators', [SuperMagicAgentCollaboratorApi::class, 'index']);
         // 新增智能体协作者。
         Router::post('/{code}/collaborators', [SuperMagicAgentCollaboratorApi::class, 'store']);

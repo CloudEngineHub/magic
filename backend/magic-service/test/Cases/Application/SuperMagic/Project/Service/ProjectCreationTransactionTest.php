@@ -7,13 +7,19 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperMagic\Project\Service;
 
+use App\Application\SuperMagic\Common\Collaboration\Policy\ResourceAccessPolicyService;
 use App\Application\SuperMagic\File\DTO\Request\CreateAudioProjectRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\CreateAgentProjectRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\CreateMicroAppProjectRequestDTO;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
+use App\Application\SuperMagic\Skill\Service\SkillAppService;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
+use App\Domain\Contact\Repository\Facade\MagicDepartmentUserRepositoryInterface;
 use App\Domain\Contact\Repository\Facade\MagicUserSettingRepositoryInterface;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
+use App\Domain\Group\Repository\Facade\MagicGroupRepositoryInterface;
+use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
+use App\Domain\Permission\Service\OperationPermissionDomainService;
 use App\Domain\SuperMagic\Common\Share\Constant\ResourceType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
 use App\Domain\SuperMagic\Common\Share\Service\ResourceShareDomainService;
@@ -28,17 +34,31 @@ use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
+use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
+use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Domain\SuperMagic\Workspace\Entity\WorkspaceEntity;
 use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
+use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
+use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
+use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface;
 use App\Infrastructure\Core\Exception\BusinessException;
 use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\SuperMagic\Project\DTO\Request\CreateProjectRequestDTO;
 use App\Interfaces\SuperMagic\Project\DTO\Request\CreateSpecialProjectRequestDTO;
 use App\Interfaces\SuperMagic\Project\DTO\Request\ForkProjectRequestDTO;
+use App\Interfaces\SuperMagic\Skill\DTO\Request\CreateSkillDraftRequestDTO;
 use Hyperf\Amqp\Producer;
+use Hyperf\Context\ApplicationContext;
+use Hyperf\Database\ConnectionResolverInterface;
+use Hyperf\Database\MySqlConnection;
+use Hyperf\DbConnection\Db;
+use Hyperf\Redis\Redis;
 use HyperfTest\Cases\Application\SuperMagic\Topic\Service\CreationTransactionTestCase;
+use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Container\ContainerInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use ReflectionClass;
 use RuntimeException;
@@ -46,6 +66,138 @@ use RuntimeException;
 /** @internal */
 final class ProjectCreationTransactionTest extends CreationTransactionTestCase
 {
+    private ?SkillEntity $skill = null;
+
+    public function testConversationSkillCreationUsesOneTransactionAndPreservesDefault(): void
+    {
+        try {
+            $result = $this->skillService()->createDraft($this->requestContext(), $this->draftRequest());
+        } catch (BusinessException $error) {
+            self::fail('Draft creation failed before identity preparation could complete: ' . implode(', ', $this->events) . '; ' . $error->getMessage());
+        }
+        self::assertSame('7', $result['project_id']);
+        self::assertSame('skill-code', $result['skill_code']);
+        self::assertSame(7, $this->skill?->getProjectId());
+        self::assertSame(1, count(array_keys($this->events, 'begin', true)));
+        self::assertSame('identity', $this->events[0]);
+        self::assertSame(['bind-skill', 'commit', 'event'], array_slice($this->events, -3));
+        self::assertNotContains('default', $this->events);
+        self::assertSame(0, $this->transactionLevel);
+    }
+
+    public function testWebSkillBindingFinalizesDefaultAfterBinding(): void
+    {
+        $service = $this->skillService(existingSkill: true);
+        try {
+            $result = $service->createAndBindProject($this->requestContext(), 'Demo', 'skill-code');
+        } catch (BusinessException $error) {
+            self::fail('Web binding failed before identity preparation could complete: ' . implode(', ', $this->events) . '; ' . $error->getMessage());
+        }
+        self::assertSame('7', $result['project']['id']);
+        self::assertSame(['bind-skill', 'default', 'commit', 'event'], array_slice($this->events, -4));
+        self::assertSame('identity', $this->events[0]);
+    }
+
+    public function testSkillCreationRetryReusesTheCommittedBinding(): void
+    {
+        $service = $this->skillService();
+        $first = $service->createDraft($this->requestContext(), $this->draftRequest());
+        $events = $this->events;
+        $second = $service->createDraft($this->requestContext(), $this->draftRequest());
+        self::assertSame($first, $second);
+        self::assertSame($events, $this->events);
+    }
+
+    public function testExistingWebSkillBindingDoesNotPrepareAnotherProjectOrChangeDefault(): void
+    {
+        $service = $this->skillService();
+        $service->createDraft($this->requestContext(), $this->draftRequest());
+        $events = $this->events;
+        self::assertSame(['project' => ['id' => '7']], $service->createAndBindProject($this->requestContext(), 'Renamed', 'skill-code'));
+        self::assertSame($events, $this->events);
+    }
+
+    #[DataProvider('earlySkillFailures')]
+    public function testEarlyProjectFailureDoesNotCreateOrBindSkill(string $failure): void
+    {
+        try {
+            $this->skillService($failure)->createDraft($this->requestContext(), $this->draftRequest());
+            self::fail('Expected project creation failure');
+        } catch (BusinessException) {
+            self::assertNull($this->skill);
+            self::assertNotContains('create-skill', $this->events);
+            self::assertNotContains('default', $this->events);
+            self::assertNotContains('commit', $this->events);
+            self::assertNotContains('event', $this->events);
+            self::assertSame(0, $this->transactionLevel);
+        }
+    }
+
+    public static function earlySkillFailures(): array
+    {
+        return [['identity'], ['project-root']];
+    }
+
+    public function testUnauthorizedBindingDoesNotPrepareProjectOrChangeDefault(): void
+    {
+        $service = $this->skillService(existingSkill: true);
+        $service->expects(self::once())->method('assertSkillEditable')->willThrowException(new RuntimeException('Access denied'));
+        try {
+            $service->createAndBindProject($this->requestContext(), 'Demo', 'skill-code');
+            self::fail('Expected permission rejection');
+        } catch (RuntimeException $error) {
+            self::assertSame('Access denied', $error->getMessage());
+            self::assertSame([], $this->events);
+            self::assertNull($this->skill?->getProjectId());
+        }
+    }
+
+    public function testSkillBindingFailureRollsBackTheNewDraftAndDoesNotPublish(): void
+    {
+        $service = $this->skillService('bind-skill');
+        try {
+            $service->createDraft($this->requestContext(), $this->draftRequest());
+            self::fail('Expected binding failure');
+        } catch (BusinessException) {
+            self::assertNull($this->skill);
+            self::assertSame('rollback', end($this->events));
+            self::assertContains('bind-skill', $this->events);
+            self::assertNotContains('default', $this->events);
+            self::assertNotContains('commit', $this->events);
+            self::assertNotContains('event', $this->events);
+            self::assertSame(0, $this->transactionLevel);
+        }
+    }
+
+    public function testWebBindingFailureKeepsExistingDraftUnbound(): void
+    {
+        $service = $this->skillService('bind-skill', existingSkill: true);
+        try {
+            $service->createAndBindProject($this->requestContext(), 'Demo', 'skill-code');
+            self::fail('Expected binding failure');
+        } catch (BusinessException) {
+            self::assertNotNull($this->skill);
+            self::assertNull($this->skill->getProjectId());
+            self::assertNotContains('default', $this->events);
+            self::assertNotContains('event', $this->events);
+        }
+    }
+
+    public function testSkillRetryAfterPostCommitEventFailureDoesNotCreateAnotherProject(): void
+    {
+        $service = $this->skillService('event');
+        try {
+            $service->createDraft($this->requestContext(), $this->draftRequest());
+            self::fail('Expected event failure');
+        } catch (BusinessException) {
+            self::assertSame(7, $this->skill?->getProjectId());
+            self::assertNotContains('rollback', $this->events);
+        }
+        $events = $this->events;
+        self::assertSame('7', $service->createDraft($this->requestContext(), $this->draftRequest())['project_id']);
+        self::assertSame($events, $this->events);
+    }
+
     #[DataProvider('owners')]
     public function testEveryOwnerFinalizesAfterAllBusinessWork(string $owner, string $lastBusinessStep): void
     {
@@ -135,6 +287,94 @@ final class ProjectCreationTransactionTest extends CreationTransactionTestCase
         }
     }
 
+    private function draftRequest(): CreateSkillDraftRequestDTO
+    {
+        $request = new CreateSkillDraftRequestDTO();
+        $request->requestId = 'same-request';
+        $request->name = 'Weekly feedback';
+        $request->description = 'Use when preparing customer feedback reports';
+        return $request;
+    }
+
+    /** Exercise both real application services and Hyperf transaction nesting; stub persistence only. */
+    private function skillService(?string $failure = null, bool $existingSkill = false): SkillAppService
+    {
+        $pdo = $this->createMock(PDO::class);
+        $snapshot = null;
+        $pdo->method('beginTransaction')->willReturnCallback(function () use (&$snapshot): bool {
+            $snapshot = $this->skill === null ? null : clone $this->skill;
+            $this->transactionLevel = 1;
+            $this->events[] = 'begin';
+            return true;
+        });
+        $pdo->method('commit')->willReturnCallback(function (): bool {
+            $this->transactionLevel = 0;
+            $this->events[] = 'commit';
+            return true;
+        });
+        $pdo->method('rollBack')->willReturnCallback(function () use (&$snapshot): bool {
+            $this->skill = $snapshot;
+            $this->transactionLevel = 0;
+            $this->events[] = 'rollback';
+            return true;
+        });
+        $pdo->method('inTransaction')->willReturnCallback(fn () => $this->transactionLevel > 0);
+        $pdo->method('exec')->willReturn(0);
+        $connection = new MySqlConnection($pdo, 'unit_test');
+        $resolver = $this->createMock(ConnectionResolverInterface::class);
+        $resolver->method('connection')->willReturn($connection);
+        $this->services[ConnectionResolverInterface::class] = $resolver;
+        foreach ([ThirdPlatformDataIsolationManagerInterface::class, SubscriptionManagerInterface::class, OrganizationInfoManagerInterface::class] as $interface) {
+            $this->services[$interface] = $this->createMock($interface);
+        }
+        $container = $this->getMockBuilder(ContainerInterface::class)->onlyMethods(['get', 'has'])->addMethods(['make'])->getMock();
+        $container->method('get')->willReturnCallback(fn ($id) => $this->services[$id] ?? throw new RuntimeException('Unexpected dependency: ' . $id));
+        $container->method('make')->willReturnCallback(fn ($id) => $this->services[$id] ?? throw new RuntimeException('Unexpected dependency: ' . $id));
+        $container->method('has')->willReturnCallback(fn ($id) => isset($this->services[$id]));
+        $this->services[Db::class] = new Db($container);
+        ApplicationContext::setContainer($container);
+        $skillDomain = $this->createMock(SkillDomainService::class);
+        $skillDomain->method('findOptionalSkillByCode')->willReturnCallback(fn () => $this->skill);
+        $skillDomain->method('findUserSkillByCode')->willReturnCallback(fn () => $this->skill ?? throw new RuntimeException('Skill not found'));
+        $skillDomain->method('saveSkill')->willReturnCallback(function ($scope, SkillEntity $skill) use ($failure): SkillEntity {
+            self::assertSame(1, $this->transactionLevel);
+            if ($skill->getProjectId()) {
+                $this->events[] = 'bind-skill';
+                if ($failure === 'bind-skill') {
+                    throw new RuntimeException('Binding failed');
+                }
+            } else {
+                $this->events[] = 'create-skill';
+            }
+            $skill->setId(123);
+            return $this->skill = $skill;
+        });
+        $skillDomain->method('lockSkill')->willReturnCallback(function (): void {
+            self::assertSame(1, $this->transactionLevel);
+        });
+        if ($existingSkill) {
+            $this->skill = new SkillEntity(['id' => 123, 'code' => 'skill-code', 'organization_code' => 'org', 'creator_id' => 'user', 'source_type' => 'DIALOGUE_CREATION', 'name_i18n' => ['default' => 'Demo']]);
+        }
+        $redis = $this->getMockBuilder(Redis::class)->disableOriginalConstructor()->addMethods(['get', 'setex'])->getMock();
+        $redis->method('get')->willReturn('skill-code');
+        $redis->method('setex')->willReturn(true);
+        $service = $this->getMockBuilder(SkillAppService::class)->disableOriginalConstructor()
+            ->onlyMethods(['assertSkillEditable', 'acquireImportLock', 'releaseImportLock', 'createSkillDataIsolation'])->getMock();
+        $service->method('acquireImportLock')->willReturn('owner');
+        $service->method('createSkillDataIsolation')->willReturn(SkillDataIsolation::create('org', 'user'));
+        $policy = $this->createMock(ResourceAccessPolicyService::class);
+        $permissions = $this->createMock(OperationPermissionRepositoryInterface::class);
+        $permissions->method('save')->willReturnArgument(1);
+        $this->inject($service, [
+            'projectAppService' => $this->service($failure),
+            'skillDomainService' => $skillDomain,
+            'resourceAccessPolicyService' => $policy,
+            'operationPermissionDomainService' => new OperationPermissionDomainService($permissions, $this->createMock(MagicGroupRepositoryInterface::class), $this->createMock(MagicDepartmentUserRepositoryInterface::class)),
+            'redis' => $redis,
+        ]);
+        return $service;
+    }
+
     private function request(string $owner): object
     {
         return match ($owner) {
@@ -170,6 +410,7 @@ final class ProjectCreationTransactionTest extends CreationTransactionTestCase
         });
         $projects = $this->createMock(ProjectDomainService::class);
         $projects->method('createProject')->willReturn($project);
+        $projects->method('getProjectNotUserId')->willReturn($project);
         $projects->method('saveProjectEntity')->willReturnCallback(function ($entity) use ($record) {
             $record('project');
             return $entity;

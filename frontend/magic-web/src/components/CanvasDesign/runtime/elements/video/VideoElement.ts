@@ -56,7 +56,8 @@ import {
 } from "../../interaction/media-edit-recovery/MediaEditRecoveryManager"
 import { resolveVideoDisplayState, type VideoDisplayState } from "./videoDisplayState"
 
-type VideoRenderStage = "empty" | "uploading" | "generating" | "loading" | "ready" | "error"
+type VideoRenderStage =
+	"empty" | "uploading" | "compliance" | "generating" | "loading" | "ready" | "error"
 
 interface VideoRenderState {
 	stage: VideoRenderStage
@@ -990,6 +991,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 				this.renderPreview(group, width, height)
 				break
 			case "loading":
+			case "compliance":
 			case "generating":
 			case "uploading":
 			case "empty":
@@ -1113,7 +1115,10 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			stage: VideoRenderStage
 		},
 	): void {
-		const isGeneratingStage = options.stage === "generating" || options.stage === "uploading"
+		const isGeneratingStage =
+			options.stage === "compliance" ||
+			options.stage === "generating" ||
+			options.stage === "uploading"
 		const status = this.getVideoStatus()
 		const request = this.getVideoRequest()
 		const shouldShowRetryButton =
@@ -1317,9 +1322,11 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					stage:
 						state.status === "uploading"
 							? "uploading"
-							: state.status === "generating" || state.status === "composing"
-								? "generating"
-								: "loading",
+							: state.status === "compliance"
+								? "compliance"
+								: state.status === "generating" || state.status === "composing"
+									? "generating"
+									: "loading",
 					placeholderMode: "loading",
 					text,
 				}
@@ -1330,11 +1337,14 @@ export class VideoElement extends BaseElement<VideoElementData> {
 					stage:
 						state.status === "uploading"
 							? "uploading"
-							: state.status === "generating" || state.status === "composing"
-								? "generating"
-								: "empty",
+							: state.status === "compliance"
+								? "compliance"
+								: state.status === "generating" || state.status === "composing"
+									? "generating"
+									: "empty",
 					placeholderMode:
 						state.status === "uploading" ||
+						state.status === "compliance" ||
 						state.status === "generating" ||
 						state.status === "composing"
 							? "loading"
@@ -1349,6 +1359,9 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private getDisplayStateText(state: VideoDisplayState): string {
 		if (state.status === "uploading") {
 			return this.getText("video.uploading", "正在上传中...")
+		}
+		if (state.status === "compliance") {
+			return this.getText("video.complianceChecking", "正在校验")
 		}
 		if (state.status === "generating") {
 			return this.getText("video.generating", "正在生成中...")
@@ -1521,6 +1534,12 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		return resolveVideoDisplayState({
 			content,
 			isTemporary: this.canvas?.elementManager?.isTemporary?.(this.data.id) ?? false,
+			isComplianceActive: Boolean(
+				this.canvas?.generationRuntimeManager?.getComplianceState?.(
+					this.data.id,
+					activeContent?.contentId,
+				),
+			),
 			hasActiveGeneration: this.hasActiveGeneration(activeContent?.contentId),
 			hasActiveGenerationTask: Boolean(request?.video_id),
 			isCompositionActive: Boolean(
@@ -1549,6 +1568,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		switch (state.status) {
 			case "uploading":
 				return withSuffix(this.getText("video.nameSuffix.uploading", "(上传中)"))
+			case "compliance":
+				return withSuffix(this.getText("video.nameSuffix.complianceProcessing", "(校验中)"))
 			case "generating":
 				return withSuffix(this.getText("video.nameSuffix.generating", "(生成中)"))
 			case "composing":

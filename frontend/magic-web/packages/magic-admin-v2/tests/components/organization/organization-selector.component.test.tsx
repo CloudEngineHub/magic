@@ -75,6 +75,18 @@ describe("organization member selector", () => {
 		)
 
 		fireEvent.click(await screen.findByRole("checkbox", { name: "选择 研发部" }))
+
+		const actionButtons = [
+			screen.getByRole("button", { name: "取消" }),
+			screen.getByRole("button", { name: "确认添加" }),
+		]
+		const actionButtonGroup = actionButtons[0].parentElement
+		const dialogFooter = actionButtonGroup?.parentElement
+		expect(actionButtonGroup).toHaveClass("flex-row")
+		expect(actionButtonGroup).not.toHaveClass("flex-col-reverse")
+		expect(dialogFooter).toHaveAttribute("data-slot", "dialog-footer")
+		expect(dialogFooter).toHaveClass("flex-row", "justify-between")
+		expect(dialogFooter).not.toHaveClass("flex-col-reverse")
 		fireEvent.click(screen.getByRole("button", { name: "确认添加" }))
 
 		await waitFor(() => expect(onConfirm).toHaveBeenCalledTimes(1))

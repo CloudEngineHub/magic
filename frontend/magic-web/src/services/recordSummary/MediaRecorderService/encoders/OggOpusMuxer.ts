@@ -59,10 +59,17 @@ export class OggOpusMuxer {
 		this.packets.push({ ...packet, data: new Uint8Array(packet.data) })
 	}
 
-	/** Finalize headers, timed audio pages, CRC values, and the EOS marker. */
-	finalize(): ArrayBuffer {
+	/**
+	 * Finalize headers, timed audio pages, CRC values, and the EOS marker.
+	 * Streaming callers only know the end trim once every packet is in, so it may override the
+	 * config value here.
+	 */
+	finalize(endTrim48k: number = this.config.endTrim48k): ArrayBuffer {
 		if (this.packets.length === 0) {
 			throw new Error("Cannot finalize an Ogg Opus stream without audio packets")
+		}
+		if (endTrim48k < 0) {
+			throw new Error("Opus end trim must not be negative")
 		}
 
 		const pages: Uint8Array[] = []
@@ -87,7 +94,7 @@ export class OggOpusMuxer {
 		this.packets.forEach((packet, index) => {
 			decodedSamples48k += Math.round((packet.durationUs * OGG_CLOCK_RATE) / 1_000_000)
 			const isLastPacket = index === this.packets.length - 1
-			const finalTrim = isLastPacket ? this.config.endTrim48k : 0
+			const finalTrim = isLastPacket ? endTrim48k : 0
 			pages.push(
 				...this.createPacketPages({
 					packet: packet.data,

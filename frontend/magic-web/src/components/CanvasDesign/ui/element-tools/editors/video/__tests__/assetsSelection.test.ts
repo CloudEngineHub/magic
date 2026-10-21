@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import { applyImportedAssetToVideoSlot, resolveVideoAssetMediaTypes } from "../assetsSelection"
+import type { VideoInputModeConfig } from "../../../../../public/magic-types"
+import {
+	applyImportedAssetToVideoSlot,
+	resolveVideoAssetMediaTypes,
+	validateVideoAssetSelection,
+} from "../assetsSelection"
 
 describe("resolveVideoAssetMediaTypes", () => {
 	it("limits frame slots to images", () => {
@@ -177,5 +182,116 @@ describe("resolveVideoAssetMediaTypes", () => {
 				frameRole: "end",
 			},
 		])
+	})
+})
+
+describe("validateVideoAssetSelection", () => {
+	const baseSlot = { inputTab: "reference" as const, slotIndex: 0 }
+
+	it("rejects a batch that exceeds a per-kind variant limit before importing", () => {
+		const modeConfig: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos"],
+			variants: [
+				{
+					code: "one-image-one-video",
+					limits: {
+						reference_images: { max: 1 },
+						reference_videos: { max: 1 },
+					},
+				},
+			],
+		}
+
+		expect(
+			validateVideoAssetSelection({
+				slot: baseSlot,
+				assets: [
+					{ asset_id: "image-1", asset_media_type: "IMAGE" },
+					{ asset_id: "image-2", asset_media_type: "IMAGE" },
+				],
+				allowedMediaTypes: ["IMAGE"],
+				currentReferenceAssets: [],
+				inputMode: "omni_reference",
+				modeConfig,
+			}),
+		).toContain("limits")
+	})
+
+	it("allows a partial variant draft when the selected assets can still complete it", () => {
+		const modeConfig: VideoInputModeConfig = {
+			supported_fields: ["reference_images", "reference_videos"],
+			variants: [
+				{
+					code: "image-and-video",
+					limits: {
+						reference_images: { min: 1, max: 1 },
+						reference_videos: { min: 1, max: 1 },
+					},
+				},
+			],
+		}
+
+		expect(
+			validateVideoAssetSelection({
+				slot: baseSlot,
+				assets: [{ asset_id: "image-1", asset_media_type: "IMAGE" }],
+				allowedMediaTypes: ["IMAGE", "VIDEO"],
+				currentReferenceAssets: [],
+				inputMode: "omni_reference",
+				modeConfig,
+			}),
+		).toBeNull()
+	})
+
+	it("accounts for the selected slot replacement before checking capacity", () => {
+		const modeConfig: VideoInputModeConfig = {
+			supported_fields: ["reference_images"],
+			reference_images: { max_count: 1 },
+		}
+
+		expect(
+			validateVideoAssetSelection({
+				slot: { ...baseSlot, path: "./images/old.png", referenceAssetKind: "image" },
+				assets: [{ asset_id: "image-2", asset_media_type: "IMAGE" }],
+				allowedMediaTypes: ["IMAGE"],
+				currentReferenceAssets: [{ path: "./images/old.png", assetType: "image" }],
+				inputMode: "image_reference",
+				modeConfig,
+			}),
+		).toBeNull()
+	})
+
+	it("uses the captured slot kind when a linked replacement is absent from manual refs", () => {
+		const modeConfig: VideoInputModeConfig = {
+			supported_fields: ["reference_images"],
+			reference_images: { max_count: 1 },
+		}
+
+		expect(
+			validateVideoAssetSelection({
+				slot: {
+					...baseSlot,
+					path: "./linked/image.png",
+					referenceAssetKind: "image",
+				},
+				assets: [{ asset_id: "image-2", asset_media_type: "IMAGE" }],
+				allowedMediaTypes: ["IMAGE"],
+				currentReferenceAssets: [{ path: "./manual/image.png", assetType: "image" }],
+				inputMode: "image_reference",
+				modeConfig,
+			}),
+		).toBeNull()
+	})
+
+	it("rejects a non-image asset even when a frame policy is supplied incorrectly", () => {
+		expect(
+			validateVideoAssetSelection({
+				slot: { inputTab: "frame", slotIndex: 0 },
+				assets: [{ asset_id: "video-1", asset_media_type: "VIDEO" }],
+				allowedMediaTypes: ["VIDEO"],
+				currentReferenceAssets: [],
+				inputMode: "keyframe_guided",
+			}),
+		).toContain("frame")
 	})
 })

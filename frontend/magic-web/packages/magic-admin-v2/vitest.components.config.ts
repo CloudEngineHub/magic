@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      "@": path.resolve(__dirname, "../../src"),
       "@magic-admin-v2": path.resolve(__dirname, "src"),
     },
   },

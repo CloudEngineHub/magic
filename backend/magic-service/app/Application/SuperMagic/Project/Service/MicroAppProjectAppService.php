@@ -30,6 +30,7 @@ use App\Domain\SuperMagic\Project\Event\ProjectUpdatedEvent;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Persistence\MicroAppTransferRepository;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Workspace\Entity\ValueObject\WorkspaceType;
@@ -70,34 +71,31 @@ class MicroAppProjectAppService extends AbstractAppService
         private readonly MicroAppShareConfig $shareConfig,
         private readonly MicroAppVisitRepositoryInterface $microAppVisitRepository,
         private readonly TaskFileRepositoryInterface $taskFileRepository,
+        private readonly MicroAppTransferRepository $mutationLocks,
     ) {
     }
 
     public function publish(RequestContext $requestContext, int $appId, PublishMicroAppRequestDTO $requestDTO): array
     {
         $authorization = $requestContext->getUserAuthorization();
-        [$record, $project] = $this->getValidatedMicroApp($appId);
-        $projectId = $project->getId();
-        $this->getAccessibleProjectWithManager(
-            $projectId,
-            $authorization->getId(),
-            $authorization->getOrganizationCode()
-        );
-        $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
-        $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
-        $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
-        $defaultOpenFileId = $requestDTO->hasDefaultOpenFileId()
-            ? $this->validateDefaultOpenFileId($requestDTO->getDefaultOpenFileId(), $projectId)
-            : null;
-
-        if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
-        }
-
-        $now = date('Y-m-d H:i:s');
-
+        [, $initialProject] = $this->getValidatedMicroApp($appId);
         Db::beginTransaction();
         try {
+            [$record, $project] = $this->lockMicroAppForMutation($appId, $initialProject->getId(), $authorization, MemberRole::MANAGE);
+            $projectId = $project->getId();
+            $projectNameChanged = $project->getProjectName() !== $requestDTO->getProjectName();
+            $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
+            $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
+            $defaultOpenFileId = $requestDTO->hasDefaultOpenFileId()
+                ? $this->validateDefaultOpenFileId($requestDTO->getDefaultOpenFileId(), $projectId)
+                : null;
+
+            if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+            }
+
+            $now = date('Y-m-d H:i:s');
+
             if ($projectNameChanged || $coverChanged) {
                 $project
                     ->setProjectName($requestDTO->getProjectName())
@@ -131,7 +129,12 @@ class MicroAppProjectAppService extends AbstractAppService
                 $shareData['extra'] = $this->shareConfig->buildExtra($existingShare?->getExtra(), $requestDTO);
             }
             $shareDTO = CreateShareRequestDTO::fromArray($shareData);
-            $shareItem = $this->resourceShareAppService->createShare($authorization, $shareDTO, 'micro_app');
+            // The locked manager may configure this app, while the stable link belongs to its owner.
+            $this->resourceShareAppService->assertMicroAppShareAllowed($authorization, $requestDTO->getShareType());
+            $shareOwner = (new MagicUserAuthorization())->setId($project->getUserId())
+                ->setOrganizationCode($project->getUserOrganizationCode());
+            $shareItem = $this->resourceShareAppService->createShare($shareOwner, $shareDTO, 'micro_app');
+            $this->mutationLocks->recordShareOperator($record, $authorization->getId());
             $accessUrl = $this->shareUrlBuilder->buildMicroAppShareUrl((string) $record->getId());
 
             $record
@@ -169,15 +172,17 @@ class MicroAppProjectAppService extends AbstractAppService
 
     public function delete(RequestContext $requestContext, int $appId): array
     {
-        [, $project] = $this->getValidatedMicroApp($appId);
-
-        $this->projectAppService->deleteProject($requestContext, $project->getId());
-
-        return [
-            'app_id' => (string) $appId,
-            'project_id' => (string) $project->getId(),
-            'deleted' => true,
-        ];
+        [, $initialProject] = $this->getValidatedMicroApp($appId);
+        return Db::transaction(function () use ($requestContext, $appId, $initialProject): array {
+            [, $project] = $this->lockMicroAppForMutation(
+                $appId,
+                $initialProject->getId(),
+                $requestContext->getUserAuthorization(),
+                MemberRole::MANAGE
+            );
+            $this->projectAppService->deleteProject($requestContext, $project->getId());
+            return ['app_id' => (string) $appId, 'project_id' => (string) $project->getId(), 'deleted' => true];
+        });
     }
 
     public function update(RequestContext $requestContext, int $appId, UpdateMicroAppRequestDTO $requestDTO): array
@@ -187,28 +192,25 @@ class MicroAppProjectAppService extends AbstractAppService
         }
 
         $authorization = $requestContext->getUserAuthorization();
-        [$record, $project] = $this->getValidatedMicroApp($appId);
-        $this->getAccessibleProjectWithEditor(
-            $project->getId(),
-            $authorization->getId(),
-            $authorization->getOrganizationCode()
-        );
-
-        if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
-        }
-
-        $projectName = $requestDTO->hasAppName() ? $requestDTO->getAppName() : $project->getProjectName();
-        $projectNameChanged = $project->getProjectName() !== $projectName;
-        $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
-        $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
-        if (! $projectNameChanged && ! $coverChanged) {
-            return $this->responseFormatter->formatAppMetadata($record, $project);
-        }
-
-        $now = date('Y-m-d H:i:s');
+        [, $initialProject] = $this->getValidatedMicroApp($appId);
         Db::beginTransaction();
         try {
+            [$record, $project] = $this->lockMicroAppForMutation($appId, $initialProject->getId(), $authorization, MemberRole::EDITOR);
+
+            if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_ACCESS_DENIED, 'project.access_denied');
+            }
+
+            $projectName = $requestDTO->hasAppName() ? $requestDTO->getAppName() : $project->getProjectName();
+            $projectNameChanged = $project->getProjectName() !== $projectName;
+            $coverFileKey = $requestDTO->hasCoverFileKey() ? $requestDTO->getCoverFileKey() : $record->getCoverFileKey();
+            $coverChanged = $record->getCoverFileKey() !== $coverFileKey;
+            if (! $projectNameChanged && ! $coverChanged) {
+                Db::commit();
+                return $this->responseFormatter->formatAppMetadata($record, $project);
+            }
+
+            $now = date('Y-m-d H:i:s');
             $project
                 ->setProjectName($projectName ?? '')
                 ->setUpdatedUid($authorization->getId())
@@ -233,21 +235,20 @@ class MicroAppProjectAppService extends AbstractAppService
     public function unpublish(RequestContext $requestContext, int $appId): array
     {
         $authorization = $requestContext->getUserAuthorization();
-        [$record, $project] = $this->getValidatedMicroApp($appId);
-        $this->getAccessibleProjectWithManager(
-            $project->getId(),
-            $authorization->getId(),
-            $authorization->getOrganizationCode()
-        );
-
-        if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
-            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
-        }
-
+        [, $initialProject] = $this->getValidatedMicroApp($appId);
         Db::beginTransaction();
         try {
+            [$record, $project] = $this->lockMicroAppForMutation($appId, $initialProject->getId(), $authorization, MemberRole::MANAGE);
+
+            if ($record->getOrganizationCode() !== $project->getUserOrganizationCode()) {
+                ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'micro_app.publish_not_found');
+            }
+
             if ($record->getPublishStatus() === MicroAppPublishStatus::Published->value) {
-                $this->resourceShareAppService->cancelShareByResourceId($authorization, $record->getResourceId());
+                $shareOwner = (new MagicUserAuthorization())->setId($project->getUserId())
+                    ->setOrganizationCode($project->getUserOrganizationCode());
+                $this->resourceShareAppService->cancelShareByResourceId($shareOwner, $record->getResourceId());
+                $this->mutationLocks->recordShareOperator($record, $authorization->getId());
             }
 
             $record
@@ -535,6 +536,18 @@ class MicroAppProjectAppService extends AbstractAppService
     /**
      * @return array{0: MicroAppEntity, 1: ProjectEntity}
      */
+    private function lockMicroAppForMutation(int $appId, int $projectId, MagicUserAuthorization $authorization, MemberRole $role): array
+    {
+        $project = $this->mutationLocks->lockProject($projectId);
+        $record = $project === null ? null : $this->mutationLocks->lockAppByProject($projectId, $project->getUserOrganizationCode());
+        if ($project === null || $record === null || $record->getId() !== $appId || $record->getDeletedAt() !== null
+            || $project->getUserOrganizationCode() !== $authorization->getOrganizationCode()) {
+            ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.project_not_found');
+        }
+        $this->getAccessibleProject($projectId, $authorization->getId(), $authorization->getOrganizationCode(), $role);
+        return [$record, $project];
+    }
+
     private function getValidatedMicroApp(int $appId): array
     {
         $record = $this->microAppRepository->findById($appId);

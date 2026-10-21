@@ -258,7 +258,7 @@ function OrganizationList(props: OrganizationListItemProps) {
 			data-testid="user-menus-organization-list-content"
 		>
 			{accounts.length === 0 ? (
-				<MagicEmpty style={{ width: "100%" }} />
+				<MagicEmpty className="w-full" />
 			) : (
 				<>
 					{currentAccount ? (

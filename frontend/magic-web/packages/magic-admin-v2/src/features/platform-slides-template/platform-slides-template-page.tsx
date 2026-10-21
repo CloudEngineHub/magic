@@ -1,11 +1,13 @@
-import { Plus, RefreshCw, RotateCcw } from "lucide-react"
-import { useRef, useState } from "react"
+import { Plus, RefreshCw } from "lucide-react"
+import { useCallback, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
 import { useIsFetching, useQueryClient } from "@tanstack/react-query"
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
+import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@magic-admin-v2/components/ui/tabs"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import {
@@ -30,7 +32,10 @@ import { platformSlidesTemplateKeys } from "@magic-admin-v2/features/platform-sl
 import type {
 	SlidesTemplate,
 	SlidesTemplateCategory,
+	SlidesTemplateCategoryQueryParams,
+	SlidesTemplateQueryParams,
 	SlidesTemplateTag,
+	SlidesTemplateTagQueryParams,
 } from "@magic-admin-v2/features/platform-slides-template/types"
 import {
 	isSystemSlidesTemplate,
@@ -41,6 +46,20 @@ import {
 import { allowMagic } from "@magic-admin-v2/routes/access"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
 import { cn } from "@magic-admin-v2/utils/cn"
+import {
+	countActiveCategoryFilters,
+	countActiveTagFilters,
+	countActiveTemplateLibraryFilters,
+	createDefaultCategoryFilterDraft,
+	createDefaultTagFilterDraft,
+	createDefaultTemplateLibraryDraft,
+	toCategoryListParams,
+	toTagListParams,
+	toTemplateLibraryParams,
+	type CategoryFilterDraft,
+	type TagFilterDraft,
+	type TemplateLibraryFilterDraft,
+} from "@magic-admin-v2/features/platform-slides-template/list-params"
 
 type TabValue = "categories" | "library" | "tags"
 type DeleteTarget = {
@@ -58,7 +77,9 @@ export default function PlatformSlidesTemplatePage() {
 	const categoryManagerRef = useRef<CategoryManagerHandle>(null)
 	const tagManagerRef = useRef<TagManagerHandle>(null)
 	const [tab, setTab] = useState<TabValue>("library")
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 	const [canCreateTag, setCanCreateTag] = useState(false)
+	const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 	const [editorOpen, setEditorOpen] = useState(false)
 	const [selectedTemplate, setSelectedTemplate] = useState<SlidesTemplate | null>(null)
 	const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
@@ -66,6 +87,33 @@ export default function PlatformSlidesTemplatePage() {
 	const templateMutations = useSlidesTemplateMutations()
 	const categoryMutations = useSlidesTemplateCategoryMutations()
 	const tagMutations = useSlidesTemplateTagMutations()
+	const libraryQueryState = useListQueryParams<
+		TemplateLibraryFilterDraft,
+		SlidesTemplateQueryParams
+	>({
+		debounceFields: ["keyword", "code"],
+		initialDraft: createDefaultTemplateLibraryDraft,
+		toParams: toTemplateLibraryParams,
+	})
+	const categoryQueryState = useListQueryParams<
+		CategoryFilterDraft,
+		SlidesTemplateCategoryQueryParams
+	>({
+		debounceFields: ["keyword", "code"],
+		initialDraft: createDefaultCategoryFilterDraft,
+		toParams: toCategoryListParams,
+	})
+	const toTagParams = useCallback(
+		(draft: TagFilterDraft, page: number, pageSize: number) =>
+			toTagListParams(draft, page, pageSize, selectedGroupId),
+		[selectedGroupId],
+	)
+	const tagQueryState = useListQueryParams<TagFilterDraft, SlidesTemplateTagQueryParams>({
+		debounceFields: ["keyword", "code"],
+		extraResetKey: selectedGroupId,
+		initialDraft: createDefaultTagFilterDraft,
+		toParams: toTagParams,
+	})
 	const isDeletePending =
 		deleteTarget?.kind === "template"
 			? templateMutations.delete.isPending
@@ -145,11 +193,6 @@ export default function PlatformSlidesTemplatePage() {
 	const refresh = () => {
 		void queryClient.invalidateQueries({ queryKey: platformSlidesTemplateKeys.all })
 	}
-	const resetCurrentTab = () => {
-		if (tab === "library") templateLibraryRef.current?.reset()
-		else if (tab === "categories") categoryManagerRef.current?.reset()
-		else tagManagerRef.current?.reset()
-	}
 	const createCurrentTab = () => {
 		if (tab === "library") openEditor()
 		else if (tab === "categories") categoryManagerRef.current?.create()
@@ -162,6 +205,10 @@ export default function PlatformSlidesTemplatePage() {
 				? t("slidesTemplate.createCategory")
 				: t("slidesTemplate.createTag")
 	const createDisabled = !canEdit || (tab === "tags" && !canCreateTag)
+	const handleTabChange = (value: string) => {
+		setMobileFilterOpen(false)
+		setTab(value as TabValue)
+	}
 
 	return (
 		<>
@@ -169,17 +216,33 @@ export default function PlatformSlidesTemplatePage() {
 				testId="slides-template-page"
 				actions={
 					<>
-						<PageHeaderActionButton onClick={refresh} variant="outline" data-testid="platform-slides-template-refresh-button">
-							<RefreshCw
-								className={cn("size-4", isFetching && "animate-spin")}
-							/>
+						<PageHeaderFilterButton
+							count={
+								tab === "library"
+									? countActiveTemplateLibraryFilters(
+											libraryQueryState.filterDraft,
+										)
+									: tab === "categories"
+										? countActiveCategoryFilters(categoryQueryState.filterDraft)
+										: countActiveTagFilters(tagQueryState.filterDraft)
+							}
+							label={t("slidesTemplate.filterTitle")}
+							onClick={() => setMobileFilterOpen(true)}
+							data-testid="platform-slides-template-filter-button"
+						/>
+						<PageHeaderActionButton
+							onClick={refresh}
+							variant="outline"
+							data-testid="platform-slides-template-refresh-button"
+						>
+							<RefreshCw className={cn("size-4", isFetching && "animate-spin")} />
 							{t("slidesTemplate.refresh")}
 						</PageHeaderActionButton>
-						<PageHeaderActionButton onClick={resetCurrentTab} variant="outline" data-testid="platform-slides-template-create-button">
-							<RotateCcw className="size-4" />
-							{t("slidesTemplate.reset")}
-						</PageHeaderActionButton>
-						<PageHeaderActionButton disabled={createDisabled} onClick={createCurrentTab} data-testid="platform-slides-template-create-button">
+						<PageHeaderActionButton
+							disabled={createDisabled}
+							onClick={createCurrentTab}
+							data-testid="platform-slides-template-create-button"
+						>
 							<Plus className="size-4" />
 							{createLabel}
 						</PageHeaderActionButton>
@@ -188,17 +251,33 @@ export default function PlatformSlidesTemplatePage() {
 				description={t("slidesTemplate.description")}
 				title={t("slidesTemplate.title")}
 			>
-				<Tabs onValueChange={(value) => setTab(value as TabValue)} value={tab}>
+				<Tabs onValueChange={handleTabChange} value={tab}>
 					<TabsList>
-						<TabsTrigger value="library" data-testid="platform-slides-template-tab-trigger">{t("slidesTemplate.library")}</TabsTrigger>
-						<TabsTrigger value="categories" data-testid="platform-slides-template-tab-trigger">
+						<TabsTrigger
+							value="library"
+							data-testid="platform-slides-template-tab-trigger"
+						>
+							{t("slidesTemplate.library")}
+						</TabsTrigger>
+						<TabsTrigger
+							value="categories"
+							data-testid="platform-slides-template-tab-trigger"
+						>
 							{t("slidesTemplate.categories")}
 						</TabsTrigger>
-						<TabsTrigger value="tags" data-testid="platform-slides-template-tab-trigger">{t("slidesTemplate.tags")}</TabsTrigger>
+						<TabsTrigger
+							value="tags"
+							data-testid="platform-slides-template-tab-trigger"
+						>
+							{t("slidesTemplate.tags")}
+						</TabsTrigger>
 					</TabsList>
 					<TabsContent className="mt-4" value="library">
 						<TemplateLibrary
 							canEdit={canEdit}
+							queryState={libraryQueryState}
+							mobileFilterOpen={tab === "library" && mobileFilterOpen}
+							onMobileFilterOpenChange={setMobileFilterOpen}
 							onDelete={requestTemplateDelete}
 							onEdit={openEditor}
 							ref={templateLibraryRef}
@@ -207,6 +286,9 @@ export default function PlatformSlidesTemplatePage() {
 					<TabsContent className="mt-4" value="categories">
 						<CategoryManager
 							canEdit={canEdit}
+							queryState={categoryQueryState}
+							mobileFilterOpen={tab === "categories" && mobileFilterOpen}
+							onMobileFilterOpenChange={setMobileFilterOpen}
 							onDelete={requestCategoryDelete}
 							ref={categoryManagerRef}
 						/>
@@ -214,7 +296,12 @@ export default function PlatformSlidesTemplatePage() {
 					<TabsContent className="mt-4" value="tags">
 						<TagManager
 							canEdit={canEdit}
+							queryState={tagQueryState}
+							selectedGroupId={selectedGroupId}
+							onSelectedGroupIdChange={setSelectedGroupId}
+							mobileFilterOpen={tab === "tags" && mobileFilterOpen}
 							onCreateAvailabilityChange={setCanCreateTag}
+							onMobileFilterOpenChange={setMobileFilterOpen}
 							onDelete={requestTagDelete}
 							ref={tagManagerRef}
 						/>
@@ -227,9 +314,9 @@ export default function PlatformSlidesTemplatePage() {
 				template={selectedTemplate}
 			/>
 			<DeleteConfirmDialog
-			contentTestId="platform-slides-template-delete-dialog-content"
-			cancelButtonTestId="platform-slides-template-delete-cancel-button"
-			confirmButtonTestId="platform-slides-template-delete-confirm-button"
+				contentTestId="platform-slides-template-delete-dialog-content"
+				cancelButtonTestId="platform-slides-template-delete-cancel-button"
+				confirmButtonTestId="platform-slides-template-delete-confirm-button"
 				open={Boolean(deleteTarget)}
 				onOpenChange={(open) => !open && setDeleteTarget(null)}
 				title={deleteDialogTitle}

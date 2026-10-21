@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import html
 import re
+import traceback
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.sdk.base.exceptions import HttpRequestError
@@ -19,12 +22,14 @@ from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import 
     MagicServiceApiError,
     MagicServiceUnauthorizedException,
 )
+from app.service.prepared_operation_confirmation import PreparedOperationError
 from app.tools.core import BaseTool, BaseToolParams
 from app.tools.utils.time_display import format_tool_time
 
 from .context import ProductConfigurationError, ProductContext, ProductContextError, current_product_context
 
 T = TypeVar("T", bound=BaseToolParams)
+logger = get_logger(__name__)
 
 
 def _label(key: str, **kwargs: object) -> str:
@@ -40,6 +45,7 @@ def _visible_text(value: object, limit: int = 2000) -> str:
 
 # 每个注册工具都声明展示对象；只读取已知业务字段，不把模型正文或 ID 当摘要。
 TOOL_SUBJECTS = {
+    **dict.fromkeys(('list_skills', 'get_skill', 'create_skill', 'prepare_skill_publish', 'publish_skill', 'get_skill_publish_result'), "skill"),
     **dict.fromkeys(("list_workspaces", "get_workspace", "create_workspace", "update_workspace", "archive_workspace", "delete_workspace"), "workspace"),
     **dict.fromkeys(("list_projects", "get_project", "create_project", "update_project", "move_project", "delete_project"), "project"),
     **dict.fromkeys(("list_topics", "get_topic", "create_topic", "update_topic", "archive_topic", "delete_topic", "read_topic_messages", "start_topic_task", "send_topic_message", "list_topic_queued_messages"), "topic"),
@@ -47,6 +53,8 @@ TOOL_SUBJECTS = {
     "get_file_batch_status": "batch",
     "get_topic_task": "task", "cancel_topic_task": "task",
     "delete_topic_queued_message": "queue",
+    "search_users": "person",
+    "search_departments": "department",
 }
 
 
@@ -203,6 +211,33 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
         lines.extend(["", _label(key, count=len(records)), ""])
         if not records:
             lines.append(_label("empty"))
+        elif tool_name in {"search_users", "search_departments"}:
+            for item in records[:20]:
+                if not isinstance(item, dict):
+                    continue
+                name = (item.get("nickname") or item.get("real_name")) if tool_name == "search_users" else item.get("name")
+                visible_name = _visible_text(name or "-", 200).replace("\n", " ")
+                details = []
+                if tool_name == "search_users":
+                    if item.get("job_title"):
+                        details.append(f"{_label('field.job_title')}: {_visible_text(item['job_title'], 120)}")
+                    departments = item.get("departments")
+                    if isinstance(departments, list):
+                        paths = []
+                        for department in departments[:3]:
+                            if isinstance(department, dict):
+                                names = department.get("path_names") or [department.get("name", "")]
+                                if isinstance(names, list):
+                                    paths.append("/".join(_visible_text(part, 120) for part in names))
+                        if paths:
+                            details.append(f"{_label('field.departments')}: {', '.join(paths)}")
+                else:
+                    names = item.get("path_names")
+                    if isinstance(names, list) and names:
+                        details.append(f"{_label('field.department_path')}: {'/'.join(_visible_text(part, 120) for part in names)}")
+                lines.append(f"- {visible_name}" + (f" · {' · '.join(details)}" if details else ""))
+            if len(records) > 20:
+                lines.extend(["", _label("truncated")])
         else:
             lines.extend([f"| {_label('field.name')} | {_label('field.status')} | {_label('field.location')} | {_label('field.updated_at')} |", "| --- | --- | --- | --- |"])
             for index, item in enumerate(records[:100], 1):
@@ -260,6 +295,8 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
         lines.extend(["", _label("more")])
     elif data.get("has_more") is False:
         lines.extend(["", _label("no_more")])
+    if tool_name == "search_departments" and data.get("coverage") == "bounded":
+        lines.extend(["", _label("contact.bounded")])
     if len(lines) == 2:
         lines.append(_label(f"subject.{TOOL_SUBJECTS[tool_name]}"))
         lines.append(_label("completed"))
@@ -365,7 +402,21 @@ class ProductTool(BaseTool[T]):
             return ToolResult.error(message, use_custom_remark=True, data={"code": code})
         except ProductConfigurationError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "execution_config_unavailable"})
+        except PreparedOperationError as exc:
+            return ToolResult.error(str(exc), use_custom_remark=True, data={"code": exc.code.lower()})
         except ValueError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "invalid_input_or_response"})
-        except Exception:
+        except (FileNotFoundError, PermissionError):
+            return ToolResult.error(
+                "The required project files are unavailable. Check the configured project mount and access permissions before retrying.",
+                use_custom_remark=True, data={"code": "resource_files_unavailable"},
+            )
+        except Exception as exc:
+            # 保留异常类型和调用位置，避免记录可能含凭据的上游正文或函数局部变量。
+            frames = "; ".join(f"{frame.filename}:{frame.lineno} in {frame.name}" for frame in traceback.extract_tb(exc.__traceback__))
+            logger.error(
+                f"Product operation failed: tool={self.name}, action={action}, "
+                f"tool_call_id={tool_context.tool_call_id if tool_context else 'unknown'}, "
+                f"exception_type={type(exc).__name__}, stack={frames}"
+            )
             return ToolResult.error("The product operation failed unexpectedly.", use_custom_remark=True, data={"code": "unexpected_error"})

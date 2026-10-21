@@ -1,7 +1,12 @@
 import Konva from "konva"
 import type { Canvas } from "../../core/Canvas"
 import { ElementTypeEnum } from "../../document/types"
-import { BaseLabelManager, type BaseLabelManagerConfig, type LabelSize } from "./BaseLabelManager"
+import {
+	BaseLabelManager,
+	type BaseLabelManagerConfig,
+	type LabelLayoutSyncContext,
+	type LabelSize,
+} from "./BaseLabelManager"
 import type { MediaLabelLayout } from "./mediaLabelLayout"
 
 /**
@@ -66,13 +71,17 @@ export class SizeLabelManager extends BaseLabelManager {
 	 * that sibling after the size label changes visibility or geometry, while
 	 * keeping the coordination out of the per-frame name-label layout path.
 	 */
-	protected override updateLabelPosition(elementId: string, skipBatchDraw = false): boolean {
+	protected override updateLabelPosition(
+		elementId: string,
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): boolean {
 		const previousVisible = this.isLabelVisibleForElement(elementId)
 		const previousSize = this.getLabelSizeForElement(elementId)
 		let result = false
 		this.updatingLabelPositionElementIds.add(elementId)
 		try {
-			result = super.updateLabelPosition(elementId, skipBatchDraw)
+			result = super.updateLabelPosition(elementId, skipBatchDraw, context)
 		} finally {
 			this.updatingLabelPositionElementIds.delete(elementId)
 		}
@@ -82,7 +91,7 @@ export class SizeLabelManager extends BaseLabelManager {
 		const visibilityChanged = previousVisible !== nextVisible
 		const sizeChanged = this.hasLabelSizeChanged(previousSize, nextSize)
 		if ((previousVisible || nextVisible) && (visibilityChanged || sizeChanged)) {
-			this.canvas.nameLabelManager?.refreshLabelLayout(elementId, skipBatchDraw)
+			this.canvas.nameLabelManager?.refreshLabelLayout(elementId, skipBatchDraw, context)
 		}
 
 		return result
@@ -92,14 +101,20 @@ export class SizeLabelManager extends BaseLabelManager {
 		elementId: string,
 		skipBatchDraw = false,
 		mediaLayout?: MediaLabelLayout | null,
+		context?: LabelLayoutSyncContext,
 	): boolean {
-		const visibilityChanged = super.updateLabelVisibility(elementId, skipBatchDraw, mediaLayout)
+		const visibilityChanged = super.updateLabelVisibility(
+			elementId,
+			skipBatchDraw,
+			mediaLayout,
+			context,
+		)
 		if (
 			visibilityChanged &&
 			this.labelMap.has(elementId) &&
 			!this.updatingLabelPositionElementIds.has(elementId)
 		) {
-			this.canvas.nameLabelManager?.refreshLabelLayout(elementId, skipBatchDraw)
+			this.canvas.nameLabelManager?.refreshLabelLayout(elementId, skipBatchDraw, context)
 		}
 		return visibilityChanged
 	}
@@ -108,12 +123,16 @@ export class SizeLabelManager extends BaseLabelManager {
 	 * Re-evaluates visibility after the name takes or releases the shared row.
 	 * The guard keeps the one-way notification from recursively refreshing name.
 	 */
-	public refreshVisibilityForNamePriority(elementId: string, skipBatchDraw = false): boolean {
+	public refreshVisibilityForNamePriority(
+		elementId: string,
+		skipBatchDraw = false,
+		context?: LabelLayoutSyncContext,
+	): boolean {
 		if (this.updatingLabelPositionElementIds.has(elementId)) return false
 
 		this.updatingLabelPositionElementIds.add(elementId)
 		try {
-			return this.updateLabelVisibility(elementId, skipBatchDraw)
+			return this.updateLabelVisibility(elementId, skipBatchDraw, undefined, context)
 		} finally {
 			this.updatingLabelPositionElementIds.delete(elementId)
 		}

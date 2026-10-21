@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\BatchStatusResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\GatewayResult;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Result\SandboxListResult;
@@ -81,8 +82,10 @@ interface SandboxGatewayInterface
      * @param string $userSpaceRootFileId User space root directory file ID
      * @param string $topicSpaceRootFileId Topic space root directory file ID
      * @param array<string, string> $labels 额外 pod 标签
+     * @param null|SandboxImageTarget $images 目标镜像；只有指定了镜像的运行才会把镜像写进创建请求，
+     *                                        未指定时留空，让网关继续使用它自己的发布版本
      */
-    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', array $labels = []): GatewayResult;
+    public function createSandbox(DataIsolation $dataIsolation, string $projectId, string $sandboxId, string $workDir, string $projectSpaceRootFileId = '', string $userSpaceRootFileId = '', string $topicSpaceRootFileId = '', array $labels = [], ?SandboxImageTarget $images = null): GatewayResult;
 
     /**
      * 删除（停止）沙箱.

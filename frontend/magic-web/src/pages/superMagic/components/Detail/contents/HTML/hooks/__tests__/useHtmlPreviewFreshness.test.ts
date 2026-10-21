@@ -27,7 +27,7 @@ describe("HTML preview freshness", () => {
 		})
 		act(() => {
 			result.current.ready(previous)
-			result.current.fail(previous)
+			result.current.fail(previous, "load_failed")
 		})
 		expect(result.current.phase).toBe("updating")
 		act(() => result.current.rendering(current))
@@ -57,7 +57,7 @@ describe("HTML preview freshness", () => {
 		})
 		act(() => {
 			const request = result.current.begin()
-			result.current.fail(request)
+			result.current.fail(request, "load_failed")
 		})
 		expect(result.current.hasRendered).toBe(true)
 		expect(result.current.phase).toBe("failed")
@@ -82,5 +82,58 @@ describe("HTML preview freshness", () => {
 		unmount()
 		expect(result.current.isCurrent(request)).toBe(false)
 		expect(vi.getTimerCount()).toBe(0)
+	})
+	it("reports why a generation failed, with whether anything was shown", () => {
+		const onFailed = vi.fn()
+		const { result } = renderHook(() => useHtmlPreviewFreshness("file-a", onFailed))
+		let request = 0
+		act(() => {
+			request = result.current.begin()
+		})
+		act(() => vi.advanceTimersByTime(HTML_PREVIEW_READY_TIMEOUT))
+		expect(onFailed).toHaveBeenLastCalledWith({
+			reason: "update_timeout",
+			elapsedMs: HTML_PREVIEW_READY_TIMEOUT,
+			hasRendered: false,
+			error: undefined,
+		})
+
+		act(() => {
+			request = result.current.begin()
+			result.current.rendering(request)
+		})
+		act(() => vi.advanceTimersByTime(HTML_PREVIEW_READY_TIMEOUT))
+		expect(onFailed).toHaveBeenLastCalledWith(
+			expect.objectContaining({ reason: "render_timeout", hasRendered: false }),
+		)
+
+		const cause = new Error("boom")
+		act(() => {
+			request = result.current.begin()
+			result.current.ready(request)
+		})
+		act(() => {
+			request = result.current.begin()
+			result.current.fail(request, "process_failed", cause)
+		})
+		expect(onFailed).toHaveBeenLastCalledWith(
+			expect.objectContaining({
+				reason: "process_failed",
+				hasRendered: true,
+				error: cause,
+			}),
+		)
+		expect(onFailed).toHaveBeenCalledTimes(3)
+	})
+	it("does not report failures superseded by a newer generation", () => {
+		const onFailed = vi.fn()
+		const { result } = renderHook(() => useHtmlPreviewFreshness("file-a", onFailed))
+		let previous = 0
+		act(() => {
+			previous = result.current.begin()
+			result.current.begin()
+		})
+		act(() => result.current.fail(previous, "load_failed", new Error("late")))
+		expect(onFailed).not.toHaveBeenCalled()
 	})
 })

@@ -302,28 +302,9 @@ export function createSidebarDragImage(
 	const text = document.createElement("span")
 	text.textContent = label
 	image.append(icon, text)
-	image.style.cssText = [
-		"position:fixed",
-		"top:-1000px",
-		"left:-1000px",
-		"z-index:9999",
-		"pointer-events:none",
-		"user-select:none",
-		"display:flex",
-		"align-items:center",
-		"gap:8px",
-		"max-width:260px",
-		"height:28px",
-		"padding:0 10px",
-		"border-radius:8px",
-		"background:#ffffff",
-		"box-shadow:0 0 1px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.1)",
-		"color:#1c1d23",
-		"font:500 12px/1.2 -apple-system,BlinkMacSystemFont,sans-serif",
-		"white-space:nowrap",
-		"overflow:hidden",
-		"text-overflow:ellipsis",
-	].join(";")
+	// A fixed offscreen preview is captured by native HTML drag-and-drop.
+	image.className =
+		"pointer-events-none fixed -left-[1000px] -top-[1000px] z-[9999] flex h-7 max-w-[260px] select-none items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap rounded-lg bg-white px-2.5 py-0 text-xs font-medium leading-[1.2] text-[#1c1d23] shadow-[0_0_1px_rgba(0,0,0,0.3),0_4px_14px_rgba(0,0,0,0.1)] [font-family:-apple-system,BlinkMacSystemFont,sans-serif]"
 	document.body.appendChild(image)
 	return image
 }
@@ -332,13 +313,10 @@ export function createSidebarDragImage(
 export function createSidebarDropIndicator() {
 	const indicator = document.createElementNS("http://www.w3.org/2000/svg", "svg")
 	indicator.setAttribute("aria-hidden", "true")
-	indicator.style.cssText = [
-		"position:fixed",
-		"display:none",
-		"pointer-events:none",
-		"z-index:10000",
-		"overflow:visible",
-	].join(";")
+	indicator.setAttribute(
+		"class",
+		"pointer-events-none fixed z-[10000] hidden h-2 overflow-visible text-[#b9dcff]",
+	)
 
 	const line = document.createElementNS("http://www.w3.org/2000/svg", "line")
 	line.setAttribute("x1", "4")

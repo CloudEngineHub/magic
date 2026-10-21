@@ -189,11 +189,11 @@ export function AvailableModelRow({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="max-h-80 w-56 overflow-y-auto" data-testid="platform-official-staff-action-button">
           <DropdownMenuItem
+            data-testid="platform-official-staff-menu-item"
             onSelect={() => {
               onMenuOpenChange(false);
               onCreateGroupForModel(model);
-            }}
-           data-testid="platform-official-staff-menu-item">
+            }}>
             <Plus className="mr-2 size-4" />
             {t("officialStaff.action.createGroup")}
           </DropdownMenuItem>
@@ -201,11 +201,11 @@ export function AvailableModelRow({
           {targetGroups.map((targetGroup) => (
             <Fragment key={targetGroup.groupId}>
               <DropdownMenuItem
+                data-testid="platform-official-staff-menu-item"
                 onSelect={() => {
                   onMenuOpenChange(false);
                   onAddModel(model, targetGroup);
-                }}
-               data-testid="platform-official-staff-menu-item">
+                }}>
                 <List className="mr-2 size-4" />
                 <span className="truncate">{targetGroup.label}</span>
               </DropdownMenuItem>
@@ -213,12 +213,12 @@ export function AvailableModelRow({
                 ? targetGroup.dynamicTargets.map((target) => (
                     <DropdownMenuItem
                       className="pl-8"
+                      data-testid="platform-official-staff-menu-item"
                       key={`${target.groupId}-${target.dynamicId}`}
                       onSelect={() => {
                         onMenuOpenChange(false);
                         onAddModel(model, target);
-                      }}
-                     data-testid="platform-official-staff-menu-item">
+                      }}>
                       <SquareEqual className="mr-2 size-4" />
                       <span className="truncate">{target.label}</span>
                     </DropdownMenuItem>

@@ -16,7 +16,7 @@ interface QueueEntry {
  */
 export class HtmlPermissionAuthorizationQueue {
 	private readonly entries: QueueEntry[] = []
-	private readonly pendingByKey = new Map<string, Promise<boolean>>()
+	private readonly pendingByKey = new Map<string | object, Promise<boolean>>()
 	private processing = false
 	private disposed = false
 	private currentEntry: QueueEntry | null = null
@@ -25,7 +25,7 @@ export class HtmlPermissionAuthorizationQueue {
 		return this.disposed
 	}
 
-	enqueue(key: string, task: HtmlPermissionAuthorizationTask): Promise<boolean> {
+	enqueue(key: string | object, task: HtmlPermissionAuthorizationTask): Promise<boolean> {
 		if (this.disposed) return Promise.resolve(false)
 
 		const pending = this.pendingByKey.get(key)
@@ -93,7 +93,7 @@ export class HtmlPermissionAuthorizationQueue {
 		}
 	}
 
-	private clearPending(key: string, result: Promise<boolean>) {
+	private clearPending(key: string | object, result: Promise<boolean>) {
 		if (this.pendingByKey.get(key) === result) this.pendingByKey.delete(key)
 	}
 }

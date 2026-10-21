@@ -36,6 +36,7 @@ import {
 import type { ImageEditSessionSnapshot } from "./useImageEditorConfig"
 import { useElementToolCommand } from "../../model/useElementToolCommand"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
+import type { MediaEditorSubmissionController } from "../shared/useMediaEditorSubmission"
 
 type SecondEditIntent = "quick-edit" | "re-edit" | "generate-again"
 
@@ -45,6 +46,7 @@ interface SecondEditProps {
 	onPendingToolCommandHandled?: () => void
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+	submissionController: MediaEditorSubmissionController
 }
 
 export default function SecondEdit(props: SecondEditProps) {
@@ -204,122 +206,130 @@ export default function SecondEdit(props: SecondEditProps) {
 				sendingRef.current = true
 				setIsSending(true)
 				try {
-					const submitted = await originalElementInstance.submitContentGeneration(
-						request,
-						{
-							recoveryIntent: "generate",
+					const result = await props.submissionController.run({
+						initialPhase: "submitting",
+						execute: async () => {
+							const submitted = await originalElementInstance.submitContentGeneration(
+								request,
+								{
+									recoveryIntent: "generate",
+								},
+							)
+							if (submitted) {
+								sessionPersistenceEnabledRef.current = false
+								if (sessionStore && sessionIntentToClear) {
+									sessionStore.clear(getSessionKey(sessionIntentToClear))
+									if (sessionIntent === sessionIntentToClear) {
+										setHasInterruptedDraft(false)
+									}
+								}
+								canvas.mediaEditRecoveryManager.clearContent(
+									props.imageElement.id,
+									sessionContentId,
+								)
+								if (options?.clearEditorPromptOnSuccess) setPrompt("")
+								if (options?.closeEditorOnSuccess) setIsEditing(false)
+								if (options?.deselectOnSuccess) {
+									canvas.selectionManager.deselectAll()
+								}
+							}
+							return { accepted: submitted }
 						},
-					)
-					if (!submitted) return false
-					sessionPersistenceEnabledRef.current = false
-					if (sessionStore && sessionIntentToClear) {
-						sessionStore.clear(getSessionKey(sessionIntentToClear))
-						if (sessionIntent === sessionIntentToClear) setHasInterruptedDraft(false)
-					}
-					canvas.mediaEditRecoveryManager.clearContent(
-						props.imageElement.id,
-						sessionContentId,
-					)
-					if (options?.clearEditorPromptOnSuccess) setPrompt("")
-					if (options?.closeEditorOnSuccess) setIsEditing(false)
-					if (options?.deselectOnSuccess) canvas.selectionManager.deselectAll()
-					return true
+					})
+					return result.accepted
 				} finally {
 					sendingRef.current = false
 					setIsSending(false)
 				}
 			}
 
-			// 新元素位置间距常量（像素）
-			const NEW_ELEMENT_SPACING = 0
-
-			// 计算新元素的位置（放在原元素右边，顶部对齐）
-			const newPosition = resolveDerivedRightPlacement(
-				props.imageElement,
-				originalElementInstance,
-				canvas.elementManager,
-				{ spacing: NEW_ELEMENT_SPACING },
-			)
-			if (!newPosition) {
-				return false
-			}
-			const { x: newX, y: newY } = newPosition
-
-			const originalElement = props.imageElement
-			let imageInfo = originalElementInstance.getImageInfo()
-			if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
-				await originalElementInstance.getHTMLImageElement({ variant: "preview" })
-				imageInfo = originalElementInstance.getImageInfo()
-			}
-
-			const imageProcessRequestPayload = getImageProcessRequestPayload({
-				crop: activeContent.crop,
-				sourceDimensions: {
-					width: imageInfo?.naturalWidth ?? props.imageElement.width ?? 0,
-					height: imageInfo?.naturalHeight ?? props.imageElement.height ?? 0,
-				},
-			})
-
-			const croppedVisibleWidth = originalElement.width ?? activeContent.crop?.displayWidth
-			const croppedVisibleHeight = originalElement.height ?? activeContent.crop?.displayHeight
-			const hasCroppedVisibleSize =
-				!!activeContent.crop &&
-				Number.isFinite(croppedVisibleWidth) &&
-				Number.isFinite(croppedVisibleHeight) &&
-				!!croppedVisibleWidth &&
-				!!croppedVisibleHeight &&
-				croppedVisibleWidth > 0 &&
-				croppedVisibleHeight > 0
-
-			// 新元素尺寸优先跟随当前请求配置；没有请求尺寸时再复用裁剪可视尺寸。
-			const requestSize = parseImageElementSize(request.size)
-			const cropPayloadSize = parseImageElementSize(imageProcessRequestPayload.size)
-			let newWidth: number
-			let newHeight: number
-			if (requestSize) {
-				newWidth = requestSize.width
-				newHeight = requestSize.height
-			} else if (hasCroppedVisibleSize) {
-				newWidth = croppedVisibleWidth
-				newHeight = croppedVisibleHeight
-			} else if (cropPayloadSize) {
-				newWidth = cropPayloadSize.width
-				newHeight = cropPayloadSize.height
-			} else {
-				const defaultSize = getDefaultImageSize(imageModelList)
-				newWidth = originalElement.width ?? defaultSize?.width ?? 1024
-				newHeight = originalElement.height ?? defaultSize?.height ?? 1024
-			}
-
-			// 生成新元素 ID
-			const newElementId = generateElementId()
-
-			// 获取下一个 zIndex
-			const newZIndex = canvas.elementManager.getNextZIndexInLevel()
-
-			const generateRequest: GenerateImageRequest = {
-				...request,
-				prompt: request.prompt.trim(),
-				size: request.size || imageProcessRequestPayload.size,
-			}
-
-			// 创建新的图片元素数据（使用选中的尺寸）
-			const newImageElement = {
-				...ElementFactory.createElementData(
-					ElementTypeEnum.Image,
-					newElementId,
-					newX,
-					newY,
-					newWidth,
-					newHeight,
-					newZIndex,
-				),
-				name: "Image",
-			} as ImageElement
-
-			sendingRef.current = true
-			setIsSending(true)
+			const submissionId = props.submissionController.begin("preparing")
+			let accepted = false
 			try {
+				// 新元素位置间距常量（像素）
+				const NEW_ELEMENT_SPACING = 0
+
+				// 计算新元素的位置（放在原元素右边，顶部对齐）
+				const newPosition = resolveDerivedRightPlacement(
+					props.imageElement,
+					originalElementInstance,
+					canvas.elementManager,
+					{ spacing: NEW_ELEMENT_SPACING },
+				)
+				if (!newPosition) return false
+				const { x: newX, y: newY } = newPosition
+
+				const originalElement = props.imageElement
+				let imageInfo = originalElementInstance.getImageInfo()
+				if (!imageInfo?.naturalWidth || !imageInfo?.naturalHeight) {
+					await originalElementInstance.getHTMLImageElement({ variant: "preview" })
+					imageInfo = originalElementInstance.getImageInfo()
+				}
+
+				const imageProcessRequestPayload = getImageProcessRequestPayload({
+					crop: activeContent.crop,
+					sourceDimensions: {
+						width: imageInfo?.naturalWidth ?? props.imageElement.width ?? 0,
+						height: imageInfo?.naturalHeight ?? props.imageElement.height ?? 0,
+					},
+				})
+
+				const croppedVisibleWidth =
+					originalElement.width ?? activeContent.crop?.displayWidth
+				const croppedVisibleHeight =
+					originalElement.height ?? activeContent.crop?.displayHeight
+				const hasCroppedVisibleSize =
+					!!activeContent.crop &&
+					Number.isFinite(croppedVisibleWidth) &&
+					Number.isFinite(croppedVisibleHeight) &&
+					!!croppedVisibleWidth &&
+					!!croppedVisibleHeight &&
+					croppedVisibleWidth > 0 &&
+					croppedVisibleHeight > 0
+
+				// 新元素尺寸优先跟随当前请求配置；没有请求尺寸时再复用裁剪可视尺寸。
+				const requestSize = parseImageElementSize(request.size)
+				const cropPayloadSize = parseImageElementSize(imageProcessRequestPayload.size)
+				let newWidth: number
+				let newHeight: number
+				if (requestSize) {
+					newWidth = requestSize.width
+					newHeight = requestSize.height
+				} else if (hasCroppedVisibleSize) {
+					newWidth = croppedVisibleWidth
+					newHeight = croppedVisibleHeight
+				} else if (cropPayloadSize) {
+					newWidth = cropPayloadSize.width
+					newHeight = cropPayloadSize.height
+				} else {
+					const defaultSize = getDefaultImageSize(imageModelList)
+					newWidth = originalElement.width ?? defaultSize?.width ?? 1024
+					newHeight = originalElement.height ?? defaultSize?.height ?? 1024
+				}
+
+				const newElementId = generateElementId()
+				const newZIndex = canvas.elementManager.getNextZIndexInLevel()
+				const generateRequest: GenerateImageRequest = {
+					...request,
+					prompt: request.prompt.trim(),
+					size: request.size || imageProcessRequestPayload.size,
+				}
+				const newImageElement = {
+					...ElementFactory.createElementData(
+						ElementTypeEnum.Image,
+						newElementId,
+						newX,
+						newY,
+						newWidth,
+						newHeight,
+						newZIndex,
+					),
+					name: "Image",
+				} as ImageElement
+
+				props.submissionController.setPhase(submissionId, "submitting")
+				sendingRef.current = true
+				setIsSending(true)
 				const submitted = await createAndSubmitNewImageGeneration({
 					canvas,
 					newImageElement,
@@ -340,6 +350,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				if (!submitted) {
 					return false
 				}
+				accepted = true
 				sessionPersistenceEnabledRef.current = false
 				if (sessionStore && sessionIntentToClear) {
 					sessionStore.clear(getSessionKey(sessionIntentToClear))
@@ -360,6 +371,7 @@ export default function SecondEdit(props: SecondEditProps) {
 				}
 				return true
 			} finally {
+				props.submissionController.finish(submissionId, accepted)
 				sendingRef.current = false
 				setIsSending(false)
 			}
@@ -370,6 +382,7 @@ export default function SecondEdit(props: SecondEditProps) {
 			getSessionKey,
 			imageModelList,
 			props.imageElement,
+			props.submissionController,
 			sessionContentId,
 			sessionIntent,
 			sessionStore,

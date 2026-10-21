@@ -1,4 +1,3 @@
-import type { ReactNode } from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import { AlertCircle, type LucideIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
@@ -36,8 +35,9 @@ type MarketListPanelProps<TData> = {
 	queryError: ApiError | null
 	showCategoryFilter?: boolean
 	showPackageName: boolean
+	mobileOpen?: boolean
+	onMobileOpenChange?: (open: boolean) => void
 	stickyLeftColumnId?: string
-	toolbarActions?: ReactNode
 	total: number
 }
 
@@ -64,29 +64,28 @@ export function MarketListPanel<TData>({
 	queryError,
 	showCategoryFilter,
 	showPackageName,
+	mobileOpen,
+	onMobileOpenChange,
 	stickyLeftColumnId,
-	toolbarActions,
 	total,
 }: MarketListPanelProps<TData>) {
 	const { t } = useTranslation()
 
 	return (
 		<div className="space-y-4">
-			{/* Keep marketplace filters aligned with the approval list while the table scrolls. */}
-			<div className="sticky top-0 z-40 -mx-4 bg-background px-4 py-2 lg:-mx-6 lg:px-6">
-				<MarketFilters
-					categoryOptions={categoryOptions}
-					categoryOptionsLoading={categoryOptionsLoading}
-					codeLabel={codeLabel}
-					codePlaceholder={codePlaceholder}
-					filterDraft={filterDraft}
-					kind={kind}
-					onDraftChange={onDraftChange}
-					showCategoryFilter={showCategoryFilter}
-					showPackageName={showPackageName}
-					toolbarActions={toolbarActions}
-				/>
-			</div>
+			<MarketFilters
+				categoryOptions={categoryOptions}
+				categoryOptionsLoading={categoryOptionsLoading}
+				codeLabel={codeLabel}
+				codePlaceholder={codePlaceholder}
+				filterDraft={filterDraft}
+				kind={kind}
+				onDraftChange={onDraftChange}
+				showCategoryFilter={showCategoryFilter}
+				showPackageName={showPackageName}
+				mobileOpen={mobileOpen}
+				onMobileOpenChange={onMobileOpenChange}
+			/>
 
 			{queryError ? (
 				<div className="rounded-lg border border-border/50 p-4">
@@ -96,7 +95,8 @@ export function MarketListPanel<TData>({
 						description={
 							queryError.message || t("officialMarketplace.error.loadFailed")
 						}
-						testId="platform-official-marketplace-error"/>
+						testId="platform-official-marketplace-error"
+					/>
 				</div>
 			) : (
 				<DataTable
@@ -108,7 +108,8 @@ export function MarketListPanel<TData>({
 								icon={emptyIcon}
 								title={emptyTitle}
 								description={emptyDescription}
-							 testId="platform-official-marketplace-empty"/>
+								testId="platform-official-marketplace-empty"
+							/>
 						</div>
 					}
 					getRowId={(item, index) =>
@@ -116,27 +117,30 @@ export function MarketListPanel<TData>({
 							? String(item.id)
 							: String(index)
 					}
+					containerTestId="platform-official-marketplace-list"
 					isLoading={isFetching && data.length === 0}
+					loadingTestId="platform-official-marketplace-loading"
 					minWidth={minWidth}
+					rowTestId="platform-official-marketplace-row"
 					stickyLeftColumnId={stickyLeftColumnId}
-				 containerTestId="platform-official-marketplace-list" loadingTestId="platform-official-marketplace-loading" rowTestId="platform-official-marketplace-row"/>
+				/>
 			)}
 
 			{!queryError ? (
 				<ListPagination
-					previousButtonTestId="official-marketplace-previous-button"
-					nextButtonTestId="official-marketplace-next-button"
-					pageSizeTriggerTestId="official-marketplace-page-size-trigger"
-					pageSizeOptionTestId="official-marketplace-page-size-option"
-					jumpInputTestId="official-marketplace-jump-input"
-				testId="official-marketplace-pagination"
 					showQuickJumper
 					className="px-1"
+					jumpInputTestId="official-marketplace-jump-input"
 					loading={isFetching}
+					nextButtonTestId="official-marketplace-next-button"
 					onPageChange={onPageChange}
 					onPageSizeChange={onPageSizeChange}
 					page={page}
 					pageSize={pageSize}
+					pageSizeOptionTestId="official-marketplace-page-size-option"
+					pageSizeTriggerTestId="official-marketplace-page-size-trigger"
+					previousButtonTestId="official-marketplace-previous-button"
+					testId="official-marketplace-pagination"
 					total={total}
 				/>
 			) : null}
