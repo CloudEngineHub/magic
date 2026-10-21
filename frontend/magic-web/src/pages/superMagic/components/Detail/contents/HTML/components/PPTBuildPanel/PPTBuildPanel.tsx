@@ -1,6 +1,22 @@
-import { useState, type RefObject } from "react"
+import type { ReactNode, RefObject } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
+import {
+	DndContext,
+	KeyboardSensor,
+	PointerSensor,
+	closestCenter,
+	useSensor,
+	useSensors,
+	type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+	SortableContext,
+	sortableKeyboardCoordinates,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import { ArrowDown, ArrowUp, GripVertical, ListOrdered, Plus, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
@@ -34,9 +50,18 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	)
 	const groups = groupBuildQueue(entries)
 	const locked = disabled || busy || loading || failed
-	const [draggedStep, setDraggedStep] = useState<number | null>(null)
+	const sensors = useSensors(
+		useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+	)
 	const selected = entries.find((entry) => entry.selector === selectedElement?.selector)
 	const move = (from: number, to: number) => void update(reorderBuildQueue(entries, from, to))
+	const onDragEnd = ({ active, over }: DragEndEvent) => {
+		if (!over || active.id === over.id || locked) return
+		const from = groups.findIndex((group) => group.step === active.id)
+		const to = groups.findIndex((group) => group.step === over.id)
+		if (from >= 0 && to >= 0) move(from, to)
+	}
 	const select = (selector: string) => {
 		void editorRef.current?.selectElement(selector).catch(() => {
 			void reload()
@@ -87,7 +112,7 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 					{selected ? t("ppt.build.alreadyAdded") : t("ppt.build.pickElement")}
 				</p>
 			</div>
-			<ScrollArea className="min-h-0 flex-1" viewportClassName="p-3">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="p-3 [&>div]:!block">
 				{loading ? (
 					<p role="status" className="text-xs text-muted-foreground">
 						{t("ppt.build.loading")}
@@ -104,82 +129,57 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 						{t("ppt.build.empty")}
 					</p>
 				) : (
-					<ol className="space-y-3" aria-label={t("ppt.build.queue")} aria-busy={busy}>
-						{groups.map((group, index) => (
-							<li
-								key={group.step}
-								className={cn(
-									"rounded-md border border-border",
-									draggedStep === index && "opacity-50",
-								)}
-								onDragOver={(event) => {
-									if (draggedStep !== null && !locked) event.preventDefault()
-								}}
-								onDrop={(event) => {
-									event.preventDefault()
-									if (draggedStep !== null && !locked) move(draggedStep, index)
-									setDraggedStep(null)
-								}}
+					<DndContext
+						sensors={sensors}
+						collisionDetection={closestCenter}
+						onDragEnd={onDragEnd}
+					>
+						<SortableContext
+							items={groups.map((group) => group.step)}
+							strategy={verticalListSortingStrategy}
+						>
+							<ol
+								className="space-y-3"
+								aria-label={t("ppt.build.queue")}
+								aria-busy={busy}
 							>
-								<div className="flex items-center gap-1 border-b border-border bg-muted/40 px-2 py-1">
-									<span
-										draggable={!locked}
-										onDragStart={(event) => {
-											event.dataTransfer.effectAllowed = "move"
-											event.dataTransfer.setData("text/plain", String(index))
-											setDraggedStep(index)
-										}}
-										onDragEnd={() => setDraggedStep(null)}
-										className="cursor-grab text-muted-foreground"
-										aria-hidden="true"
-									>
-										<GripVertical size={16} />
-									</span>
-									<span className="flex-1 text-xs font-medium">
-										{t("ppt.build.stepLabel", { step: index + 1 })}
-									</span>
-									{[
-										{
-											icon: ArrowUp,
+								{groups.map((group, index) => (
+									<SortableStep
+										key={group.step}
+										id={group.step}
+										locked={locked}
+										label={t("ppt.build.stepLabel", { step: index + 1 })}
+										moveUp={{
 											label: t("ppt.build.moveUp"),
-											to: index - 1,
-										},
-										{
-											icon: ArrowDown,
+											disabled: locked || index <= 0,
+											onClick: () => move(index, index - 1),
+										}}
+										moveDown={{
 											label: t("ppt.build.moveDown"),
-											to: index + 1,
-										},
-									].map(({ icon: Icon, label, to }) => (
-										<MagicTooltip key={label} title={label}>
-											<Button
-												variant="ghost"
-												size="icon"
-												className="size-7"
-												aria-label={label}
-												disabled={locked || to < 0 || to >= groups.length}
-												onClick={() => move(index, to)}
-											>
-												<Icon size={16} />
-											</Button>
-										</MagicTooltip>
-									))}
-								</div>
-								<ul className="space-y-1 p-1">
-									{group.items.map((entry) => (
-										<PPTBuildQueueItem
-											key={entry.selector}
-											entry={entry}
-											entries={entries}
-											selected={entry.selector === selectedElement?.selector}
-											disabled={locked}
-											onSelect={select}
-											onUpdate={update}
-										/>
-									))}
-								</ul>
-							</li>
-						))}
-					</ol>
+											disabled: locked || index >= groups.length - 1,
+											onClick: () => move(index, index + 1),
+										}}
+									>
+										<ul className="space-y-1 p-1">
+											{group.items.map((entry) => (
+												<PPTBuildQueueItem
+													key={entry.selector}
+													entry={entry}
+													entries={entries}
+													selected={
+														entry.selector === selectedElement?.selector
+													}
+													disabled={locked}
+													onSelect={select}
+													onUpdate={update}
+												/>
+											))}
+										</ul>
+									</SortableStep>
+								))}
+							</ol>
+						</SortableContext>
+					</DndContext>
 				)}
 			</ScrollArea>
 			<p className="border-t border-border p-3 text-xs text-muted-foreground" role="status">
@@ -188,3 +188,78 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 		</aside>
 	)
 })
+
+interface StepAction {
+	label: string
+	disabled: boolean
+	onClick: () => void
+}
+
+function SortableStep({
+	id,
+	locked,
+	label,
+	moveUp,
+	moveDown,
+	children,
+}: {
+	id: number
+	locked: boolean
+	label: string
+	moveUp: StepAction
+	moveDown: StepAction
+	children: ReactNode
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		setActivatorNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id, disabled: locked })
+	return (
+		<li
+			ref={setNodeRef}
+			style={{ transform: CSS.Transform.toString(transform), transition }}
+			className={cn(
+				"relative rounded-md border border-border bg-background",
+				isDragging && "z-10 opacity-70 shadow-md",
+			)}
+		>
+			<div className="flex items-center gap-1 border-b border-border bg-muted/40 px-2 py-1">
+				<button
+					type="button"
+					ref={setActivatorNodeRef}
+					disabled={locked}
+					className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label={label}
+					{...attributes}
+					{...listeners}
+				>
+					<GripVertical size={16} />
+				</button>
+				<span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
+				{[
+					{ icon: ArrowUp, action: moveUp },
+					{ icon: ArrowDown, action: moveDown },
+				].map(({ icon: Icon, action }) => (
+					<MagicTooltip key={action.label} title={action.label}>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7 shrink-0"
+							aria-label={action.label}
+							disabled={action.disabled}
+							onClick={action.onClick}
+						>
+							<Icon size={16} />
+						</Button>
+					</MagicTooltip>
+				))}
+			</div>
+			{children}
+		</li>
+	)
+}
