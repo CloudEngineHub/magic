@@ -267,10 +267,20 @@ const MentionPanel = observer(
 				{ type: "audio", label: t.selectionSummary.audio },
 			]
 
-			return summaryDefinitions.filter((definition) => {
-				const limit = selectionSummary.limits[definition.type]
-				return typeof limit === "number" && Number.isFinite(limit) && limit > 0
-			})
+			return summaryDefinitions
+				.map((definition) => {
+					const limit = selectionSummary.limits[definition.type]
+					const isActive =
+						typeof limit === "number" && Number.isFinite(limit) && limit > 0
+					return {
+						...definition,
+						limit,
+						isActive,
+						reached:
+							isActive && selectionSummaryCounts[definition.type] >= (limit ?? 0),
+					}
+				})
+				.filter((item) => item.isActive)
 		}, [selectionSummary, selectionSummaryCounts, t.selectionSummary])
 		const showSelectionSummary = Boolean(
 			multiSelectMode && selectionSummary && selectionSummaryCounts,
@@ -1156,10 +1166,10 @@ const MentionPanel = observer(
 							<span>
 								{t.selectionSummary.selected} {pendingByKey.size}
 							</span>
-							{selectionSummaryItems.map(({ type, label }) => (
+							{selectionSummaryItems.map(({ type, label, reached }) => (
 								<span key={type} className="inline-flex items-center gap-1">
 									<span aria-hidden>{" · "}</span>
-									<span>
+									<span className={cn(reached && "text-destructive")}>
 										{label} {selectionSummaryCounts[type]}/
 										{selectionSummary.limits[type]}
 									</span>
