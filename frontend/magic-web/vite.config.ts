@@ -13,6 +13,7 @@ import mkcert from "vite-plugin-mkcert"
 import vitePluginImp from "vite-plugin-imp"
 import { visualizer } from "rollup-plugin-visualizer"
 import vitePluginStripConsole from "./plugins/vite-plugin-strip-console"
+import { withTransformFilter } from "./plugins/with-transform-filter"
 import babelPluginAntdStyle from "babel-plugin-antd-style"
 import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
@@ -315,12 +316,17 @@ export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: s
 			// Critical font preload plugin for LCP optimization
 			!isDev && vitePluginCriticalFontPreload(),
 			!isDev &&
-				viteExternalsPlugin({
-					// 模块名: 全局变量名
-					react: "React",
-					"react-dom": "ReactDOM",
-					"lodash-es": "_",
-				}),
+				// The plugin only rewrites exact `react` / `react-dom` / `lodash-es` specifiers (import or
+				// require), so skip every module that never quotes one of them.
+				withTransformFilter(
+					viteExternalsPlugin({
+						// 模块名: 全局变量名
+						react: "React",
+						"react-dom": "ReactDOM",
+						"lodash-es": "_",
+					}),
+					{ code: /["'`]\s*(?:react|react-dom|lodash-es)\s*["'`]/ },
+				),
 			!isDev && externalGlobalsPlugin(),
 			vitePluginImp({
 				libList: [
