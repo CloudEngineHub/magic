@@ -374,10 +374,11 @@ class ModeAppService extends AbstractModeAppService
         );
 
         $reasoningCapabilities = $this->buildReasoningCapabilities($authorization, $providerModels, $allProviderModelsWithStatus);
+        // 倍率与后台配置共用持久化状态，整批模型只读取一次。
         $multipliers = di(ModelBillingMultiplierCalculator::class)->calculate(
             $reasoningCapabilities,
             $availableProviderGroups,
-            di(PlatformSettingsDomainService::class)->get()->getModelBillingMultiplier()
+            di(PlatformSettingsDomainService::class)->getPersisted()->getModelBillingMultiplier()
         );
         foreach ($reasoningCapabilities as $modelId => &$capability) {
             $capability['billing_multiplier'] = $multipliers[$modelId];

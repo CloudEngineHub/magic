@@ -213,8 +213,8 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
             if ($name === 'get') {
                 return $cache[$args[0]] ?? false;
             }
-            if ($name === 'set') {
-                $cache[$args[0]] = $args[1];
+            if ($name === 'setex') {
+                $cache[$args[0]] = $args[2];
                 return true;
             }
             if ($name === 'del') {
@@ -239,6 +239,7 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
             $data = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '2', 'output_price' => '3', 'currency' => 'CNY', 'usd_to_cny_rate' => '7'])->toArray();
             $service->save(PlatformSettings::fromArray(['model_billing_multiplier' => $data]));
             $this->assertContains('magic:platform_settings_cache', $deleted);
+            $this->assertContains('magic:platform_settings_cache:v2', $deleted);
             $this->assertContains('globalConfig:all', $deleted);
             $settings = $service->get();
             $this->assertSame($data, $settings->getModelBillingMultiplier()->toArray());

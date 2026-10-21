@@ -22,7 +22,13 @@ use Hyperf\Redis\Redis;
  */
 class PlatformSettingsDomainService
 {
-    private const string CACHE_KEY = 'magic:platform_settings_cache';
+    private const string CACHE_KEY = 'magic:platform_settings_cache:v2';
+
+    private const string LEGACY_CACHE_KEY = 'magic:platform_settings_cache';
+
+    private const int CACHE_TTL = 300;
+
+    private const string UPDATE_LOCK = 'platform_settings_update';
 
     public function __construct(
         private readonly MagicUserSettingRepositoryInterface $magicUserSettingRepository,
@@ -31,23 +37,33 @@ class PlatformSettingsDomainService
     ) {
     }
 
-    /**
-     * Get platform settings.
-     */
+    /** 缓存回填与配置保存共用互斥锁，避免旧读取在失效之后写回。 */
     public function get(): PlatformSettings
     {
-        $cache = $this->redis->get(self::CACHE_KEY);
-        if ($cache) {
-            $data = json_decode($cache, true) ?? [];
-            return PlatformSettings::fromArray($data);
+        $settings = $this->getCachedSettings();
+        if ($settings !== null) {
+            return $settings;
         }
 
-        $settings = $this->getPersisted();
-        $this->redis->set(self::CACHE_KEY, json_encode($settings->toArray()));
-        return $settings;
+        $owner = bin2hex(random_bytes(16));
+        if (! $this->locker->spinLock(self::UPDATE_LOCK, $owner, 180, 3)) {
+            // 锁超时只读数据库，不参与回填，避免覆盖其他请求保存的新值。
+            return $this->getPersisted();
+        }
+        try {
+            $settings = $this->getCachedSettings();
+            if ($settings !== null) {
+                return $settings;
+            }
+            $settings = $this->getPersisted();
+            $this->redis->setex(self::CACHE_KEY, self::CACHE_TTL, json_encode($settings->toArray()));
+            return $settings;
+        } finally {
+            $this->locker->release(self::UPDATE_LOCK, $owner);
+        }
     }
 
-    /** 管理配置和写入链共用持久化读取，不能用展示缓存替代已保存状态。 */
+    /** 倍率计算、管理配置与写入链统一读取持久化状态，不依赖展示缓存。 */
     public function getPersisted(): PlatformSettings
     {
         $entity = $this->magicUserSettingRepository->getGlobal(UserSettingKey::PlatformSettings->value);
@@ -109,9 +125,8 @@ class PlatformSettingsDomainService
     /** 在统一互斥范围内读取最新配置并应用字段更新，防止不同页面互相覆盖。 */
     public function update(callable $updater): PlatformSettings
     {
-        $name = 'platform_settings_update';
         $owner = bin2hex(random_bytes(16));
-        if (! $this->locker->spinLock($name, $owner, 180, 3)) {
+        if (! $this->locker->spinLock(self::UPDATE_LOCK, $owner, 180, 3)) {
             throw new LockException();
         }
         try {
@@ -119,7 +134,7 @@ class PlatformSettingsDomainService
             $settings = $updater($current);
             return $this->persist($settings);
         } finally {
-            $this->locker->release($name, $owner);
+            $this->locker->release(self::UPDATE_LOCK, $owner);
         }
     }
 
@@ -127,6 +142,17 @@ class PlatformSettingsDomainService
     public function save(PlatformSettings $settings): PlatformSettings
     {
         return $this->update(static fn (PlatformSettings $current): PlatformSettings => $settings);
+    }
+
+    /** 仅使用当前版本的完整缓存，缺失倍率字段时回源读取。 */
+    private function getCachedSettings(): ?PlatformSettings
+    {
+        $cache = $this->redis->get(self::CACHE_KEY);
+        if (! $cache) {
+            return null;
+        }
+        $data = json_decode($cache, true);
+        return is_array($data) && isset($data['model_billing_multiplier']) ? PlatformSettings::fromArray($data) : null;
     }
 
     /** 保存已归一化配置并清除平台缓存，仅供更新临界区调用。 */
@@ -138,6 +164,7 @@ class PlatformSettingsDomainService
         $entity->setMagicId(null);
         $this->magicUserSettingRepository->saveGlobal($entity);
         $this->redis->del(self::CACHE_KEY);
+        $this->redis->del(self::LEGACY_CACHE_KEY);
         GlobalConfigCacheUtil::deleteGlobalConfig();
         return $settings;
     }
