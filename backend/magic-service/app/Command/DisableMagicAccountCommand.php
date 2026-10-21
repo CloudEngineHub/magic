@@ -69,6 +69,7 @@ class DisableMagicAccountCommand extends HyperfCommand
                 ->when($phone !== '', static fn ($query) => $query->where('magic_contact_accounts.phone', $phone))
                 ->when($emailDomain !== '', static fn ($query) => $query->where('magic_contact_accounts.email', 'like', '%@' . $emailDomain))
                 ->get();
+            $accounts = $accounts->map(static fn ($account): object => is_array($account) ? (object) $account : $account);
         } catch (Throwable $e) {
             $this->error('查询账号失败: ' . $e->getMessage());
             return self::FAILURE;
