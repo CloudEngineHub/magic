@@ -94,11 +94,22 @@ function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
 
 	return (
 		<div className="w-full" data-testid="ai-canvas-create-prompt">
-			<EditorLayout
-				mode={TopicMode.Design}
-				editorContext={editorContext}
-				sceneStateStore={sceneStateStore}
-			/>
+			{workspace ? (
+				<EditorLayout
+					mode={TopicMode.Design}
+					editorContext={editorContext}
+					sceneStateStore={sceneStateStore}
+				/>
+			) : (
+				// The editor keys its draft by workspace. Mounting it before the ai-canvas workspace
+				// loads would restore the "defaultWorkspaceId" draft, then clear it when the real key
+				// arrives, so a stale prompt flashed on refresh. Until then, an empty shell of the
+				// composer's size (outline and shadow as in AiCanvasComposerFrame) holds its place.
+				<div
+					className="h-[150px] w-full rounded-[20px] border border-border bg-background shadow-[0_16px_48px_-16px_rgb(15_23_42/0.16)]"
+					aria-busy="true"
+				/>
+			)}
 		</div>
 	)
 }
