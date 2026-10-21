@@ -113,10 +113,10 @@ export function ModelGroupSection({
 									/>
 									<ModelTags model={model} />
 								</FlexBox>
-								{/* 倍率用等宽小字，和名称拉开层级，也不抢名称的宽度。 */}
+								{/* 倍率用 Inter 小字，和名称拉开层级，也不抢名称的宽度。 */}
 								<ModelBillingMultiplier
 									value={model.billing_multiplier}
-									className="font-mono text-[11px] leading-4"
+									className="text-[11px] leading-4 [font-family:Inter,sans-serif]"
 								/>
 								{/* 固定勾选列，倍率在每一行保持同一条垂直基线。 */}
 								<span
