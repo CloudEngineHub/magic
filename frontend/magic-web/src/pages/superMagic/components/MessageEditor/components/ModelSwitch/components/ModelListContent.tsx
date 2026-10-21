@@ -74,7 +74,8 @@ export const ModelListContent = observer(function ModelListContent({
 				onModelsLoaded={onModelsLoaded}
 				compact={showModelInfo}
 			/>
-			{visibleGroups.length === 0 && (
+			{/* 平台模型和「我的模型 / 企业模型」都没有时才显示空状态；只有企业模型时不再在下方追加空状态。 */}
+			{visibleGroups.length === 0 && !hasMyModels && (
 				<ModelEmptyState
 					icon={EmptyStateIcon}
 					title={emptyStateTitle}
