@@ -65,6 +65,8 @@
 		"input": "输入",
 		"invalid": "非法价格",
 		"invalidManual": "请输入大于 0 的倍率，整数、小数最多各 12 位",
+		"invalidManualPrecision": "整数、小数各不超过 12 位",
+		"invalidManualValue": "请输入大于 0 的数字",
 		"invalid_base": "请填写有效基准金额",
 		"invalid_config": "动态配置无效",
 		"invalid_currency": "请选择基准币种",

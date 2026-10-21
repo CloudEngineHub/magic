@@ -159,17 +159,43 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 	manualControl: css`
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) 48px;
-		align-items: center;
+		align-items: start;
 		gap: 8px;
 		width: 100%;
 		max-width: 224px;
 		margin-left: auto;
+	`,
+	manualField: css`
+		min-width: 0;
 	`,
 	manualInput: css`
 		width: 100%;
 		min-width: 0;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
+		&[aria-invalid="true"] {
+			border-color: ${token.colorError};
+			&:hover {
+				border-color: ${token.colorError};
+			}
+			&:focus {
+				border-color: ${token.colorError};
+				box-shadow: 0 0 0 2px ${token.colorErrorBg};
+			}
+		}
+	`,
+	// 提示限制在输入列内，覆盖数值单元格的右对齐和逐字断行。
+	manualError: css`
+		padding-top: 4px;
+		color: ${token.colorError};
+		font-size: 12px;
+		line-height: 20px;
+		text-align: left;
+		overflow-wrap: normal;
+		word-break: normal;
+		> span {
+			display: block;
+		}
 	`,
 	resetButton: css`
 		min-width: 0;

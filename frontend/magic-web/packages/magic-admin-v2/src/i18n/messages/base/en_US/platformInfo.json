@@ -65,6 +65,8 @@
 		"input": "Input",
 		"invalid": "Invalid price",
 		"invalidManual": "Enter a positive multiplier, up to 12 integer and 12 decimal digits.",
+		"invalidManualPrecision": "Up to 12 integer and 12 decimal digits.",
+		"invalidManualValue": "Enter a number greater than 0.",
 		"invalid_base": "Enter a valid reference amount",
 		"invalid_config": "Invalid dynamic configuration",
 		"invalid_currency": "Select a benchmark currency",
