@@ -106,7 +106,7 @@ export function ModelGroupSection({
 										isSelected={false}
 										className={cn(
 											// 覆盖 ModelName 自带的 120px 上限，名称尽量完整显示，只在真的放不下时截断。
-											"min-w-0 !max-w-none flex-1 !text-sm !font-medium",
+											"min-w-0 !max-w-none flex-1 !text-[13px] !font-medium",
 											isSelected ? "!text-foreground" : "text-foreground/80",
 											isDisabled && "opacity-50",
 										)}
