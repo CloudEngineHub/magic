@@ -58,7 +58,9 @@ export default function ProjectTypeTag({
 				aria-label={label}
 				data-testid="project-type-tag"
 			>
-				<Icon size={16} strokeWidth={1.8} aria-hidden="true" />
+				{/* 不传 strokeWidth：Lucide 图标沿用 src/styles/lucide.css 的全局 1.5px，
+				    MagiClaw 沿用自身 16 画板的默认线宽，与侧栏菜单图标视觉线粗一致。 */}
+				<Icon size={16} aria-hidden="true" />
 			</span>
 		</MagicTooltip>
 	)
