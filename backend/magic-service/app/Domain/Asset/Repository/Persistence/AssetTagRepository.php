@@ -17,9 +17,13 @@ use App\Infrastructure\Util\IdGenerator\IdGenerator;
 
 class AssetTagRepository implements AssetTagRepositoryInterface
 {
-    public function queryVisible(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array
+    public function queryVisible(AssetDataIsolation $dataIsolation, ?string $ownerUid = null, ?string $businessType = null): array
     {
         $builder = AssetTagModel::query()->whereIn('organization_code', $dataIsolation->getOrganizationCodes())->where('status', 1);
+        // null 表示不按业务类型过滤（后台查看全部）；用户侧必须显式传入。
+        if ($businessType !== null) {
+            $builder->where('business_type', $businessType);
+        }
         $builder->where(static function ($query) use ($ownerUid): void {
             $query->whereNull('owner_uid');
             if ($ownerUid !== null && $ownerUid !== '') {
@@ -29,9 +33,9 @@ class AssetTagRepository implements AssetTagRepositoryInterface
         return $builder->orderBy('sort', 'desc')->orderBy('id', 'desc')->get()->map(static fn (AssetTagModel $model) => AssetTagFactory::modelToEntity($model))->all();
     }
 
-    public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array
+    public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null, ?string $businessType = null): array
     {
-        $nodes = $this->queryVisible($dataIsolation, $ownerUid);
+        $nodes = $this->queryVisible($dataIsolation, $ownerUid, $businessType);
         $children = [];
         $roots = [];
         foreach ($nodes as $node) {

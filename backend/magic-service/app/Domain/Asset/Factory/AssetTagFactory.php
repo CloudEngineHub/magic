@@ -17,6 +17,7 @@ class AssetTagFactory
         return (new AssetTagEntity())
             ->setId($model->id)
             ->setOrganizationCode((string) $model->organization_code)
+            ->setBusinessType($model->business_type)
             ->setParentId($model->parent_id)
             ->setNodeType((string) $model->node_type)
             ->setNameI18n($model->name_i18n ?? [])

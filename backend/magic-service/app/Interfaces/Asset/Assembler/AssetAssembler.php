@@ -38,6 +38,7 @@ class AssetAssembler
         return [
             'id' => (string) $tag->getId(),
             'parentId' => (string) $tag->getParentId(),
+            'businessType' => $tag->getBusinessType(),
             'nodeType' => $tag->getNodeType()->value,
             'name' => $tag->getI18nName(self::language()),
             'ownerUid' => $tag->getOwnerUid(),

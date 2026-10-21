@@ -37,15 +37,21 @@ class AdminAssetAppService extends AbstractAssetAppService
         parent::__construct($resourceVisibilityDomainService);
     }
 
-    public function listOfficialTags(Authenticatable|BaseDataIsolation $authorization): array
+    /** @param null|string $businessType 只看某个业务类型；null 表示后台查看全部 */
+    public function listOfficialTags(Authenticatable|BaseDataIsolation $authorization, ?string $businessType = null): array
     {
-        return $this->assetTagDomainService->listVisible($this->officialDataIsolation($authorization));
+        return $this->assetTagDomainService->listVisible($this->officialDataIsolation($authorization), $businessType);
     }
 
-    public function createOfficialTag(Authenticatable|BaseDataIsolation $authorization, string $name, string $nodeType, int $parentId): AssetTagEntity
-    {
+    public function createOfficialTag(
+        Authenticatable|BaseDataIsolation $authorization,
+        string $name,
+        string $nodeType,
+        int $parentId,
+        string $businessType = AssetTagEntity::DEFAULT_BUSINESS_TYPE,
+    ): AssetTagEntity {
         $isolation = $this->officialDataIsolation($authorization);
-        return $this->assetTagDomainService->createOfficial($isolation, $name, AssetTagNodeType::from($nodeType), $parentId);
+        return $this->assetTagDomainService->createOfficial($isolation, $name, AssetTagNodeType::from($nodeType), $parentId, $businessType);
     }
 
     public function updateOfficialTag(Authenticatable|BaseDataIsolation $authorization, int|string $id, string $name, string $nodeType, int $parentId): AssetTagEntity
