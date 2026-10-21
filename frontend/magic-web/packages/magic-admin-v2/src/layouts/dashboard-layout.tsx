@@ -44,12 +44,19 @@ export default function DashboardLayout() {
 	const location = useLocation()
 	const routeBasePath = useResolvedPath(".").pathname
 	const routes = useRouteConfig()
-	const { access } = useRuntime()
+	const { access, organization } = useRuntime()
 	const platformInfoQuery = usePlatformInfoQuery()
 	const isBrandLoading = !platformInfoQuery.data && platformInfoQuery.isLoading
 	const platformBrand = useMemo(
-		() => getPlatformBrand(platformInfoQuery.data, language, t("app.name"), isBrandLoading),
-		[isBrandLoading, language, platformInfoQuery.data, t],
+		() =>
+			getPlatformBrand(
+				platformInfoQuery.data,
+				language,
+				t("app.name"),
+				isBrandLoading,
+				organization.current.logo,
+			),
+		[isBrandLoading, language, organization.current.logo, platformInfoQuery.data, t],
 	)
 	const navigation = useMemo(
 		() => createNavigation(routes, access, routeBasePath),
@@ -854,6 +861,7 @@ function getPlatformBrand(
 	language: LanguageCode,
 	fallbackName: string,
 	isLoading: boolean,
+	organizationLogo?: string,
 ): PlatformBrand {
 	if (isLoading) {
 		return {
@@ -867,10 +875,12 @@ function getPlatformBrand(
 	const locale = toPlatformLocale(language)
 	const fallbackLocale = normalizePlatformLocale(platformInfo?.default_language)
 	const name = getLocalizedValue(platformInfo?.name_i18n, locale, fallbackLocale) || fallbackName
-	const logoUrl =
+	const platformLogoUrl =
 		platformInfo?.minimal_logo ||
 		getLocalizedValue(platformInfo?.logo, locale, fallbackLocale) ||
 		""
+	const organizationLogoUrl = organizationLogo?.trim() || ""
+	const logoUrl = platformLogoUrl || organizationLogoUrl
 
 	return {
 		name,
