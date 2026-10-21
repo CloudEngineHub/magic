@@ -1,4 +1,4 @@
-import { Check, Info } from "lucide-react"
+import { Check, ChevronRight } from "lucide-react"
 import { useState, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
@@ -22,7 +22,7 @@ interface MobileModelRowProps {
 /**
  * 移动端模型行，和桌面行同一结构：分组标题带供应商图标，行内不再重复图标并向右缩进一级；
  * 选中态靠勾号与名称加重表达，倍率用小字放右侧。
- * 行尾的「i」打开介绍弹层，内容与桌面悬停卡相同；它和选中按钮是两个并列控件，不互相触发。
+ * 行尾的「›」打开介绍弹层，内容与桌面悬停卡相同；它和选中按钮是两个并列控件，不互相触发。
  */
 export function MobileModelRow({
 	model,
@@ -91,7 +91,7 @@ export function MobileModelRow({
 						className="flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-muted/60"
 						data-testid="mobile-model-info-trigger"
 					>
-						<Info size={16} aria-hidden="true" />
+						<ChevronRight size={16} aria-hidden="true" />
 					</button>
 					<ModelInfoSheet
 						visible={infoOpen}
