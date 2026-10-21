@@ -134,11 +134,7 @@ class WebScrapeRequestDTO extends AbstractRequestDTO
         return $this;
     }
 
-    /**
-     * Validate web scrape parameters.
-     *
-     * @throws RuntimeException
-     */
+    /** Validate web scrape parameters. */
     public function validate(): void
     {
         if (empty($this->url)) {
@@ -149,8 +145,7 @@ class WebScrapeRequestDTO extends AbstractRequestDTO
             throw new RuntimeException('Invalid URL format');
         }
 
-        if (empty($this->formats)) {
-            throw new RuntimeException('At least one format must be specified');
-        }
+        // Provider adapters own format validation because providers may support
+        // different output formats or apply a provider-specific fallback.
     }
 }
