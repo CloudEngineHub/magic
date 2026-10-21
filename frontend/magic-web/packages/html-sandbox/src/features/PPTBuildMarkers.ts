@@ -80,17 +80,35 @@ export class PPTBuildMarkers {
 			if (!this.observed.has(element)) this.resize?.observe(element)
 		}
 		this.observed = targets
+		// The slide is shown scaled down, so size the chrome against that scale to keep it legible.
+		const displayScale = window.__MAGIC_SCALE_RATIO__
+		const k = Math.min(
+			3,
+			Math.max(
+				1,
+				typeof displayScale === "number" && displayScale > 0 ? 1 / displayScale : 1,
+			),
+		)
+		const size = Math.round(24 * k)
 		for (const { element, build } of builds) {
 			const rect = element.getBoundingClientRect()
 			if (rect.width === 0 || rect.height === 0) continue
+			const frame = document.createElement("div")
+			frame.style.cssText =
+				`position:absolute;left:${rect.left}px;top:${rect.top}px;` +
+				`width:${rect.width}px;height:${rect.height}px;box-sizing:border-box;` +
+				`border:${Math.round(2 * k)}px solid #2563eb;border-radius:${Math.round(4 * k)}px;` +
+				"background:rgba(37,99,235,.10);"
 			const marker = document.createElement("span")
 			marker.textContent = String(steps.indexOf(build.step) + 1)
 			marker.style.cssText =
-				`position:absolute;left:${rect.left}px;top:${rect.top}px;` +
-				"box-sizing:border-box;min-width:20px;height:20px;padding:0 4px;" +
-				"border:1px solid white;border-radius:5px;background:#2563eb;color:white;" +
-				"font:600 12px/18px system-ui;text-align:center;box-shadow:0 1px 4px #0006;"
-			this.shadow.append(marker)
+				`position:absolute;left:${Math.round(-size / 2)}px;top:${Math.round(-size / 2)}px;` +
+				`box-sizing:border-box;min-width:${size}px;height:${size}px;padding:0 ${Math.round(6 * k)}px;` +
+				`border:${Math.round(2 * k)}px solid white;border-radius:${size}px;background:#2563eb;color:white;` +
+				`font:700 ${Math.round(14 * k)}px/${size - Math.round(4 * k)}px system-ui;text-align:center;` +
+				`box-shadow:0 ${Math.round(2 * k)}px ${Math.round(6 * k)}px rgba(0,0,0,.45);`
+			frame.append(marker)
+			this.shadow.append(frame)
 		}
 	}
 
