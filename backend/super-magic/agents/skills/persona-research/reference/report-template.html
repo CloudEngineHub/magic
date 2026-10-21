@@ -167,6 +167,14 @@
         .image-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px dashed #d9d4ce; border-radius: 16px; background: var(--sunken); color: var(--faint); font-size: 13px; text-align: center; padding: 16px; }
         .image-placeholder i { font-size: 20px; }
 
+        /* Touch screens: small inline links get a larger hit area without changing the layout (vertical padding on an
+           inline element does not move the lines around it), and the folded criteria get a taller handle. */
+        @media (pointer: coarse) {
+            .citation-ref { padding: 12px 8px; margin: -12px -6px; }
+            main a.text-link, main a.underline { padding: 10px 2px; margin: -10px -2px; }
+            .criteria > summary { padding: 8px 0; }
+        }
+
         @media print {
             .top-bar, .toc, .float-btn, .citation-tooltip, .heading-anchor { display: none !important; }
             article, .persona-card, figure { break-inside: avoid; }
@@ -284,7 +292,7 @@
                     <!-- Margin: the strongest quote for this hypothesis, its speaker, then up to two sources -->
                     <aside class="margin-note self-start space-y-2 text-[13px] leading-6" data-persona-tone="Zhang Wei">
                         <p class="hang font-bold text-ink">I tried it twice in the first week, then forgot it existed.</p>
-                        <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei · AI-simulated · <a href="#q1" class="text-link">Q1</a></p>
+                        <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span><span class="min-w-0">Zhang Wei · AI-simulated · <a href="#q1" class="text-link">Q1</a></span></p>
                         <p class="font-mono text-[11px] text-faint"><a href="#s1" class="text-link">[S1]</a> SaaS Trial Retention Benchmarks</p>
                     </aside>
                 </article>
@@ -380,7 +388,7 @@
                     </div>
                     <aside class="margin-note self-start space-y-2 text-[13px] leading-6" data-persona-tone="Zhang Wei">
                         <p class="hang font-bold text-ink">I tried it twice in the first week, then forgot it existed.</p>
-                        <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>Zhang Wei · <a href="#q1" class="text-link">Q1</a></p>
+                        <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span><span class="min-w-0">Zhang Wei · <a href="#q1" class="text-link">Q1</a></span></p>
                     </aside>
                 </article>
             </section>
@@ -439,7 +447,7 @@
                     <!-- id="q<N>"; data-source-name = persona name; data-source-title = quote; href = transcript path -->
                     <a id="q1" href="interviews/p_zhangwei_7f3a.json" class="block py-4 pl-6 pr-2 hover:bg-sunken" data-persona-tone="Zhang Wei">
                         <p data-source-title class="hang text-[15px] font-bold leading-7">I tried it twice in the first week, then forgot it existed.</p>
-                        <p class="flex items-center gap-2 text-xs text-faint mt-2"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span>[Q1] <span data-source-name>Zhang Wei</span> · interview, round 2 · theme: no routine</p>
+                        <p class="flex items-center gap-2 text-xs text-faint mt-2"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span><span class="min-w-0">[Q1] <span data-source-name>Zhang Wei</span> · interview, round 2 · theme: no routine</span></p>
                     </a>
                     <a id="q2" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
                         <p data-source-title class="hang text-[15px] font-bold leading-7">I liked trying it, but I never found a weekly task for it.</p>
