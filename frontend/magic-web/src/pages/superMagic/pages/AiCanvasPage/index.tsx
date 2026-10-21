@@ -44,7 +44,25 @@ function AiCanvasPage() {
 	// Latest list request wins; older responses (e.g. a background refresh) are dropped.
 	const listRequestRef = useRef<AbortController | null>(null)
 
-	const projects = workspace ? projectStore.getProjectsByWorkspace(workspace.id) : NO_PROJECTS
+	const workspaceProjects = workspace
+		? projectStore.getProjectsByWorkspace(workspace.id)
+		: NO_PROJECTS
+	// Pinned canvases lead "My canvases"; the stable sort keeps the server order within each group.
+	// Pinning mutates the item in place, so the pinned ids join the memo key (read in render, which
+	// also keeps this observer reacting) and the list reference stays stable otherwise.
+	const pinnedKey = workspaceProjects
+		.filter((project) => project.is_pinned)
+		.map((project) => project.id)
+		.join(",")
+	const projects = useMemo(
+		() =>
+			pinnedKey
+				? [...workspaceProjects].sort(
+						(a, b) => Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned)),
+					)
+				: workspaceProjects,
+		[pinnedKey, workspaceProjects],
+	)
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
 	const covers = useCanvasCovers(projects)
 	// Static: the hero board only shows the built-in showcase (placeholders until it exists).
