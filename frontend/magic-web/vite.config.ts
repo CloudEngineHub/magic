@@ -12,7 +12,7 @@ import { resolve } from "path"
 import mkcert from "vite-plugin-mkcert"
 import vitePluginImp from "vite-plugin-imp"
 import { visualizer } from "rollup-plugin-visualizer"
-import keepConsole from "vite-plugin-keep-console"
+import vitePluginStripConsole from "./plugins/vite-plugin-strip-console"
 import babelPluginAntdStyle from "babel-plugin-antd-style"
 import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
@@ -243,7 +243,7 @@ export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: s
 					},
 				],
 			}),
-			keepConsole(),
+			vitePluginStripConsole(),
 			isEnableInspect &&
 				Inspect({
 					build: true,
@@ -269,21 +269,24 @@ export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: s
 				needEnvInspector: true,
 			}),
 			react(),
-			babel({
-				plugins: [
-					babelPluginAntdStyle,
-					// [
-					// 	// 等待magic-flow包升级完才能使用
-					// 	"babel-plugin-import",
-					// 	{
-					// 		libraryName: "@tabler/icons-react",
-					// 		libraryDirectory: "dist/esm/icons",
-					// 		camel2DashComponentName: false,
-					// 	},
-					// 	"tabler",
-					// ],
-				],
-			}),
+			// babel-plugin-antd-style returns an empty visitor when NODE_ENV=production, so in
+			// builds Babel would only re-parse and re-print every module (~15s). Dev-only.
+			isDev &&
+				babel({
+					plugins: [
+						babelPluginAntdStyle,
+						// [
+						// 	// 等待magic-flow包升级完才能使用
+						// 	"babel-plugin-import",
+						// 	{
+						// 		libraryName: "@tabler/icons-react",
+						// 		libraryDirectory: "dist/esm/icons",
+						// 		camel2DashComponentName: false,
+						// 	},
+						// 	"tabler",
+						// ],
+					],
+				}),
 			// VitePWA({
 			// 	// disable: true,
 			// 	strategies: "injectManifest",
