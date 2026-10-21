@@ -1699,6 +1699,11 @@ const PPTRenderInner = observer(function PPTRenderInner({
 									store.isReady &&
 									hasSlides && (
 										<PPTControlBar
+											rightInset={
+												buildPanelOpen && canConfigureTransitions
+													? "calc(min(18rem, 45%) + 0.5rem)"
+													: undefined
+											}
 											animationOnly={isAnySlideEditing}
 											buildPanelOpen={buildPanelOpen}
 											onToggleBuildPanel={

@@ -7,6 +7,7 @@ import {
 	Home,
 	Maximize,
 	Minimize,
+	Ellipsis,
 	RefreshCw,
 	RotateCw,
 	PanelsTopLeft,
@@ -56,6 +57,7 @@ export function PPTControlBar({
 	onScaleChange,
 	onResetScale,
 	className,
+	rightInset,
 	currentFileId,
 }: PPTControlBarProps) {
 	const { t } = useTranslation("super")
@@ -64,24 +66,11 @@ export function PPTControlBar({
 	const [isPageInputVisible, setIsPageInputVisible] = useState(false)
 	const pageInputRef = useRef<HTMLInputElement>(null)
 	const containerRef = useRef<HTMLDivElement>(null)
-	const mainBarRef = useRef<HTMLDivElement>(null)
-	const templateBarRef = useRef<HTMLDivElement>(null)
-	const zoomBarRef = useRef<HTMLDivElement>(null)
 	const containerSize = useSize(containerRef)
-	const mainBarSize = useSize(mainBarRef)
-	const templateBarSize = useSize(templateBarRef)
-	const zoomBarSize = useSize(zoomBarRef)
 	const barClassName =
 		"pointer-events-auto flex w-max max-w-full items-center gap-1 rounded-[9px] border border-[#dfe2e7]/50 bg-white p-[5px] text-[#252830] shadow-[0_1px_2px_#17213b08,0_3px_8px_#17213b08] dark:border-[#4b515b]/55 dark:bg-[#292c33] dark:text-[#eef0f4] dark:shadow-[0_1px_2px_#00000020,0_3px_8px_#00000015] [&_button]:rounded-[5px] [&_button]:text-[13px] [&_button]:font-normal [&_button]:leading-[1.5] [&_button]:text-inherit [&_button:hover]:bg-[#f0f2f6] dark:[&_button:hover]:bg-[#3a3f49] [&_svg]:stroke-[1.7]"
-	// 独立按钮组整体居中；右侧测量包含备注与缩放，窄预览时一起换行。
-	// 40px 常规高度由 28px 控件、上下 5px 留白和边框组成，避免默认按钮样式改变视觉尺寸。
-	const sideWidth =
-		(onReplaceTemplate ? (templateBarSize?.width ?? 0) : 0) + (zoomBarSize?.width ?? 0)
-	const separateRows =
-		!isMobile &&
-		(!containerSize ||
-			!mainBarSize ||
-			containerSize.width < mainBarSize.width + sideWidth + (onReplaceTemplate ? 16 : 8))
+	// Keep the bar clear of a side panel that is docked inside the stage.
+	const containerStyle = { left: 8, right: rightInset ?? 8 }
 
 	// Handle page jump
 	function handleJumpToPage(pageNum: string) {
@@ -123,8 +112,9 @@ export function PPTControlBar({
 			<div
 				ref={containerRef}
 				data-testid="ppt-control-bar"
+				style={containerStyle}
 				className={cn(
-					"pointer-events-none absolute inset-x-2 bottom-[18px] z-50 flex justify-center",
+					"pointer-events-none absolute bottom-[18px] z-50 flex justify-center",
 					className,
 				)}
 			>
@@ -142,29 +132,17 @@ export function PPTControlBar({
 		<div
 			ref={containerRef}
 			data-testid="ppt-control-bar"
+			style={containerStyle}
 			className={cn(
-				"pointer-events-none absolute inset-x-2 bottom-[18px] z-50 items-center justify-center gap-2",
-				separateRows || !onReplaceTemplate
-					? "grid-cols-[auto_auto]"
-					: "grid-cols-[auto_auto_auto]",
-				// Keep mobile navigation and notes side by side, wrapping only when needed.
-				isMobile ? "bottom-[20px] flex flex-wrap" : "grid",
+				"pointer-events-none absolute z-50 flex flex-wrap items-center justify-center gap-2",
+				isMobile ? "bottom-[20px]" : "bottom-[18px]",
 				className,
 			)}
 		>
 			<div
-				ref={mainBarRef}
-				// 显式约束主块宽度，防止 auto 网格轨道被英文按钮撑出预览区。
+				// 显式约束主块宽度，防止按钮被英文文案撑出预览区。
 				style={{ maxWidth: containerSize?.width }}
-				className={cn(
-					barClassName,
-					"flex-wrap justify-center justify-self-center",
-					separateRows || isMobile
-						? "col-span-full row-start-2"
-						: onReplaceTemplate
-							? "col-start-2 row-start-1"
-							: "col-start-1 row-start-1",
-				)}
+				className={cn(barClassName, "flex-wrap justify-center")}
 			>
 				{buildProgress && buildProgress.total > 0 && (
 					<span className="px-1 text-xs tabular-nums" aria-live="polite">
@@ -297,85 +275,31 @@ export function PPTControlBar({
 						</span>
 					</MagicTooltip>
 
-					{/* Go to first slide button */}
-					<MagicTooltip title={isMobile ? undefined : t("detail.goToFirstPage")}>
-						<span>
-							<Button
-								variant="ghost"
-								size="sm"
-								data-testid="ppt-control-bar-first-button"
-								className="h-7 w-7 p-0 text-foreground"
-								onClick={(e) => {
-									e.stopPropagation()
-									e.currentTarget.blur()
-									onGoToFirstSlide()
-								}}
-								aria-label={t("detail.goToFirstPage")}
-								disabled={!canGoPrevious || isTransitioning}
-							>
-								<Home className="h-4 w-4" />
-							</Button>
-						</span>
-					</MagicTooltip>
+					{/* Mobile keeps a direct shortcut; desktop has it in the more menu. */}
+					{isMobile && (
+						<>
+							<MagicTooltip title={isMobile ? undefined : t("detail.goToFirstPage")}>
+								<span>
+									<Button
+										variant="ghost"
+										size="sm"
+										data-testid="ppt-control-bar-first-button"
+										className="h-7 w-7 p-0 text-foreground"
+										onClick={(e) => {
+											e.stopPropagation()
+											e.currentTarget.blur()
+											onGoToFirstSlide()
+										}}
+										aria-label={t("detail.goToFirstPage")}
+										disabled={!canGoPrevious || isTransitioning}
+									>
+										<Home className="h-4 w-4" />
+									</Button>
+								</span>
+							</MagicTooltip>
+						</>
+					)}
 				</div>
-				{!isMobile && (
-					<div className="flex items-center gap-1 before:mx-[3px] before:h-4 before:w-px before:shrink-0 before:bg-[#e8ebf0] dark:before:bg-[#424650]">
-						<Button
-							variant="ghost"
-							size="sm"
-							data-testid="ppt-control-bar-refresh-current-button"
-							className="h-7 gap-[5px] px-[7px] text-[13px] font-normal"
-							onClick={(event) => {
-								event.stopPropagation()
-								event.currentTarget.blur()
-								onRefreshCurrentSlide?.()
-							}}
-							disabled={
-								isTransitioning ||
-								isRefreshingCurrentSlide ||
-								!onRefreshCurrentSlide
-							}
-							aria-busy={isRefreshingCurrentSlide}
-						>
-							<RotateCw
-								className={cn("size-4", isRefreshingCurrentSlide && "animate-spin")}
-							/>
-							<span className={isMobile ? "sr-only" : undefined}>
-								{t("ppt.reloadCurrentSlide")}
-							</span>
-						</Button>
-						{/* Refresh slides button */}
-						<MagicTooltip title={isMobile ? undefined : t("ppt.reloadAllSlides")}>
-							<span>
-								<Button
-									variant="ghost"
-									size="sm"
-									data-testid="ppt-control-bar-refresh-button"
-									className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
-									onClick={(e) => {
-										e.stopPropagation()
-										e.currentTarget.blur()
-										onRefreshSlides()
-									}}
-									aria-label={t("ppt.reloadAllSlides")}
-									disabled={isTransitioning || isRefreshingAll}
-									aria-busy={isRefreshingAll}
-								>
-									<RefreshCw
-										className={cn("h-4 w-4", isRefreshingAll && "animate-spin")}
-									/>
-									<span className={isMobile ? "sr-only" : "tabular-nums"}>
-										{t("ppt.reloadAllSlides")}
-										{refreshAllProgress
-											? ` (${refreshAllProgress.done}/${refreshAllProgress.total})`
-											: null}
-									</span>
-								</Button>
-							</span>
-						</MagicTooltip>
-					</div>
-				)}
-
 				{/* Reuse the same fullscreen action on phones; icon labels stay accessible. */}
 				<MagicTooltip
 					title={isFullscreen ? t("fileViewer.exitFullscreen") : t("ppt.startSlideshow")}
@@ -451,43 +375,31 @@ export function PPTControlBar({
 				) : null}
 			</div>
 			{(!isMobile || onToggleNotes || onOpenTransitions || onToggleBuildPanel) && (
-				<div
-					ref={zoomBarRef}
-					className={cn(
-						"row-start-1 flex flex-wrap items-center justify-center gap-2 justify-self-start",
-						separateRows || !onReplaceTemplate ? "col-start-2" : "col-start-3",
-					)}
-				>
-					{(onOpenTransitions || onToggleBuildPanel) && (
-						<div className={barClassName}>
-							<PPTAnimationControls
-								onOpenTransitions={onOpenTransitions}
-								onToggleBuildPanel={onToggleBuildPanel}
-								buildPanelOpen={buildPanelOpen}
-							/>
-						</div>
-					)}
+				<div className={cn(barClassName, "flex-wrap justify-center")}>
+					<PPTAnimationControls
+						onOpenTransitions={onOpenTransitions}
+						onToggleBuildPanel={onToggleBuildPanel}
+						buildPanelOpen={buildPanelOpen}
+					/>
 					{onToggleNotes && (
-						<div className={barClassName} data-testid="ppt-control-bar-notes-group">
-							<Button
-								variant="ghost"
-								size="sm"
-								data-testid="ppt-control-bar-notes-button"
-								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal aria-pressed:bg-accent"
-								aria-pressed={Boolean(notesVisible)}
-								aria-expanded={Boolean(notesVisible)}
-								onClick={(event) => {
-									event.stopPropagation()
-									onToggleNotes()
-								}}
-							>
-								<NotebookPen className="size-4" />
-								{t("ppt.speakerNotes.title")}
-							</Button>
-						</div>
+						<Button
+							variant="ghost"
+							size="sm"
+							data-testid="ppt-control-bar-notes-button"
+							className="h-7 gap-[5px] px-[7px] text-[13px] font-normal aria-pressed:bg-accent"
+							aria-pressed={Boolean(notesVisible)}
+							aria-expanded={Boolean(notesVisible)}
+							onClick={(event) => {
+								event.stopPropagation()
+								onToggleNotes()
+							}}
+						>
+							<NotebookPen className="size-4" />
+							{t("ppt.speakerNotes.title")}
+						</Button>
 					)}
 					{!isMobile && (
-						<div className={barClassName}>
+						<div className="flex items-center gap-1 before:mx-[3px] before:h-4 before:w-px before:shrink-0 before:bg-[#e8ebf0] dark:before:bg-[#424650]">
 							<PPTZoomControl
 								scaleRatio={scaleRatio}
 								isAutoScale={isAutoScale}
@@ -495,36 +407,78 @@ export function PPTControlBar({
 								onScaleChange={onScaleChange}
 								onResetScale={onResetScale}
 							/>
+							<MagicDropdown
+								placement="topRight"
+								getPopupContainer={() => portalContainer || document.body}
+								menu={{
+									items: [
+										...(onReplaceTemplate
+											? [
+													{
+														key: "template",
+														icon: <PanelsTopLeft className="size-4" />,
+														label: t("ppt.templateReplacement.button"),
+														onClick: onReplaceTemplate,
+													},
+												]
+											: []),
+										{
+											key: "refresh-current",
+											icon: (
+												<RotateCw
+													className={cn(
+														"size-4",
+														isRefreshingCurrentSlide && "animate-spin",
+													)}
+												/>
+											),
+											label: t("ppt.reloadCurrentSlide"),
+											disabled:
+												isTransitioning ||
+												isRefreshingCurrentSlide ||
+												!onRefreshCurrentSlide,
+											onClick: () => onRefreshCurrentSlide?.(),
+										},
+										{
+											key: "refresh-all",
+											icon: (
+												<RefreshCw
+													className={cn(
+														"size-4",
+														isRefreshingAll && "animate-spin",
+													)}
+												/>
+											),
+											label: `${t("ppt.reloadAllSlides")}${
+												refreshAllProgress
+													? ` (${refreshAllProgress.done}/${refreshAllProgress.total})`
+													: ""
+											}`,
+											disabled: isTransitioning || isRefreshingAll,
+											onClick: onRefreshSlides,
+										},
+										{
+											key: "first-page",
+											icon: <Home className="size-4" />,
+											label: t("detail.goToFirstPage"),
+											disabled: !canGoPrevious || isTransitioning,
+											onClick: onGoToFirstSlide,
+										},
+									],
+								}}
+							>
+								<Button
+									variant="ghost"
+									size="sm"
+									data-testid="ppt-control-bar-more-button"
+									className="h-7 w-7 p-0"
+									aria-label={t("ppt.moreActions")}
+								>
+									<Ellipsis className="size-4" />
+								</Button>
+							</MagicDropdown>
 						</div>
 					)}
-				</div>
-			)}
-
-			{!isMobile && onReplaceTemplate && (
-				<div
-					ref={templateBarRef}
-					data-testid="ppt-control-bar-template-group"
-					className={cn(barClassName, "col-start-1 row-start-1 justify-self-end")}
-				>
-					<MagicTooltip title={t("ppt.templateReplacement.button")}>
-						<span>
-							<Button
-								variant="ghost"
-								size="sm"
-								data-testid="ppt-control-bar-template-button"
-								className="h-7 gap-[5px] px-[7px] text-[13px] font-normal text-foreground"
-								onClick={(e) => {
-									e.stopPropagation()
-									e.currentTarget.blur()
-									onReplaceTemplate()
-								}}
-								aria-label={t("ppt.templateReplacement.button")}
-							>
-								<PanelsTopLeft className="h-4 w-4" />
-								<span>{t("ppt.templateReplacement.button")}</span>
-							</Button>
-						</span>
-					</MagicTooltip>
 				</div>
 			)}
 		</div>

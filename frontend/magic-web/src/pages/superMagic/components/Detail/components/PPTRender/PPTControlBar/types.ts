@@ -32,5 +32,7 @@ export interface PPTControlBarProps {
 	onScaleChange: (scale: number) => void
 	onResetScale: () => void
 	className?: string
+	/** Right offset (CSS length) that keeps the bar clear of a docked side panel. */
+	rightInset?: string | number
 	currentFileId?: string
 }

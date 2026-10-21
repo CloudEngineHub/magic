@@ -5261,6 +5261,7 @@
 		"initializing": "正在初始化...",
 		"loadError": "加载失败",
 		"loading": "加载中",
+		"moreActions": "更多操作",
 		"navigationConfirmDescription": "当前页面编辑尚未保存，是否保存后切换至第 {{page}} 页？",
 		"navigationConfirmTitle": "保存并跳转",
 		"noSlidesAvailable": "暂无 PPT 页面",

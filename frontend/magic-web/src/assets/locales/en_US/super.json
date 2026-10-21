@@ -5263,6 +5263,7 @@
 		"initializing": "Initializing...",
 		"loadError": "Load Failed",
 		"loading": "Loading",
+		"moreActions": "More actions",
 		"navigationConfirmDescription": "Current page has unsaved changes. Save before switching to page {{page}}?",
 		"navigationConfirmTitle": "Save and Navigate",
 		"noSlidesAvailable": "No PPT pages available",
