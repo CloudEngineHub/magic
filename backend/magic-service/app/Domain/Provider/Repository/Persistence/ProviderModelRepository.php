@@ -428,6 +428,7 @@ class ProviderModelRepository extends AbstractProviderModelRepository implements
         $builder = $this->createBuilder($dataIsolation, ProviderModelModel::query())
             ->whereIn('service_provider_config_id', $enabledConfigQuery)
             ->where('status', Status::Enabled->value)
+            ->where('type', '<>', ProviderModelType::DYNAMIC->value)
             ->whereNull('deleted_at')
             ->selectRaw('model_id, MAX(name) as name, MAX(icon) as icon, MAX(status) as status, MAX(type) as type')
             ->groupBy('model_id')
