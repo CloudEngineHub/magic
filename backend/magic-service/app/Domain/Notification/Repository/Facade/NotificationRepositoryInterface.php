@@ -40,6 +40,12 @@ interface NotificationRepositoryInterface
 
     public function countPendingAuthorization(NotificationDataIsolation $dataIsolation): int;
 
+    /**
+     * @param list<string> $recipientUserIds
+     * @return array<string, array{system_unread:int, authorization_pending:int}>
+     */
+    public function countActiveByRecipientIds(NotificationDataIsolation $dataIsolation, array $recipientUserIds): array;
+
     public function markRead(NotificationDataIsolation $dataIsolation, string $id, string $readAt): bool;
 
     public function updateActionIfPending(

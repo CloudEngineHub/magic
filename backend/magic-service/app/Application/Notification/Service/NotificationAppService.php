@@ -12,16 +12,23 @@ use App\Domain\Notification\Repository\Facade\NotificationRepositoryInterface;
 use App\ErrorCode\GenericErrorCode;
 use App\ErrorCode\NotificationErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use Hyperf\Logger\LoggerFactory;
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Throwable;
 use ValueError;
 
 final readonly class NotificationAppService
 {
+    private LoggerInterface $logger;
+
     public function __construct(
         private NotificationRepositoryInterface $notifications,
         private ?NotificationRealtimePushService $realtimePush = null,
+        ?LoggerFactory $loggerFactory = null,
     ) {
+        $this->logger = $loggerFactory?->get(self::class) ?? new NullLogger();
     }
 
     /** @return array{items:list<array<string,mixed>>, next_cursor:?string, has_more:bool} */
@@ -96,8 +103,14 @@ final readonly class NotificationAppService
                 return;
             }
             di(NotificationRealtimePushService::class)->pushForUser($isolation, $reason);
-        } catch (Throwable) {
+        } catch (Throwable $throwable) {
             // WebSocket delivery is best effort; the committed read state is authoritative.
+            $this->logger->warning('Notification realtime push failed after read', [
+                'organization_code' => $isolation->getCurrentOrganizationCode(),
+                'user_id' => $isolation->getCurrentUserId(),
+                'reason' => $reason,
+                'error' => $throwable->getMessage(),
+            ]);
         }
     }
 

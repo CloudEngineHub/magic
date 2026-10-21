@@ -64,6 +64,22 @@ final readonly class NotificationRealtimePushService
             $users[$user->getUserId()] = $user;
         }
 
+        try {
+            $countsByUser = $this->notifications->countActiveByRecipientIds(
+                NotificationDataIsolation::create($organizationCode),
+                array_keys($users),
+            );
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Notification realtime push count lookup failed', [
+                'organization_code' => $organizationCode,
+                'user_ids' => array_keys($users),
+                'reason' => $reason,
+                'event_id' => $eventId,
+                'error' => $throwable->getMessage(),
+            ]);
+            return;
+        }
+
         foreach ($userIds as $userId) {
             $user = $users[$userId] ?? null;
             $magicId = trim((string) ($user?->getMagicId() ?? ''));
@@ -76,9 +92,10 @@ final readonly class NotificationRealtimePushService
             }
 
             try {
-                $isolation = NotificationDataIsolation::create($organizationCode, $userId, $magicId);
-                $systemUnread = $this->notifications->countUnreadSystem($isolation);
-                $authorizationPending = $this->notifications->countPendingAuthorization($isolation);
+                $counts = $countsByUser[$userId] ?? [
+                    'system_unread' => 0,
+                    'authorization_pending' => 0,
+                ];
                 SocketIOUtil::sendIntermediate(
                     SocketEventType::Intermediate,
                     $magicId,
@@ -87,9 +104,9 @@ final readonly class NotificationRealtimePushService
                         'notification_update' => [
                             'organization_code' => $organizationCode,
                             'counts' => [
-                                'total' => $systemUnread + $authorizationPending,
-                                'system_unread' => $systemUnread,
-                                'authorization_pending' => $authorizationPending,
+                                'total' => $counts['system_unread'] + $counts['authorization_pending'],
+                                'system_unread' => $counts['system_unread'],
+                                'authorization_pending' => $counts['authorization_pending'],
                             ],
                             'reason' => $reason,
                             'event_id' => $eventId,

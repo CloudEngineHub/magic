@@ -178,6 +178,44 @@ final class NotificationRepository implements NotificationRepositoryInterface
             ->count();
     }
 
+    public function countActiveByRecipientIds(NotificationDataIsolation $dataIsolation, array $recipientUserIds): array
+    {
+        $recipientUserIds = array_values(array_unique(array_filter(array_map(
+            static fn (mixed $userId): string => trim((string) $userId),
+            $recipientUserIds
+        ))));
+        if ($recipientUserIds === []) {
+            return [];
+        }
+
+        $rows = $this->organizationQuery($dataIsolation)
+            ->selectRaw(
+                'recipient_user_id,
+                SUM(CASE WHEN category = ? AND read_at IS NULL THEN 1 ELSE 0 END) AS system_unread,
+                SUM(CASE WHEN category = ? AND action_status = ? THEN 1 ELSE 0 END) AS authorization_pending',
+                [
+                    NotificationCategory::SYSTEM->value,
+                    NotificationCategory::AUTHORIZATION->value,
+                    'pending',
+                ]
+            )
+            ->whereIn('recipient_user_id', $recipientUserIds)
+            ->where('message_status', NotificationMessageStatus::ACTIVE->value)
+            ->whereIn('category', [NotificationCategory::SYSTEM->value, NotificationCategory::AUTHORIZATION->value])
+            ->groupBy('recipient_user_id')
+            ->get();
+
+        $counts = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $counts[(string) $row['recipient_user_id']] = [
+                'system_unread' => (int) $row['system_unread'],
+                'authorization_pending' => (int) $row['authorization_pending'],
+            ];
+        }
+        return $counts;
+    }
+
     public function markRead(NotificationDataIsolation $dataIsolation, string $id, string $readAt): bool
     {
         return $this->scopedQuery($dataIsolation)
