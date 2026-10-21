@@ -8,11 +8,16 @@ declare(strict_types=1);
 namespace App\Domain\Contact\Service;
 
 use App\Domain\Contact\Entity\ValueObject\AccountStatus;
+use App\Domain\Contact\Repository\Facade\MagicAccountRepositoryInterface;
 use Hyperf\DbConnection\Db;
-use RuntimeException;
 
 class MagicAccountStatusService
 {
+    public function __construct(
+        private readonly MagicAccountRepositoryInterface $accountRepository,
+    ) {
+    }
+
     public function enable(string $magicId): bool
     {
         return Db::transaction(function () use ($magicId): bool {
@@ -25,32 +30,6 @@ class MagicAccountStatusService
      */
     public function updateStatus(string $magicId, AccountStatus $targetStatus): bool
     {
-        $account = Db::table('magic_contact_accounts')
-            ->where('magic_id', $magicId)
-            ->whereNull('deleted_at')
-            ->lockForUpdate()
-            ->first();
-
-        if ($account === null) {
-            throw new RuntimeException('账号不存在或已删除。');
-        }
-
-        $status = (int) $account->status;
-        if ($status !== AccountStatus::Disable->value && $status !== AccountStatus::Normal->value) {
-            throw new RuntimeException("账号 {$magicId} 的状态值 {$status} 不受支持。");
-        }
-
-        if ($status === $targetStatus->value) {
-            return false;
-        }
-
-        Db::table('magic_contact_accounts')
-            ->where('id', $account->id)
-            ->update([
-                'status' => $targetStatus->value,
-                'updated_at' => date('Y-m-d H:i:s'),
-            ]);
-
-        return true;
+        return $this->accountRepository->updateStatus($magicId, $targetStatus);
     }
 }
