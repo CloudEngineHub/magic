@@ -10,14 +10,13 @@ namespace App\Domain\Contact\Service;
 use App\Domain\Contact\Entity\ValueObject\AccountStatus;
 use App\Domain\Token\Entity\ValueObject\MagicTokenType;
 use Hyperf\DbConnection\Db;
-use RuntimeException;
 
 class MagicAccountRevocationService
 {
-    /** magic_contact_accounts.status: 1=正常，0=禁用。 */
-    private const int ACTIVE_ACCOUNT_STATUS = AccountStatus::Normal->value;
-
-    private const int DISABLED_ACCOUNT_STATUS = AccountStatus::Disable->value;
+    public function __construct(
+        private readonly MagicAccountStatusService $statusService,
+    ) {
+    }
 
     /**
      * 禁用账号并撤销该账号下的本地凭证。
@@ -36,32 +35,7 @@ class MagicAccountRevocationService
     public function revoke(string $magicId): array
     {
         return Db::transaction(function () use ($magicId): array {
-            $account = Db::table('magic_contact_accounts')
-                ->where('magic_id', $magicId)
-                ->whereNull('deleted_at')
-                ->lockForUpdate()
-                ->first();
-
-            if ($account === null) {
-                throw new RuntimeException('账号不存在或已删除。');
-            }
-
-            $currentStatus = (int) $account->status;
-            if ($currentStatus !== self::ACTIVE_ACCOUNT_STATUS
-                && $currentStatus !== self::DISABLED_ACCOUNT_STATUS
-            ) {
-                throw new RuntimeException("账号 {$magicId} 的状态值 {$currentStatus} 不受支持。");
-            }
-
-            $alreadyDisabled = $currentStatus === self::DISABLED_ACCOUNT_STATUS;
-            if (! $alreadyDisabled) {
-                Db::table('magic_contact_accounts')
-                    ->where('id', $account->id)
-                    ->update([
-                        'status' => self::DISABLED_ACCOUNT_STATUS,
-                        'updated_at' => date('Y-m-d H:i:s'),
-                    ]);
-            }
+            $alreadyDisabled = ! $this->statusService->updateStatus($magicId, AccountStatus::Disable);
 
             $userIds = Db::table('magic_contact_users')
                 ->where('magic_id', $magicId)
