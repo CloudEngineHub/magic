@@ -152,7 +152,14 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
                             continue
                         fields = request.model_dump(exclude={"persona_id"}, exclude_none=True)
                         ranked = rank(catalog, query_from_fields(fields), rng)
-                        candidates = [match for match in ranked if match.entry.id not in taken_ids]
+                        # 被检查标为「看起来像同一个人」的头像归为一个相似组，已用掉其中一张，其余也不再选
+                        taken_groups = self._lookalike_groups(catalog, taken_ids)
+                        candidates = [
+                            match
+                            for match in ranked
+                            if match.entry.id not in taken_ids
+                            and not (match.entry.tags.get("lookalike", frozenset()) & taken_groups)
+                        ]
                         if not candidates:
                             results.append(
                                 {
@@ -246,6 +253,14 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
                 "reason": "Every suitable avatar is already used by another persona; a distinct one is needed.",
             }
         return {"persona_id": persona_id, "status": "unavailable", "reason": "; ".join(errors[:3])}
+
+    @staticmethod
+    def _lookalike_groups(catalog: list[PortraitEntry], taken_ids: set[str]) -> frozenset[str]:
+        groups: set[str] = set()
+        for entry in catalog:
+            if entry.id in taken_ids:
+                groups |= entry.tags.get("lookalike", frozenset())
+        return frozenset(groups)
 
     @staticmethod
     def _digest_of(portrait: dict | None) -> str | None:

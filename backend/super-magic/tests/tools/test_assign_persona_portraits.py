@@ -256,3 +256,21 @@ async def test_used_library_avatars_are_excluded_before_any_download(tmp_path, m
     second = await run_many(tmp_path, ["p_b_02"])
     assert second.data["results"][0]["asset_id"] != used
     assert f"download:{used}" not in client.calls
+
+
+@pytest.mark.asyncio
+async def test_lookalike_avatars_are_not_given_to_two_personas(tmp_path, monkeypatch):
+    for persona_id in ("p_a_01", "p_b_02", "p_c_03"):
+        await add_persona(tmp_path, persona_id)
+    # a1 和 a2 被检查标为同一个相似组；a3 是另一个人。
+    catalog = {"items": [
+        item("a1", age_band=["25_34"], lookalike=["lk01"]),
+        item("a2", age_band=["25_34"], lookalike=["lk01"]),
+        item("a3", age_band=["25_34"]),
+    ]}  # fmt: skip
+    install(monkeypatch, FakeClient(catalog, {"a1": png("red"), "a2": png("green"), "a3": png("blue")}))
+    result = await run_many(tmp_path, ["p_a_01", "p_b_02", "p_c_03"])
+    assigned = [r["asset_id"] for r in result.data["results"] if r["status"] == "assigned"]
+    # 三个人只能拿到两张：a1/a2 里只会用到一张，另一个人拿 a3，剩下的人保持无匹配
+    assert len(assigned) == 2 and "a3" in assigned and len({"a1", "a2"} & set(assigned)) == 1
+    assert [r["status"] for r in result.data["results"]].count("no_match") == 1
