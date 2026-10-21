@@ -1,4 +1,4 @@
-import { collectPPTBuilds, parsePPTBuild, isPPTBuildElement } from "./pptBuild"
+import { collectPPTBuilds, readPPTBuild, isPPTBuildElement } from "./pptBuild"
 
 /** Runs only in a slide preview. The source file contains metadata, never hidden content. */
 export function pptBuildRuntime(
@@ -6,13 +6,13 @@ export function pptBuildRuntime(
 	documentKey: string,
 	initiallyEnabled: boolean,
 	collect: typeof collectPPTBuilds,
-	parse: typeof parsePPTBuild,
+	read: typeof readPPTBuild,
 	allowed: typeof isPPTBuildElement,
 	attribute: string,
 ) {
 	let enabled = initiallyEnabled
 	let current = 0
-	const entries = collect(document, parse, allowed, attribute)
+	const entries = collect(document, read, allowed, attribute)
 	const ignored = document.querySelectorAll(`[${attribute}]`).length - entries.length
 	const steps = [...new Set(entries.map(({ build }) => build.step))].sort((a, b) => a - b)
 	const animations = new Map<HTMLElement, Animation>()

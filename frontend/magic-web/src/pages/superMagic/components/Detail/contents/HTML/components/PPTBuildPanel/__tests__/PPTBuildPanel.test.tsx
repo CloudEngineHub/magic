@@ -27,7 +27,7 @@ vi.mock("@/components/shadcn-ui/scroll-area", () => ({
 const make = (selector: string, step: number): PPTBuildEntry => ({
 	selector,
 	label: selector,
-	build: { version: 1, step, effect: "fade" },
+	build: { step, effect: "fade" },
 })
 function setup(initial = [make("first", 1), make("second", 2)], onCommit?: () => Promise<boolean>) {
 	let entries = initial
@@ -134,7 +134,7 @@ describe("PPT build panel", () => {
 		fireEvent.click(screen.getByRole("button", { name: "ppt.build.addSelected" }))
 		await screen.findByRole("combobox", { name: "ppt.build.effect" })
 		expect(editor.updatePPTBuilds).toHaveBeenCalledWith([
-			{ selector: "third", build: { version: 1, step: 3, effect: "fade" } },
+			{ selector: "third", build: { step: 3, effect: "fade" } },
 		])
 		await waitFor(() =>
 			expect(screen.getByRole("combobox", { name: "ppt.build.effect" })).not.toBeDisabled(),
@@ -144,7 +144,7 @@ describe("PPT build panel", () => {
 		})
 		await waitFor(() =>
 			expect(editor.updatePPTBuilds).toHaveBeenLastCalledWith([
-				{ selector: "third", build: { version: 1, step: 3, effect: "appear" } },
+				{ selector: "third", build: { step: 3, effect: "appear" } },
 			]),
 		)
 	})

@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { CommandHistory } from "../../core/CommandHistory"
 import { PPTBuildManager } from "../PPTBuildManager"
 import { StyleManager } from "../StyleManager"
-import { PPT_BUILD_ATTRIBUTE, type PPTBuild } from "../../utils/pptBuild"
+import { PPT_BUILD_ATTRIBUTE, writePPTBuild, type PPTBuild } from "../../utils/pptBuild"
 import { markSourceNodes } from "../../utils/sourceNodes"
 import { getElementSelector } from "../../utils/dom"
 
-const build = (step: number): PPTBuild => ({ version: 1, step, effect: "appear" })
+const build = (step: number): PPTBuild => ({ step, effect: "appear" })
 
 describe("PPTBuildManager", () => {
 	let history: CommandHistory
@@ -25,8 +25,8 @@ describe("PPTBuildManager", () => {
 	afterEach(() => vi.unstubAllGlobals())
 
 	it("reorders multiple elements as one undoable command and preserves unrelated attributes", async () => {
-		document.querySelector("#a")!.setAttribute(PPT_BUILD_ATTRIBUTE, JSON.stringify(build(1)))
-		document.querySelector("#b")!.setAttribute(PPT_BUILD_ATTRIBUTE, JSON.stringify(build(2)))
+		writePPTBuild(document.querySelector("#a")!, build(1))
+		writePPTBuild(document.querySelector("#b")!, build(2))
 		document.querySelector("#a")!.setAttribute("title", "Keep me")
 		const entries = manager.getBuilds()
 		manager.updateBuilds(
@@ -60,7 +60,7 @@ describe("PPTBuildManager", () => {
 	})
 
 	it("validates the final state when transferring a build from parent to child", async () => {
-		document.querySelector("#a")!.setAttribute(PPT_BUILD_ATTRIBUTE, JSON.stringify(build(1)))
+		writePPTBuild(document.querySelector("#a")!, build(1))
 		manager.updateBuilds([
 			{ selector: "#child", build: build(1) },
 			{ selector: "#a", build: null },
@@ -74,12 +74,10 @@ describe("PPTBuildManager", () => {
 
 	it("returns only valid outermost authored builds using the canvas selection selectors", () => {
 		for (const selector of ["#a", "#child", "#b"])
-			document
-				.querySelector(selector)!
-				.setAttribute(PPT_BUILD_ATTRIBUTE, JSON.stringify(build(3)))
+			writePPTBuild(document.querySelector(selector)!, build(3))
 		markSourceNodes(document)
 		const runtime = document.createElement("div")
-		runtime.setAttribute(PPT_BUILD_ATTRIBUTE, JSON.stringify(build(1)))
+		writePPTBuild(runtime, build(1))
 		document.body.append(runtime)
 		const entries = manager.getBuilds()
 		expect(entries).toHaveLength(2)

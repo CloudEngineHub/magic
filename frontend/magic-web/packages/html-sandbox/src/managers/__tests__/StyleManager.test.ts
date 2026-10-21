@@ -1243,30 +1243,6 @@ describe("StyleManager", () => {
 	})
 
 	describe("updateElementAttributes", () => {
-		it("saves, undoes and redoes build metadata in the existing history", async () => {
-			container.innerHTML = "<div id='test'>Content</div>"
-			const element = container.querySelector("#test")!
-			const value = JSON.stringify({ version: 1, step: 2, effect: "appear" })
-			await styleManager.updateElementAttributes("#test", { dataMagicPptBuild: value })
-			expect(element.getAttribute("data-magic-ppt-build")).toBe(value)
-			await styleManager.undo()
-			expect(element.hasAttribute("data-magic-ppt-build")).toBe(false)
-			await styleManager.redo()
-			expect(element.getAttribute("data-magic-ppt-build")).toBe(value)
-		})
-		it("rejects nested builds before any attribute is changed", async () => {
-			const value = JSON.stringify({ version: 1, step: 1, effect: "fade" })
-			container.innerHTML = `<section data-magic-ppt-build='${value}'><p id='test'>Content</p></section>`
-			await expect(
-				styleManager.updateElementAttributes("#test", {
-					title: "changed",
-					dataMagicPptBuild: value,
-				}),
-			).rejects.toThrow("PPT_BUILD_NESTED")
-			expect(container.querySelector("#test")!.hasAttribute("title")).toBe(false)
-			expect(commandHistory.canUndo()).toBe(false)
-		})
-
 		it("refreshes the selected link configuration after undo and redo", async () => {
 			const bridge = new EditorBridge()
 			const sendEvent = vi.spyOn(bridge, "sendEvent")

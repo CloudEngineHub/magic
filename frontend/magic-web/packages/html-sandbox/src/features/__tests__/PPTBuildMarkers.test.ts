@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PPTBuildMarkers, PPT_BUILD_MARKERS_ATTRIBUTE } from "../PPTBuildMarkers"
-import { PPT_BUILD_ATTRIBUTE } from "../../utils/pptBuild"
+import { PPT_BUILD_ATTRIBUTE, writePPTBuild } from "../../utils/pptBuild"
 import { ContentCleaner } from "../../utils/ContentCleaner"
 
 describe("PPTBuildMarkers", () => {
@@ -38,12 +38,7 @@ describe("PPTBuildMarkers", () => {
 			["b", 9],
 			["c", 9],
 		] as const)
-			document
-				.getElementById(id)!
-				.setAttribute(
-					PPT_BUILD_ATTRIBUTE,
-					JSON.stringify({ version: 1, step, effect: "appear" }),
-				)
+			writePPTBuild(document.getElementById(id)!, { step, effect: "appear" })
 		markers = new PPTBuildMarkers()
 	})
 	afterEach(() => {

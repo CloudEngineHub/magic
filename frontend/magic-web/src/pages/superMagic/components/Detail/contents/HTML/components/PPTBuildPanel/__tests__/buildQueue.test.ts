@@ -5,7 +5,7 @@ import { appendBuildStep, groupBuildQueue, reorderBuildQueue } from "../buildQue
 const entry = (selector: string, step: number): PPTBuildEntry => ({
 	selector,
 	label: selector,
-	build: { version: 1, step, effect: "fade" },
+	build: { step, effect: "fade" },
 })
 describe("build queue", () => {
 	it("reorders click groups together without separating simultaneous elements", () => {

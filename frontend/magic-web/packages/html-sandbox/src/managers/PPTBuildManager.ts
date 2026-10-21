@@ -4,8 +4,10 @@ import { getEditorNodeSelector } from "../features/domTree"
 import {
 	collectPPTBuilds,
 	isPPTBuildElement,
-	parsePPTBuild,
+	normalizePPTBuild,
 	PPT_BUILD_ATTRIBUTE,
+	readPPTBuild,
+	writePPTBuild,
 	type PPTBuild,
 } from "../utils/pptBuild"
 import { getInspectableTextContent } from "../utils/inspectableTextContent"
@@ -24,7 +26,11 @@ export interface PPTBuildUpdate {
 
 interface BuildState {
 	selector: string
-	value: string | null
+	value: PPTBuild | null
+}
+
+function sameBuild(a: PPTBuild | null, b: PPTBuild | null): boolean {
+	return a === b || (a !== null && b !== null && a.step === b.step && a.effect === b.effect)
 }
 
 /** Authored build metadata shares the editor's undo stack, but no unrelated attributes. */
@@ -58,23 +64,16 @@ export class PPTBuildManager {
 			if (!update || typeof update.selector !== "string") throw new Error("PPT_BUILD_INVALID")
 			const element = this.resolve(update.selector)
 			if (changes.has(element)) throw new Error("PPT_BUILD_DUPLICATE")
-			const build = update.build === null ? null : parsePPTBuild(JSON.stringify(update.build))
+			const build = update.build === null ? null : normalizePPTBuild(update.build)
 			if (update.build !== null && !build) throw new Error("PPT_BUILD_INVALID")
-			changes.set(element, {
-				selector: update.selector,
-				value: build ? JSON.stringify(build) : null,
-			})
+			changes.set(element, { selector: update.selector, value: build })
 		}
 
 		// Validate the final batch, so removing a parent and adding its child is atomic.
 		// Runtime nodes never block an authored build or enter its persisted history.
 		const finalBuilds = new Set<HTMLElement>()
 		document.querySelectorAll<HTMLElement>(`[${PPT_BUILD_ATTRIBUTE}]`).forEach((element) => {
-			if (
-				isPPTBuildElement(element) &&
-				parsePPTBuild(element.getAttribute(PPT_BUILD_ATTRIBUTE))
-			)
-				finalBuilds.add(element)
+			if (isPPTBuildElement(element) && readPPTBuild(element)) finalBuilds.add(element)
 		})
 		for (const [element, change] of changes) {
 			if (change.value === null) finalBuilds.delete(element)
@@ -91,8 +90,8 @@ export class PPTBuildManager {
 		const previous: BuildState[] = []
 		const next: BuildState[] = []
 		for (const [element, change] of changes) {
-			const value = element.getAttribute(PPT_BUILD_ATTRIBUTE)
-			if (value === change.value) continue
+			const value = readPPTBuild(element)
+			if (sameBuild(value, change.value)) continue
 			change.selector = getEditorNodeSelector(element)
 			previous.push({ selector: change.selector, value })
 			next.push(change)
@@ -134,9 +133,6 @@ export class PPTBuildManager {
 	private apply(states: BuildState[]): void {
 		// Resolve every target before writing; a missing target must not partially replay.
 		const elements = states.map((state) => this.resolve(state.selector))
-		states.forEach((state, index) => {
-			if (state.value === null) elements[index].removeAttribute(PPT_BUILD_ATTRIBUTE)
-			else elements[index].setAttribute(PPT_BUILD_ATTRIBUTE, state.value)
-		})
+		states.forEach((state, index) => writePPTBuild(elements[index], state.value))
 	}
 }

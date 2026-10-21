@@ -81,7 +81,7 @@ describe("pptService lazy export providers", () => {
 	})
 
 	it("exports all authored build content without presentation visibility or scripts", async () => {
-		const source = `<h1>Title</h1><p data-magic-ppt-build='{"version":1,"step":1,"effect":"fade"}'>First</p><p data-magic-ppt-build='{"version":1,"step":2,"effect":"appear"}'>Second</p>`
+		const source = `<h1>Title</h1><p data-ppt-step="1">First</p><p data-ppt-step="2" data-ppt-effect="appear">Second</p>`
 		mocks.loadSlide.mockResolvedValue(source)
 		const pages = []
 		for await (const page of iterateSingleExportSlide({

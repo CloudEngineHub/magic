@@ -1,6 +1,6 @@
 import {
 	PPT_BUILD_ATTRIBUTE,
-	parsePPTBuild,
+	readPPTBuild,
 	isPPTBuildElement,
 	collectPPTBuilds,
 } from "@dtyq/html-sandbox/utils/pptBuild"
@@ -20,10 +20,10 @@ export function injectPPTBuildBridge(
 		html,
 		`<script data-injected="true">(function(){
 const PPT_BUILD_ATTRIBUTE=${encode(PPT_BUILD_ATTRIBUTE)};
-const parsePPTBuild=${parsePPTBuild.toString()};
+const readPPTBuild=${readPPTBuild.toString()};
 const isPPTBuildElement=${isPPTBuildElement.toString()};
 const collectPPTBuilds=${collectPPTBuilds.toString()};
-(${pptBuildRuntime.toString()})(${encode(origin)},${encode(documentKey)},${encode(enabled)}, collectPPTBuilds, parsePPTBuild, isPPTBuildElement, PPT_BUILD_ATTRIBUTE);
+(${pptBuildRuntime.toString()})(${encode(origin)},${encode(documentKey)},${encode(enabled)}, collectPPTBuilds, readPPTBuild, isPPTBuildElement, PPT_BUILD_ATTRIBUTE);
 })();</script>`,
 	)
 }

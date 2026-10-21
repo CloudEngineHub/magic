@@ -7,6 +7,7 @@ import {
 	useRef,
 	type CSSProperties,
 } from "react"
+import { PPT_BUILD_ATTRIBUTE } from "@dtyq/html-sandbox/utils/pptBuild"
 import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { FileX, Loader2 } from "lucide-react"
@@ -107,6 +108,8 @@ interface PPTSlideProps {
 	htmlRelativeFolderPath?: string
 	selectedProject?: any
 	attachmentList?: any[]
+	/** Deck-level HTML resource processing; keeps every render path consistent. */
+	processSource?: (rawContent: string) => Promise<string>
 	updateSlideContents: (newContents: Map<number, string>) => void
 	loadingState?: SlideLoadingState
 	loadingError?: Error
@@ -183,6 +186,7 @@ const PPTSlide = observer(function PPTSlide({
 	htmlRelativeFolderPath,
 	selectedProject,
 	attachmentList,
+	processSource,
 	updateSlideContents,
 	loadingState = "idle",
 	loadingError,
@@ -341,7 +345,7 @@ const PPTSlide = observer(function PPTSlide({
 	)
 	const buildPlayback = usePPTBuildPlayback({
 		documentKey: buildDocumentKey,
-		hasBuilds: displayContent.content.includes("data-magic-ppt-build"),
+		hasBuilds: displayContent.content.includes(PPT_BUILD_ATTRIBUTE),
 		enabled: Boolean(isFullscreen || isPlaybackMode) && !isEditMode,
 		active: isActive,
 		startAtEnd: buildStartAtEnd,
@@ -438,6 +442,7 @@ const PPTSlide = observer(function PPTSlide({
 	// 处理历史版本内容 - 进行路径替换
 	const processHistoricalContent = useMemoizedFn(async (rawContent: string) => {
 		try {
+			if (processSource) return await processSource(rawContent)
 			const input: ProcessHtmlContentInput = {
 				content: rawContent,
 				attachments: attachmentList,
@@ -683,7 +688,7 @@ const PPTSlide = observer(function PPTSlide({
 			return true
 		}
 		// Static pages retain synchronous readiness. Only configured previews await a frame ack.
-		if (displayContent.content.includes("data-magic-ppt-build"))
+		if (displayContent.content.includes(PPT_BUILD_ATTRIBUTE))
 			return buildPlayback.initialize(true).then((ready) => ready && finish())
 		return finish()
 	})

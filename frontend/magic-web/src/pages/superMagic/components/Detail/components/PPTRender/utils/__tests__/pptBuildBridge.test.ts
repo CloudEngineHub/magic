@@ -8,7 +8,7 @@ afterEach(() => {
 describe("PPT build bridge", () => {
 	it("runs the serialized runtime without bundler closure dependencies and reveals complete groups", () => {
 		vi.useFakeTimers()
-		const html = `<html><head></head><body><h1>Title</h1><p data-magic-ppt-build='{"version":1,"step":9,"effect":"appear"}'>A</p><p data-magic-ppt-build='{"version":1,"step":9,"effect":"appear"}'>B</p></body></html>`
+		const html = `<html><head></head><body><h1>Title</h1><p data-ppt-step="9" data-ppt-effect="appear">A</p><p data-ppt-step="9" data-ppt-effect="appear">B</p></body></html>`
 		const result = injectPPTBuildBridge(html, window.location.origin, "doc", true)
 		const parsed = new DOMParser().parseFromString(result, "text/html")
 		document.body.innerHTML = parsed.body.innerHTML
@@ -47,7 +47,7 @@ describe("PPT build bridge", () => {
 	})
 	it("fails open if the host does not acknowledge initialization", () => {
 		vi.useFakeTimers()
-		const html = `<p data-magic-ppt-build='{"version":1,"step":1,"effect":"appear"}'>First</p>`
+		const html = `<p data-ppt-step="1" data-ppt-effect="appear">First</p>`
 		const parsed = new DOMParser().parseFromString(
 			injectPPTBuildBridge(html, window.location.origin, "fallback", true),
 			"text/html",
@@ -61,7 +61,7 @@ describe("PPT build bridge", () => {
 	})
 	it("preserves links and buttons while advancing a plain content click", () => {
 		vi.useFakeTimers()
-		const html = `<p id="plain" data-magic-ppt-build='{"version":1,"step":1,"effect":"appear"}'>First</p><a href="#target" id="link">link</a><button id="button">control</button>`
+		const html = `<p id="plain" data-ppt-step="1" data-ppt-effect="appear">First</p><a href="#target" id="link">link</a><button id="button">control</button>`
 		const parsed = new DOMParser().parseFromString(
 			injectPPTBuildBridge(html, window.location.origin, "click", true),
 			"text/html",

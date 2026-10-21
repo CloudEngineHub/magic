@@ -53,7 +53,7 @@ export function appendBuildStep(
 		...normalized,
 		{
 			selector,
-			build: { version: 1, step: last >= 1000 ? groups.length + 1 : last + 1, effect },
+			build: { step: last >= 1000 ? groups.length + 1 : last + 1, effect },
 		},
 	]
 }

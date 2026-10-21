@@ -1,4 +1,5 @@
 import { generateSpeakerNotes } from "./services/generateSpeakerNotes"
+import { PPT_BUILD_ATTRIBUTE } from "@dtyq/html-sandbox/utils/pptBuild"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
 import {
 	lazy,
@@ -510,7 +511,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 	const isPresenterConsole = isPresenterWindowOpen
 	const buildNavigation = usePPTBuildNavigation({
 		hasBuilds: () =>
-			Boolean(store.slides[store.activeIndex]?.content?.includes("data-magic-ppt-build")),
+			Boolean(store.slides[store.activeIndex]?.content?.includes(PPT_BUILD_ATTRIBUTE)),
 		getPageKey: () => store.slides[store.activeIndex]?.path ?? "",
 		isPresenting: () =>
 			isPresentationFullscreen || isPresenterWindowOpen || Boolean(isPlaybackMode),
@@ -887,7 +888,7 @@ const PPTRenderInner = observer(function PPTRenderInner({
 		function handleMessage(event: MessageEvent) {
 			if (!event.data || event.data.type !== "keyboardEvent" || event.data.repeat) return
 			if (
-				store.slides[store.activeIndex]?.content?.includes("data-magic-ppt-build") &&
+				store.slides[store.activeIndex]?.content?.includes(PPT_BUILD_ATTRIBUTE) &&
 				!buildNavigation.acceptsMessage(event)
 			)
 				return
@@ -1639,6 +1640,9 @@ const PPTRenderInner = observer(function PPTRenderInner({
 												htmlRelativeFolderPath={slideHtmlRelativeFolderPath}
 												selectedProject={selectedProject}
 												attachmentList={attachmentList}
+												processSource={(sourceContent) =>
+													store.processSlideSource(index, sourceContent)
+												}
 												fileApi={fileApi}
 												attachments={attachments}
 												updateSlideContents={(

@@ -1,7 +1,7 @@
-import { PPT_BUILD_ATTRIBUTE } from "@dtyq/html-sandbox/utils/pptBuild"
+import { PPT_BUILD_ATTRIBUTE, PPT_BUILD_EFFECT_ATTRIBUTE } from "@dtyq/html-sandbox/utils/pptBuild"
 
 const BUILD_ATTRIBUTE_PATTERN = new RegExp(
-	`\\s${PPT_BUILD_ATTRIBUTE}(?:=(?:"[^"]*"|'[^']*'|[^\\s>]+))?`,
+	`\\s(?:${PPT_BUILD_ATTRIBUTE}|${PPT_BUILD_EFFECT_ATTRIBUTE})(?=[\\s=>/])(?:=(?:"[^"]*"|'[^']*'|[^\\s>]+))?`,
 	"g",
 )
 
