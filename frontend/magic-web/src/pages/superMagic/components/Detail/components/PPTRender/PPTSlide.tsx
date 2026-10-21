@@ -49,6 +49,7 @@ import { flushFileSaves } from "../../services/fileSaveQueue"
 import { cn } from "@/utils/cn"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
+import { stripPPTBuildMetadata } from "./utils/pptBuildSource"
 import { stripSlideNotes } from "./utils/slideNotes"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { injectPPTSwipeBridge } from "./utils/pptSwipeBridge"
@@ -313,6 +314,12 @@ const PPTSlide = observer(function PPTSlide({
 		}
 	}, [fileId, rawContent, fetchFileVersions])
 
+	// Authoring steps must not reload the preview; only presenting needs the metadata.
+	const isPresenting = Boolean(isFullscreen || isPlaybackMode)
+	const comparableSource = useCallback(
+		(html: string) => stripSlideNotes(isPresenting ? html : stripPPTBuildMetadata(html)),
+		[isPresenting],
+	)
 	const [displayContent, setDisplayContent] = useState<{
 		content: string
 		rawContent: string
@@ -367,7 +374,7 @@ const PPTSlide = observer(function PPTSlide({
 	const isDisplayContentCurrent =
 		fileVersion === undefined
 			? displayContent.sourceVersion === undefined &&
-				stripSlideNotes(displayContent.rawContent) === stripSlideNotes(rawContent)
+				comparableSource(displayContent.rawContent) === comparableSource(rawContent)
 			: typeof versionContent === "string" &&
 				displayContent.sourceVersion === fileVersion &&
 				displayContent.rawContent === versionContent
@@ -484,7 +491,7 @@ const PPTSlide = observer(function PPTSlide({
 		}
 		if (
 			displayContent.sourceVersion === undefined &&
-			stripSlideNotes(rawContent) === stripSlideNotes(displayContent.rawContent)
+			comparableSource(rawContent) === comparableSource(displayContent.rawContent)
 		) {
 			setDisplayContent((current) => ({ ...current, rawContent }))
 			return
@@ -506,6 +513,7 @@ const PPTSlide = observer(function PPTSlide({
 	}, [
 		displayContent.rawContent,
 		displayContent.sourceVersion,
+		comparableSource,
 		fileVersion,
 		processHistoricalContent,
 		rawContent,
