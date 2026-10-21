@@ -1,8 +1,12 @@
+import { useRef, type ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
 	MODEL_INFO_HOVER_OPEN_DELAY_MS,
+	MODEL_INFO_HOVER_SCROLL_IDLE_MS,
+	MODEL_INFO_HOVER_SWITCH_DELAY_MS,
 	ModelInfoHoverCard,
+	ModelInfoHoverProvider,
 	formatContextWindow,
 } from "../ModelInfoHoverCard"
 import { ModelStatusEnum, type ModelItem } from "../../types"
@@ -48,24 +52,63 @@ function createModel(overrides: Partial<ModelItem> = {}): ModelItem {
 	}
 }
 
+function List({ children }: { children: ReactNode }) {
+	const scrollRef = useRef<HTMLDivElement>(null)
+	return (
+		<div ref={scrollRef} data-testid="model-list">
+			<ModelInfoHoverProvider scrollContainerRef={scrollRef}>
+				{children}
+			</ModelInfoHoverProvider>
+		</div>
+	)
+}
+
 function renderCard(model = createModel(), onReasoningEffortChange?: (model: ModelItem) => void) {
 	const onSelect = vi.fn()
 	render(
-		<ModelInfoHoverCard model={model} onReasoningEffortChange={onReasoningEffortChange}>
-			<div data-testid="model-switch-item" onClick={() => onSelect(model)}>
-				{model.model_name}
-			</div>
-		</ModelInfoHoverCard>,
+		<List>
+			<ModelInfoHoverCard model={model} onReasoningEffortChange={onReasoningEffortChange}>
+				<div data-testid="model-switch-item" onClick={() => onSelect(model)}>
+					{model.model_name}
+				</div>
+			</ModelInfoHoverCard>
+		</List>,
 	)
 	return { model, onSelect }
 }
 
-function hoverRow() {
-	const row = screen.getByTestId("model-switch-item")
-	fireEvent.pointerEnter(row, { pointerType: "mouse" })
-	act(() => {
-		vi.advanceTimersByTime(MODEL_INFO_HOVER_OPEN_DELAY_MS)
+function renderTwoRows() {
+	const first = createModel()
+	const second = createModel({
+		id: "glm",
+		model_id: "glm-5",
+		model_name: "GLM 5",
+		model_description: "Second model.",
 	})
+	render(
+		<List>
+			{[first, second].map((model) => (
+				<ModelInfoHoverCard key={model.model_id} model={model}>
+					<div data-testid={`row-${model.model_id}`}>{model.model_name}</div>
+				</ModelInfoHoverCard>
+			))}
+		</List>,
+	)
+	return {
+		firstRow: screen.getByTestId("row-qwen3.7-max"),
+		secondRow: screen.getByTestId("row-glm-5"),
+	}
+}
+
+function advance(ms: number) {
+	act(() => {
+		vi.advanceTimersByTime(ms)
+	})
+}
+
+function hoverRow(row: HTMLElement = screen.getByTestId("model-switch-item")) {
+	fireEvent.pointerEnter(row, { pointerType: "mouse" })
+	advance(MODEL_INFO_HOVER_OPEN_DELAY_MS)
 }
 
 describe("formatContextWindow", () => {
@@ -174,5 +217,58 @@ describe("ModelInfoHoverCard", () => {
 		hoverRow()
 		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
 		expect(screen.getByTestId("model-switch-item")).toBeTruthy()
+	})
+
+	it("keeps a single card and moves it to the next hovered row", () => {
+		const { firstRow, secondRow } = renderTwoRows()
+		hoverRow(firstRow)
+		expect(screen.getByTestId("model-info-hover-card")).toHaveTextContent("Qwen3.7 Max")
+
+		fireEvent.pointerLeave(firstRow, { pointerType: "mouse" })
+		fireEvent.pointerEnter(secondRow, { pointerType: "mouse" })
+		advance(MODEL_INFO_HOVER_SWITCH_DELAY_MS)
+
+		const cards = screen.getAllByTestId("model-info-hover-card")
+		expect(cards).toHaveLength(1)
+		expect(cards[0]).toHaveTextContent("GLM 5")
+		expect(cards[0]).not.toHaveTextContent("Qwen3.7 Max")
+	})
+
+	it("does not switch to rows the pointer only passes through", () => {
+		const { firstRow, secondRow } = renderTwoRows()
+		hoverRow(firstRow)
+
+		fireEvent.pointerLeave(firstRow, { pointerType: "mouse" })
+		fireEvent.pointerEnter(secondRow, { pointerType: "mouse" })
+		advance(MODEL_INFO_HOVER_SWITCH_DELAY_MS / 2)
+		fireEvent.pointerLeave(secondRow, { pointerType: "mouse" })
+		// 鼠标随即进入卡片，卡片保持在原来那一行上。
+		fireEvent.pointerEnter(screen.getByTestId("model-info-hover-card"), {
+			pointerType: "mouse",
+		})
+		advance(1000)
+
+		expect(screen.getByTestId("model-info-hover-card")).toHaveTextContent("Qwen3.7 Max")
+	})
+
+	it("closes on scroll and does not open for rows passing under the pointer until scrolling settles", () => {
+		const { firstRow, secondRow } = renderTwoRows()
+		hoverRow(firstRow)
+
+		fireEvent.scroll(screen.getByTestId("model-list"))
+		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
+
+		// 滚动中鼠标下掠过的行不弹卡。
+		fireEvent.pointerEnter(secondRow, { pointerType: "mouse" })
+		advance(MODEL_INFO_HOVER_SCROLL_IDLE_MS - 1)
+		fireEvent.scroll(screen.getByTestId("model-list"))
+		advance(MODEL_INFO_HOVER_OPEN_DELAY_MS)
+		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
+
+		// 停稳后鼠标再动一下，打开当前所在行的卡片。
+		advance(MODEL_INFO_HOVER_SCROLL_IDLE_MS)
+		fireEvent.pointerMove(secondRow, { pointerType: "mouse" })
+		advance(MODEL_INFO_HOVER_OPEN_DELAY_MS)
+		expect(screen.getByTestId("model-info-hover-card")).toHaveTextContent("GLM 5")
 	})
 })

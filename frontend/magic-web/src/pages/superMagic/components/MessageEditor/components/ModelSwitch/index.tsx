@@ -17,6 +17,7 @@ import { cn } from "@/utils/cn"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
 import { ModelListContent } from "./components/ModelListContent"
+import { ModelInfoHoverProvider } from "./components/ModelInfoHoverCard"
 import {
 	ModelReasoningFooter,
 	resolveReasoningFooterModel,
@@ -583,7 +584,12 @@ export const ModelSwitch = observer(function ModelSwitch({
 									!tabSwitcher && "pt-1.5",
 								)}
 							>
-								{mainContent}
+								{/* 整个列表共用一张悬停信息卡，滚动时收起。 */}
+								<ModelInfoHoverProvider
+									scrollContainerRef={desktopScrollContainerRef}
+								>
+									{mainContent}
+								</ModelInfoHoverProvider>
 							</div>
 							{/* 思考强度与添加模型固定在列表下方，不盖住滚动区。 */}
 							{reasoningFooterModel ? (

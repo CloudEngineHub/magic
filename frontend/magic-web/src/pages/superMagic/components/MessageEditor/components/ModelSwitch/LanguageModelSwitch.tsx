@@ -13,6 +13,7 @@ import { userStore } from "@/models/user"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
 import { ModelListContent } from "./components/ModelListContent"
+import { ModelInfoHoverProvider } from "./components/ModelInfoHoverCard"
 import { AddModelStoreProvider } from "./components/AddModel/context"
 import { AddModelStore } from "./components/AddModel/store"
 import { AddModelDialogLazy } from "./components/AddModel/add-model-dialog-lazy"
@@ -225,7 +226,12 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 								data-model-switch-scroll-container
 								className="scrollbar-y-thin flex max-h-[340px] flex-col overflow-y-auto"
 							>
-								{mainContent}
+								{/* 整个列表共用一张悬停信息卡，滚动时收起。 */}
+								<ModelInfoHoverProvider
+									scrollContainerRef={desktopScrollContainerRef}
+								>
+									{mainContent}
+								</ModelInfoHoverProvider>
 							</div>
 						</div>
 					</DropdownMenuContent>
