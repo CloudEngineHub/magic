@@ -148,6 +148,8 @@ export interface PersonaFile {
 	schema_version: 1
 	id: string
 	name: string
+	/** Bound project image identity; no expiring URL is persisted. Absent in older personas. */
+	portrait?: { file: string; file_id?: string; updated_at: string }
 	tagline?: string
 	tags?: string[]
 	tier: PersonaTier

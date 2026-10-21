@@ -7,6 +7,7 @@ Who writes each file:
 | File | Written by |
 |---|---|
 | `study.json` | `update_study`; hypothesis verdicts by `save_study_synthesis` |
+| `personas/*.json` optional `portrait` | `attach_persona_portrait` (image validation and binding only) |
 | `personas/*.json`, `studies/<slug>/panel.json`, `panels/*.json` | `save_personas` |
 | `interviews/*.json`, `discussions/*.json` | `persona_chat` (rounds) and `finish_persona_transcript` (summary, quotes, quality) |
 | `synthesis.json` | `save_study_synthesis` |
@@ -147,6 +148,7 @@ Path: `personas/<persona_id>.json` (project-level library). `id` format: `p_<sho
 | `field_sources` | no | per dimension key (`demographics`, `geography`, `psychographics`, `behavior`, `needs_pains`, `tech_adoption`, `social`): an array of evidence ids such as `["e1", "e3"]`, the string `"inferred"` when no evidence backs it, or `"user"` when the user filled in or edited it |
 | `consistency_notes` | no | array of strings: contradictions between layers that are kept on purpose, for example "Says efficiency matters most, yet still keeps a paper ledger" |
 | `field_labels` | no | object mapping each non-standard key used in `dimensions` or `layers` to its display name in the user's language, for example `{ "monthly_allowance_cny": "月生活费（元）" }`; required by `save_personas` for new personas |
+| `portrait` | no | `{ "file": "personas/portraits/<persona_id>/<content-hash>.webp", "file_id": "<optional MagicFS file id>", "updated_at": "<ISO 8601 with offset>" }`; maintained by `attach_persona_portrait`, never a signed URL; absent or unreadable uses the original SVG |
 | `created_in` | no | `studies/<slug>` of the study that created it |
 | `updated_at` | no | ISO 8601 time with offset |
 | `edited_at` | no | ISO 8601 time with offset of the user's last edit in the persona library |

@@ -85,7 +85,7 @@ def test_persona_research_skill_references_exist():
 def test_persona_research_code_mode_tools_are_registered_and_code_mode_only():
     """主 Agent 通过 run_sdk_snippet 调用这些工具，不能在 .agent 的 tools 里声明。"""
     agent_define, _ = _load_agent("persona-research")
-    for name in ("update_study", "save_personas", "check_interviews", "save_study_synthesis", "save_validation_questionnaire"):
+    for name in ("update_study", "save_personas", "check_interviews", "save_study_synthesis", "save_validation_questionnaire", "attach_persona_portrait", "embed_persona_portraits"):
         info = tool_factory.get_tool(name)
         assert info is not None and info.code_mode_only, name
         assert name not in agent_define.tools_config

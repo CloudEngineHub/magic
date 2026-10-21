@@ -47,6 +47,10 @@ A persona that already holds the tested opinion turns the interview into an echo
 
 Persona self-check, before calling `save_personas` (the tool also runs keyword and semantic leak checks): for every persona and every hypothesis, ask "could someone predict this persona's answer to the hypothesis from its stance fields alone?" If yes, rewrite the field as a past fact (what happened, when, at what cost) and drop the attitude. [Leak] needs_pains "afraid of buying another card and leaving sessions unused again" for a hypothesis about unused sessions. [Fact] behavior "last year's 10-session card: used 6, the rest expired".
 
+### Optional Generated Portraits
+
+When the user requests photographic persona avatars, read [persona-portraits.md](persona-portraits.md). Choose a photographic direction from each saved persona's situation; a panel may mix everyday, outdoor, and simple editorial portraits. Generate through the product's `generate_images` tool, reuse an existing suitable portrait, and keep the AI-simulation disclosure. Portraits are presentation assets, never research evidence or a reason to change the persona.
+
 ## Interview Guide
 
 - Use 3-5 shared core questions for comparable coverage across personas, or fewer for a quick interview or an explicitly lower ceiling (never fewer than 1). The rest of the interview consists of probes chosen from each persona's actual answers, not a longer fixed questionnaire. Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
@@ -156,31 +160,24 @@ The tool lowers `high` and `medium` that lack the required external sources, res
 
 ### Quote Checks
 
-Quote every claim with the persona's exact words. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations, and never re-add a removed quote by paraphrasing it.
+Use exact persona words when presenting interview evidence. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations, and never re-add a removed quote by paraphrasing it. Cite external facts to their external sources. Label your inference and cite its premises; recommendations explain which finding motivates the action and how to test it. An external fact or a recommendation does not require a persona quote.
 
 ### Writing Findings
 
 Bottom line (the report's opening verdict):
 
 - `go` only when every hypothesis the decision depends on is `supported` (or `refuted`, for a no-go) with a source that covers the core claim. When any of them is `mixed`, `insufficient`, or pending real-person validation, the verdict is at most `conditional`, and the conditions are exactly the things to validate first.
-- Under the verdict, state the evidence basis in one line: web sources N, AI-simulated interviews N, real-person validation done or not done.
-- When synthesis raised a homogeneity warning, or the leak check was skipped or overridden, say so in the bottom line, not only in the limitations.
-- When only the top themes are written out in full, keep at least one theme where some personas oppose or are mixed, together with its counter-evidence; never show only the agreeing themes.
+- When synthesis raised a homogeneity warning, or the leak check was skipped or overridden, say so beside the opening judgment. Keep counter-evidence and minority views beside the findings they qualify; when selecting the top themes, include a relevant opposing or mixed theme if one exists.
+- AI-simulated samples do not support statistical inference. Never report AI stance counts, ratios, percentages or averages. Use most / some / a few only to describe the relevant AI interviews, not prevalence in real users. Effective sample accounting describes the study as a whole, not support for an individual claim. A theme raised by one persona is a signal, not a pattern; `not_mentioned` is silence, never agreement.
+- Compare public voices and AI interviews only on the same claim in comparable circumstances. Opposite answers are conflicting evidence; answers about different questions are not comparable, and silence leaves an evidence gap. For example, "I check the price before buying" and "a friend prompted me to try" can both be true. Do not infer disagreement or weaken a hypothesis merely because the statements emphasize different things.
 
-- Do not write counts or ratios of personas ("5 of 8", "62%"). Use "most", "some", or "a few", and state once that AI-simulated samples do not support statistical inference.
-- A chart cell or dot is one respondent, not a count or ratio; charts never sum personas, show percentages, or average numbers. Draw a chart only when its data warrants it (report-charts.md). A theme's `not_mentioned` is silence, never agreement.
-- Group findings by theme, and show segment differences inside each theme; a theme raised by one persona only is a signal, not a pattern.
-- Each claim cites its evidence: interview quotes (persona name + transcript file) and web sources `[S#]`. Mark claims supported only by your inference as such.
-- Report counter-evidence and minority views next to the main finding.
-- Every finding and recommendation shows an evidence bar: web sources N, AI interviews N people, real-person validation not done / done (N people).
-- State the effective sample size (completed interviews) and that participants are AI-simulated personas.
-- Compare with the real voices: for each main theme, say whether the "Real Voices" in desk research show the same thing, the opposite, or nothing, and list the disagreements.
+Use [report-templates.md](report-templates.md) for report structure, attribution display and sample accounting, and [report-charts.md](report-charts.md) to decide whether a chart adds information. These presentation choices do not change the verdict or confidence rules above.
 
-### Business Recommendations
+### Recommendations
 
-Cover, in this order: target segment priority, a one-line positioning, pricing direction, channels and reach, and first-30-day actions. Each item lists its hypothesis ids, its evidence, and what to validate first.
+Answer the decision in the confirmed plan. Include only actions relevant to that decision and supported by the findings; each identifies its hypothesis, evidence or inference, and the observable result that would justify proceeding. Untested actions remain candidates. A conditional verdict gives tests and the actions conditional on their results; a no-go gives stopping conditions or cheap tests, not a launch plan. Feature and usability studies need no positioning, pricing, channel strategy or 30-day launch plan unless the confirmed decision calls for them.
 
-Pricing warning: AI respondents are systematically optimistic about price and willingness to pay. Give only a direction and a range, never a single price point, and always state that the numbers cannot be used to set a price without real-person validation.
+When pricing is relevant, give a direction and range only if cited evidence supports them; otherwise state the missing evidence and how to collect it. Never invent a range or present one AI answer as a recommended price. AI price and willingness-to-pay answers may be optimistic and cannot set a price without real-person validation; state this beside any AI-derived pricing direction. Report observed spending as an observation, not as a price recommendation.
 
 ## Real Voices (Desk Research)
 
