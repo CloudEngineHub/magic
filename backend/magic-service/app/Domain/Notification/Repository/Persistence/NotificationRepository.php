@@ -272,6 +272,34 @@ final class NotificationRepository implements NotificationRepositoryInterface
         ]);
     }
 
+    public function withdrawBySourceIdentityAndRecipient(
+        NotificationDataIsolation $dataIsolation,
+        string $sourceDomain,
+        string $sourceType,
+        string $sourceId,
+        ?string $sourceVersion,
+        string $recipientUserId,
+        string $updatedAt
+    ): int {
+        $query = $this->organizationQuery($dataIsolation)
+            ->where('recipient_user_id', $recipientUserId)
+            ->where('source_domain', $sourceDomain)
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('message_status', NotificationMessageStatus::ACTIVE->value);
+
+        if ($sourceVersion === null) {
+            $query->whereNull('source_version');
+        } else {
+            $query->where('source_version', $sourceVersion);
+        }
+
+        return $query->update([
+            'message_status' => NotificationMessageStatus::WITHDRAWN->value,
+            'updated_at' => $updatedAt,
+        ]);
+    }
+
     public function withdrawAllBySourceIdentity(
         NotificationDataIsolation $dataIsolation,
         string $sourceDomain,
@@ -280,6 +308,26 @@ final class NotificationRepository implements NotificationRepositoryInterface
         string $updatedAt
     ): int {
         return $this->organizationQuery($dataIsolation)
+            ->where('source_domain', $sourceDomain)
+            ->where('source_type', $sourceType)
+            ->where('source_id', $sourceId)
+            ->where('message_status', NotificationMessageStatus::ACTIVE->value)
+            ->update([
+                'message_status' => NotificationMessageStatus::WITHDRAWN->value,
+                'updated_at' => $updatedAt,
+            ]);
+    }
+
+    public function withdrawAllBySourceIdentityAndRecipient(
+        NotificationDataIsolation $dataIsolation,
+        string $sourceDomain,
+        string $sourceType,
+        string $sourceId,
+        string $recipientUserId,
+        string $updatedAt
+    ): int {
+        return $this->organizationQuery($dataIsolation)
+            ->where('recipient_user_id', $recipientUserId)
             ->where('source_domain', $sourceDomain)
             ->where('source_type', $sourceType)
             ->where('source_id', $sourceId)

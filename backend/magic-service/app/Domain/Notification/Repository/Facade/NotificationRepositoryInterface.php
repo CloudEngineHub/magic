@@ -69,12 +69,33 @@ interface NotificationRepositoryInterface
         string $updatedAt
     ): int;
 
+    /** Withdraw one version of a business identity for one recipient. */
+    public function withdrawBySourceIdentityAndRecipient(
+        NotificationDataIsolation $dataIsolation,
+        string $sourceDomain,
+        string $sourceType,
+        string $sourceId,
+        ?string $sourceVersion,
+        string $recipientUserId,
+        string $updatedAt
+    ): int;
+
     /** Withdraw every active version of one business identity. */
     public function withdrawAllBySourceIdentity(
         NotificationDataIsolation $dataIsolation,
         string $sourceDomain,
         string $sourceType,
         string $sourceId,
+        string $updatedAt
+    ): int;
+
+    /** Withdraw every active version of one business identity for one recipient. */
+    public function withdrawAllBySourceIdentityAndRecipient(
+        NotificationDataIsolation $dataIsolation,
+        string $sourceDomain,
+        string $sourceType,
+        string $sourceId,
+        string $recipientUserId,
         string $updatedAt
     ): int;
 }

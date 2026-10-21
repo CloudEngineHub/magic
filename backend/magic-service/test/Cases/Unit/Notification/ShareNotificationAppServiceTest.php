@@ -29,10 +29,7 @@ final class ShareNotificationAppServiceTest extends TestCase
             });
 
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(
-            ['user-a', 'user-b'],
-            []
-        );
+        $users->method('getActiveUserIdsByOrganization')->willReturn(['user-a', 'user-b']);
         $users->method('getActiveUsersByIds')->willReturn([]);
         $departments = new MagicDepartmentUserDomainService(
             $this->createMock(MagicDepartmentUserRepositoryInterface::class)
@@ -76,6 +73,91 @@ final class ShareNotificationAppServiceTest extends TestCase
 
         $service->publishRecipientsAdded($before, $after);
         self::assertSame(['user-a'], $after->getExtra()['notification_recipient_user_ids']);
+    }
+
+    public function testUpdateWithdrawsRemovedRecipientsAndKeepsOnlyCurrentSnapshot(): void
+    {
+        $published = [];
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::once())
+            ->method('publish')
+            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+                self::assertInstanceOf(EventEnvelope::class, $envelope);
+                $published[] = $envelope;
+                return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
+            });
+        $users = $this->createMock(MagicUserDomainService::class);
+        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
+        $users->method('getActiveUsersByIds')->willReturn([]);
+        $service = new ShareNotificationAppService(
+            $publisher,
+            $users,
+            new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
+        );
+
+        $before = $this->share('project-1', 12, 'Project 1', 'all');
+        $before->setExtra(['notification_recipient_user_ids' => ['user-a', 'user-b']]);
+        $after = $this->share('project-1', 12, 'Project 1', 'all');
+
+        $service->publishRecipientsAdded($before, $after);
+
+        self::assertSame('share.project.withdrawn', $published[0]->eventType);
+        self::assertSame(['user-b'], array_map(
+            static fn ($recipient): string => $recipient->userId,
+            $published[0]->recipients
+        ));
+        self::assertSame(['user-a'], $after->getExtra()['notification_recipient_user_ids']);
+    }
+
+    public function testCancellingSharePublishesRecipientsForRealtimeRefresh(): void
+    {
+        $published = [];
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::once())
+            ->method('publish')
+            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+                self::assertInstanceOf(EventEnvelope::class, $envelope);
+                $published[] = $envelope;
+                return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
+            });
+        $service = new ShareNotificationAppService(
+            $publisher,
+            $this->createMock(MagicUserDomainService::class),
+            new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
+        );
+
+        $share = $this->share('project-1', 12, 'Project 1', 'all');
+        $share->setExtra(['notification_recipient_user_ids' => ['user-a']]);
+        $service->publishWithdrawn($share);
+
+        self::assertSame('share.project.withdrawn', $published[0]->eventType);
+        self::assertSame(['user-a'], array_map(
+            static fn ($recipient): string => $recipient->userId,
+            $published[0]->recipients
+        ));
+    }
+
+    public function testCancellingLegacyShareStillPublishesGlobalWithdrawal(): void
+    {
+        $published = [];
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::once())
+            ->method('publish')
+            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+                self::assertInstanceOf(EventEnvelope::class, $envelope);
+                $published[] = $envelope;
+                return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
+            });
+        $service = new ShareNotificationAppService(
+            $publisher,
+            $this->createMock(MagicUserDomainService::class),
+            new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
+        );
+
+        $service->publishWithdrawn($this->share('project-1', 12, 'Project 1', 'all'));
+
+        self::assertSame('share.project.withdrawn', $published[0]->eventType);
+        self::assertSame([], $published[0]->recipients);
     }
 
     public function testRestoredShareStartsANewRecipientNotificationCycle(): void

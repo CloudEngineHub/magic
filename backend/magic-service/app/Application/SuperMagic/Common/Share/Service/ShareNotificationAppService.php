@@ -35,40 +35,42 @@ final readonly class ShareNotificationAppService
     ) {
     }
 
-    /**
-     * 在分享保存成功后发布本次新增收件人事件。
-     */
+    /** 在分享保存成功后同步收件人通知：新增对象收到消息，移除对象的旧消息撤回。 */
     public function publishRecipientsAdded(
         ?ResourceShareEntity $before,
         ResourceShareEntity $after,
         string $sharerName = ''
     ): void {
         $eventType = $this->addedEventType($after);
-        if ($eventType === null || $after->getShareType() !== ShareAccessType::TeamShare->value) {
+        if ($eventType === null) {
             return;
         }
 
-        $currentRecipients = $this->resolveRecipients($after);
-        if ($currentRecipients === []) {
-            return;
-        }
+        $currentRecipients = $after->getShareType() === ShareAccessType::TeamShare->value
+            ? $this->resolveRecipients($after)
+            : [];
 
         // A soft-deleted share starts a new notification cycle when it is
         // restored. Do not carry the previous cycle's recipient snapshot into
         // the new share, otherwise re-sharing to the same user is treated as
         // an already-notified recipient and no event is published.
-        $previous = $before !== null && $before->getDeletedAt() !== null
-            ? []
-            : $this->snapshot($before ?? $after);
+        $previous = $before !== null
+            && $before->getDeletedAt() === null
+            && $before->getShareType() === ShareAccessType::TeamShare->value
+            ? $this->snapshot($before)
+            : [];
         $newRecipients = array_values(array_diff($currentRecipients, $previous));
+        $removedRecipients = array_values(array_diff($previous, $currentRecipients));
 
-        // 无新增收件人时不产生事件，但保留历史快照，便于后续配置变更继续计算差集。
-        $mergedSnapshot = array_values(array_unique(array_merge($previous, $currentRecipients)));
-        if ($after->getExtra() === null || $mergedSnapshot !== $previous) {
+        // 快照仅表示当前仍持有分享消息的对象。不能累积历史收件人，
+        // 否则移除后再添加时既不会重发消息，也无法撤回旧消息。
+        if ($after->getExtra() === null || $currentRecipients !== $previous) {
             $extra = $after->getExtra() ?? [];
-            $extra[self::RECIPIENT_SNAPSHOT] = $mergedSnapshot;
+            $extra[self::RECIPIENT_SNAPSHOT] = $currentRecipients;
             $after->setExtra($extra);
         }
+
+        $this->publishRecipientWithdrawals($after, $removedRecipients);
 
         if ($newRecipients === []) {
             return;
@@ -117,6 +119,16 @@ final readonly class ShareNotificationAppService
             return;
         }
 
+        // Carry the original recipients so the consumer can refresh their
+        // inbox counters and lists in real time after the messages withdraw.
+        // Older shares may not have a snapshot; their empty-recipient event
+        // deliberately retains the consumer's global-withdrawal fallback.
+        $recipients = $this->snapshot($share);
+        if ($recipients !== []) {
+            $this->publishRecipientWithdrawals($share, $recipients);
+            return;
+        }
+
         $kind = $this->resourceKind($share);
         $this->publisher->publish(new EventEnvelope(
             eventId: (string) IdGenerator::getSnowId(),
@@ -128,6 +140,41 @@ final readonly class ShareNotificationAppService
             recipients: [],
             payload: ['resource_id' => $share->getResourceId(), 'resource_type' => $kind],
         ));
+    }
+
+    /** @param list<string> $recipientUserIds */
+    private function publishRecipientWithdrawals(ResourceShareEntity $share, array $recipientUserIds): void
+    {
+        if ($recipientUserIds === []) {
+            return;
+        }
+
+        $eventType = $this->withdrawnEventType($share);
+        if ($eventType === null) {
+            return;
+        }
+
+        $kind = $this->resourceKind($share);
+        foreach (array_chunk($recipientUserIds, self::RECIPIENT_BATCH_SIZE) as $recipientBatch) {
+            $recipients = [];
+            foreach ($recipientBatch as $userId) {
+                $recipients[] = new EventRecipient(
+                    $userId,
+                    sprintf('share:%s:%s:%s:%s:%s', $share->getOrganizationCode(), $kind, $share->getResourceId(), (string) $share->getId(), $userId),
+                );
+            }
+
+            $this->publisher->publish(new EventEnvelope(
+                eventId: (string) IdGenerator::getSnowId(),
+                eventType: $eventType,
+                occurredAt: date('Y-m-d H:i:s'),
+                producer: 'super_magic.share',
+                organizationCode: $share->getOrganizationCode(),
+                source: new EventSource('share', $kind, $share->getResourceId()),
+                recipients: $recipients,
+                payload: ['resource_id' => $share->getResourceId(), 'resource_type' => $kind],
+            ));
+        }
     }
 
     /** @return list<string> */

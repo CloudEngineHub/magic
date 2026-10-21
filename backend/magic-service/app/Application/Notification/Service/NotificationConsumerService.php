@@ -235,6 +235,38 @@ final readonly class NotificationConsumerService
     private function withdraw(NotificationEventEntity $event): int
     {
         $isolation = NotificationDataIsolation::create($event->getOrganizationCode());
+        $payload = $event->getEventPayload();
+        $recipients = (array) ($payload['recipients'] ?? []);
+        if ($recipients !== []) {
+            $withdrawn = 0;
+            foreach ($recipients as $recipient) {
+                $userId = trim((string) ($recipient['user_id'] ?? ''));
+                if ($userId === '') {
+                    continue;
+                }
+                if ($event->getSourceVersion() !== null) {
+                    $withdrawn += $this->notifications->withdrawBySourceIdentityAndRecipient(
+                        $isolation,
+                        $event->getSourceDomain(),
+                        $event->getSourceType(),
+                        $event->getSourceId(),
+                        $event->getSourceVersion(),
+                        $userId,
+                        date('Y-m-d H:i:s')
+                    );
+                } else {
+                    $withdrawn += $this->notifications->withdrawAllBySourceIdentityAndRecipient(
+                        $isolation,
+                        $event->getSourceDomain(),
+                        $event->getSourceType(),
+                        $event->getSourceId(),
+                        $userId,
+                        date('Y-m-d H:i:s')
+                    );
+                }
+            }
+            return $withdrawn;
+        }
         return $this->notifications->withdrawAllBySourceIdentity(
             $isolation,
             $event->getSourceDomain(),
