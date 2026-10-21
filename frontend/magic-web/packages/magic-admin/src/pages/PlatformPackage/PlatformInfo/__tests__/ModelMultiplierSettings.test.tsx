@@ -223,7 +223,7 @@ it("旧端分组表隐藏空组并展示 logo，公式仍默认折叠", () => {
 			.getByRole("button", { name: /modelPricePreview.details/ })
 			.getAttribute("aria-expanded"),
 	).toBe("false")
-	expect(screen.getByText("2.00x")).toBeTruthy()
+	expect(screen.getAllByText("2.00x")).toHaveLength(2)
 })
 
 it("旧端参考值根据当前币种换算，切换不回填或修改原始快照", () => {

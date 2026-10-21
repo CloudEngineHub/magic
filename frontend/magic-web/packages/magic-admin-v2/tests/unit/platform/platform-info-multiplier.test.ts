@@ -132,3 +132,18 @@ describe("模型参考倍率配置", () => {
 		)
 	})
 })
+
+it("表单保存保留手动覆盖，非法覆盖拒绝提交", () => {
+	const schema = createPlatformInfoSchema((key) => key, "modelMultiplier")
+	const values = createEmptyPlatformInfoFormState()
+	values.model_billing_multiplier.model_overrides = [{ model_id: "mock.auto", multiplier: "0.5" }]
+	const parsed = schema.safeParse(values)
+	assert.equal(parsed.success, true)
+	if (parsed.success)
+		assert.deepEqual(
+			parsed.data.model_billing_multiplier.model_overrides,
+			values.model_billing_multiplier.model_overrides,
+		)
+	values.model_billing_multiplier.model_overrides[0].multiplier = "-1"
+	assert.equal(schema.safeParse(values).success, false)
+})

@@ -1,4 +1,7 @@
-import { validateMultiplierSettings } from "../../../../model-billing-reference"
+import {
+	areModelMultiplierOverridesValid,
+	validateMultiplierSettings,
+} from "../../../../model-billing-reference"
 import { z } from "zod"
 import type {
 	PlatformInfoFormState,
@@ -244,6 +247,13 @@ export function createPlatformInfoSchema(
 					.nullable()
 					.optional(),
 				usd_to_cny_rate: z.string().nullable(),
+				model_overrides: z
+					.array(z.object({ model_id: z.string(), multiplier: z.string() }))
+					.refine(
+						areModelMultiplierOverridesValid,
+						t("platformInfo.modelPricePreview.invalidManual"),
+					)
+					.optional(),
 			})
 			.superRefine((value, context) => {
 				for (const field of validateMultiplierSettings(value)) {

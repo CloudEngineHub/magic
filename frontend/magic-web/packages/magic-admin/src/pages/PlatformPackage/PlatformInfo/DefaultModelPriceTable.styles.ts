@@ -28,7 +28,7 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 	header: css`
 		display: grid;
 		grid-template-columns:
-			minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 0.8fr)
+			minmax(0, 2fr) minmax(0, 1.5fr) minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr)
 			32px;
 		gap: 20px;
 		align-items: center;
@@ -57,7 +57,7 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 	row: css`
 		display: grid;
 		grid-template-columns:
-			minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 0.8fr)
+			minmax(0, 2fr) minmax(0, 1.5fr) minmax(0, 0.8fr) minmax(0, 1.5fr) minmax(0, 1fr)
 			32px;
 		gap: 8px 20px;
 		align-items: center;

@@ -3,6 +3,10 @@ import { useTranslation } from "react-i18next"
 import { Boxes, ChevronDown, Folder } from "lucide-react"
 import {
 	getVisibleModelPriceGroups,
+	getDisplayModelMultiplier,
+	isValidModelMultiplier,
+	updateModelMultiplierOverrides,
+	type ModelMultiplierOverride,
 	calculateModelPrice,
 	calculateModelBenchmark,
 	formatBenchmarkUnitPrice,
@@ -12,7 +16,7 @@ import {
 	type PreviewPrice,
 } from "../../../../../model-billing-reference"
 import type { ModelPricePreviewState } from "../../../../../model-billing-reference/use-model-price-preview"
-import { MagicAvatar } from "@admin-components"
+import { MagicAvatar, MagicInput as MultiplierInput } from "@admin-components"
 import { useDefaultModelPriceStyles } from "./DefaultModelPriceTable.styles"
 /** 复用本管理端头像和失败兜底，旧接口缺少图标时仍可正常展示。 */
 function PricePreviewLogo({
@@ -38,12 +42,16 @@ export function DefaultModelPriceTable({
 	rate,
 	currency,
 	enabled,
+	overrides,
+	onOverridesChange,
 }: {
 	preview: ModelPricePreviewState
 	base: string | null
 	rate: string | null
 	currency?: string | null
 	enabled: boolean
+	overrides?: ModelMultiplierOverride[]
+	onOverridesChange?: (overrides: ModelMultiplierOverride[]) => void
 }) {
 	const { t } = useTranslation("admin/platform/info")
 	const { styles: classes } = useDefaultModelPriceStyles()
@@ -108,6 +116,8 @@ export function DefaultModelPriceTable({
 	function renderRow(row: ModelPriceRow): ReactNode {
 		const model = row.model
 		const dynamic = model.kind === "dynamic"
+		const manual = overrides?.find((item) => item.model_id === model.model_id)?.multiplier
+		const invalidManual = manual !== undefined && !isValidModelMultiplier(manual)
 		const open = preview.expanded.get(row.key) ?? dynamic
 		const result =
 			model.kind === "normal" ? calculateModelPrice(model, base, rate, supported) : null
@@ -219,17 +229,84 @@ export function DefaultModelPriceTable({
 								) : (
 									<p className={classes.muted}>— · {labels[benchmark.status]}</p>
 								)}
+								<p className={classes.muted}>
+									{t("modelPricePreview.overrideFooter")}
+								</p>
 							</section>
 						) : null}
 					</div>
-					<div className={classes.amount} title={result?.amount ?? undefined}>
-						<span className={classes.mobile}>{t("modelPricePreview.amount")}: </span>
-						{formatPreviewDecimal(result?.amount, 6)}
-					</div>
-					<output className={classes.ratio}>
-						<span className={classes.mobile}>{t("modelPricePreview.ratio")}: </span>
+					<div className={classes.amount}>
+						<span className={classes.mobile}>
+							{t("modelPricePreview.calculatedRatio")}:{" "}
+						</span>
 						{result?.multiplier ?? "—"}
-					</output>
+					</div>
+					<div>
+						<span className={classes.mobile}>
+							{t("modelPricePreview.manualRatio")}:{" "}
+						</span>
+						{onOverridesChange ? (
+							<div>
+								<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+									<MultiplierInput
+										aria-label={`${row.name}: ${t("modelPricePreview.manualRatio")}`}
+										aria-invalid={invalidManual}
+										inputMode="decimal"
+										placeholder={t("modelPricePreview.manualPlaceholder")}
+										value={manual ?? ""}
+										onChange={(event) =>
+											onOverridesChange(
+												updateModelMultiplierOverrides(
+													overrides,
+													model.model_id,
+													event.target.value,
+												),
+											)
+										}
+									/>
+									<span>×</span>
+									{manual !== undefined ? (
+										<button
+											type="button"
+											className={classes.button}
+											aria-label={`${row.name}: ${t("modelPricePreview.clearManual")}`}
+											onClick={() =>
+												onOverridesChange(
+													updateModelMultiplierOverrides(
+														overrides,
+														model.model_id,
+														"",
+													),
+												)
+											}
+										>
+											×
+										</button>
+									) : null}
+								</div>
+								{invalidManual ? (
+									<p role="alert" className={classes.muted}>
+										{t("modelPricePreview.invalidManual")}
+									</p>
+								) : null}
+							</div>
+						) : (
+							(manual ?? "—")
+						)}
+					</div>
+					<div className={classes.ratio}>
+						<span className={classes.mobile}>
+							{t("modelPricePreview.finalRatio")}:{" "}
+						</span>
+						<output>{getDisplayModelMultiplier(manual, result?.multiplier)}</output>
+						<p className={classes.muted}>
+							{t(
+								manual !== undefined
+									? "modelPricePreview.manualSource"
+									: "modelPricePreview.automaticSource",
+							)}
+						</p>
+					</div>
 					{dynamic || model.kind === "normal" ? (
 						<button
 							type="button"
@@ -337,7 +414,7 @@ export function DefaultModelPriceTable({
 	return (
 		<section className={classes.section} aria-label={t("modelPricePreview.title")}>
 			<h4>{t("modelPricePreview.title")}</h4>
-			<p className={classes.muted}>{t("modelPricePreview.hint")}</p>
+			<p className={classes.muted}>{t("modelPricePreview.overrideHint")}</p>
 			{snapshot ? (
 				<p className={classes.muted}>
 					{t("modelPricePreview.snapshot", {
@@ -377,10 +454,13 @@ export function DefaultModelPriceTable({
 									<p>{t("modelPricePreview.priceUnit")}</p>
 								</div>
 								<span className={classes.amount}>
-									{t("modelPricePreview.amount")}
+									{t("modelPricePreview.calculatedRatio")}
 								</span>
 								<span className={classes.amount}>
-									{t("modelPricePreview.ratio")}
+									{t("modelPricePreview.manualRatio")}
+								</span>
+								<span className={classes.amount}>
+									{t("modelPricePreview.finalRatio")}
 								</span>
 								<span />
 							</div>

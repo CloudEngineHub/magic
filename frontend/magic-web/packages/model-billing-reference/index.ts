@@ -1,6 +1,10 @@
+import type { ModelMultiplierOverride } from "./model-multiplier-overrides"
+export * from "./model-multiplier-overrides"
+
 /** 两个管理端共用的配置契约；默认值和最终参考金额由后端提供。 */
 export interface ModelBillingMultiplierSettings {
 	enabled: boolean
+	model_overrides?: ModelMultiplierOverride[]
 	base_price_cny: string | null
 	currency?: "CNY" | "USD" | null
 	input_price?: string | null
@@ -12,6 +16,7 @@ export interface ModelBillingMultiplierSettings {
 export function toModelMultiplierUpdate(value: ModelBillingMultiplierSettings) {
 	return {
 		enabled: value.enabled,
+		...(value.model_overrides === undefined ? {} : { model_overrides: value.model_overrides }),
 		currency: value.currency ?? "CNY",
 		input_price: value.input_price ?? null,
 		output_price: value.output_price ?? null,

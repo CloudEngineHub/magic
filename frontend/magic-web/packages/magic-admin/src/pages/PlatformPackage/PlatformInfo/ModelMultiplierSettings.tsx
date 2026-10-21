@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next"
 import { MagicButton, MagicInput, MagicSelect, MagicSwitch, SubHeader } from "@admin-components"
 import {
 	getReferenceAmount,
+	areModelMultiplierOverridesValid,
 	validateMultiplierSettings,
 } from "../../../../../model-billing-reference"
 import type { ModelBillingMultiplierSettings } from "../../../../../model-billing-reference"
@@ -104,6 +105,20 @@ export default function ModelMultiplierSettings({
 			{/* 保持字段挂载，折叠不会丢失草稿或让全页保存跳过配置校验。 */}
 			<div id={contentId} hidden={!expanded}>
 				<Flex vertical className={pageStyles.formWrapper}>
+					<Form.Item
+						name={["model_billing_multiplier", "model_overrides"]}
+						hidden
+						rules={[
+							{
+								async validator(_rule, overrides) {
+									if (!areModelMultiplierOverridesValid(overrides ?? []))
+										throw new Error(t("modelPricePreview.invalidManual"))
+								},
+							},
+						]}
+					>
+						<input type="hidden" />
+					</Form.Item>
 					<div className={pageStyles.formItem}>
 						<div className={pageStyles.formItemLabel}>{t("multiplier.enabled")}</div>
 						<div className={cx(pageStyles.formItemContent, styles.fieldContent)}>
@@ -256,6 +271,16 @@ export default function ModelMultiplierSettings({
 						rate={value?.usd_to_cny_rate ?? null}
 						currency={value?.currency}
 						enabled={Boolean(value?.enabled)}
+						overrides={value?.model_overrides}
+						onOverridesChange={
+							disabled
+								? undefined
+								: (overrides) =>
+										form.setFieldValue(
+											["model_billing_multiplier", "model_overrides"],
+											overrides,
+										)
+						}
 					/>
 					<section className={styles.section} aria-label={t("multiplier.rulesTitle")}>
 						<h4>{t("multiplier.rulesTitle")}</h4>
