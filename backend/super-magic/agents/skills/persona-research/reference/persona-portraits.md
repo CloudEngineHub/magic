@@ -1,6 +1,6 @@
 # Photographic Persona Portraits
 
-Use this reference when photographic avatars are requested. Generate them with the product Agent's `generate_images` tool from the saved persona, rather than depending on a developer-generated stock collection. Portraits represent fictional adults; retain the visible AI-simulated-persona disclosure. They are not photographs of interview participants and never count as evidence.
+Use this reference when photographic avatars are requested. First match each saved persona against the official avatar library with `assign_persona_portraits`; use the product Agent's `generate_images` tool only for personas the library cannot cover. Portraits represent fictional adults; retain the visible AI-simulated-persona disclosure. They are not photographs of interview participants and never count as evidence.
 
 ## Choose From the Persona, Not a Fixed Look
 
@@ -44,7 +44,45 @@ participant's identity. This is a fictional visual representation, not evidence.
 
 For A, describe realistic phone-camera perspective and a lightly informal composition rather than a cinematic lens. For B, keep outdoor light soft and the background quiet rather than bright blown-out highlights. For C, preserve a relaxed expression rather than a rigid ID-photo pose. These are directions to adapt, not three mandatory presets or a rule to generate three versions per person.
 
+## Match From the Official Library First
+
+`assign_persona_portraits` picks a suitable avatar from the official library of fictional adults and binds it to each saved persona. It costs no image generation. Call it once for the whole saved panel, after `save_personas`.
+
+Fill each request only from facts in the saved persona; omit everything unknown.
+
+| Field | Use |
+|---|---|
+| `age` | Known adult age. Under 18 is not supported. |
+| `gender` | `masculine`, `feminine`, or `neutral`, only when the persona states it. Never infer it from a name. |
+| `country` | ISO 3166-1 alpha-2 country the persona lives in. This is a scene and appearance context, not a claim about citizenship. |
+| `industry` | The persona's own industry as one ISIC Rev.5 section code (below). Choose the closest section; omit it when none fits. Never rewrite the persona to fit the library. |
+| `hair`, `facial_hair`, `accessories` | Only when the persona explicitly describes them. Personality and opinions never decide a face. |
+
+ISIC Rev.5 sections: A agriculture, forestry and fishing; B mining; C manufacturing; D electricity and gas; E water, waste and remediation; F construction; G wholesale and retail trade; H transportation and storage; I accommodation and food service; J publishing, broadcasting and content production; K telecommunications, programming, computing and information services; L finance and insurance; M real estate; N professional, scientific and technical activities; O administrative and support services; P public administration; Q education; R human health and social work; S arts, sports and recreation; T other services (for example hair salons and repair shops); U households as employers; V extraterritorial organizations. Example: the owner of a small noodle shop is `I`; a primary school teacher is `Q`.
+
+Read each result's `match`:
+
+- `exact`: the country and industry you supplied both matched.
+- `family`: the industry fell back to a similar work setting. Acceptable.
+- `generic`: only gender and age matched, or you supplied neither country nor industry. It is usable; do not describe it as a precise match. Consider generation only when the user wants a closer fit and has authorized the image cost.
+- `no_match` or `unavailable`: keep the existing avatar or SVG fallback. A missing library is not a reason to generate automatically.
+
+Existing portraits are reused. The same avatar may serve several personas because it stands for a kind of person, not an individual. Unmet preferences are listed in `unmet` so you can tell the user what was approximated.
+
+```python
+from sdk.tool import tool
+
+matched = tool.call("assign_persona_portraits", {
+    "requests": [
+        {"persona_id": "<saved persona id>", "age": 34, "gender": "feminine", "country": "CN", "industry": "C"},
+    ],
+})
+print(matched.content)
+```
+
 ## Generate, Inspect, and Reuse
+
+Generate only for personas that `assign_persona_portraits` left unresolved or that the user wants closer to a stated appearance.
 
 1. Reuse a suitable portrait already delivered for the same persona ID. Changing the research question, interview round, display name, or report style alone does not require a new face. A requested appearance change may justify regeneration; do not replace an existing usable image silently.
 2. Before an initial batch, state how many portraits will be generated and the expected image cost under the deployment's normal media-generation rules. Generate only when this deliverable is authorized; research-plan approval alone is not approval for unmentioned image costs. Do not exceed the selected panel size or the study's persona limit.

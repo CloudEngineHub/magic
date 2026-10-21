@@ -143,6 +143,7 @@ Interviewer sub-agents record rounds with `persona_chat` (`transcript_path` plus
 
 For photographic avatars, read [persona-portraits.md](persona-portraits.md).
 
+- `assign_persona_portraits`: `requests` (one entry per saved persona with only known `age`, `gender`, `country`, `industry` as an ISIC Rev.5 section letter, and explicitly stated `hair`, `facial_hair`, `accessories`), optional `replace`. Matches the official avatar library, downloads the chosen image, saves it as the persona's project-level WebP, and reports `match` as `exact`, `family`, or `generic` per persona. Never generates images; unresolved personas keep their existing display.
 - `attach_persona_portrait`: `persona_id` (existing saved ID), `image_path` (successful workspace-relative generation output), optional `replace` (default false; only for a requested appearance change). Validates the raster, saves a small project-level WebP, and updates only the persona's optional `portrait` and `updated_at`. A failed call preserves the previous avatar. No study-phase transition or interview is needed.
 - `embed_persona_portraits`: `study_dir`. Embeds the panel's already bound WebP avatars into its existing `report.html`. The `report_written` event runs this automatically; call it directly only when a selected existing report needs its avatars refreshed. Repeat safely after a requested avatar replacement or report rewrite. It does not generate images, edit transcripts, change evidence, or edit templates.
 

@@ -11,6 +11,7 @@ from app.tools.persona_research.check_interviews import CheckInterviews
 from app.tools.persona_research.finish_persona_transcript import FinishPersonaTranscript
 from app.tools.persona_research.save_personas import SavePersonas
 from app.tools.persona_research.persona_portraits import AttachPersonaPortrait
+from app.tools.persona_research.assign_persona_portraits import AssignPersonaPortraits
 from app.tools.persona_research.embed_persona_portraits import EmbedPersonaPortraits
 from app.tools.persona_research.save_study_synthesis import SaveStudySynthesis
 from app.tools.persona_research.save_validation_questionnaire import SaveValidationQuestionnaire
@@ -21,6 +22,7 @@ __all__ = [
     "FinishPersonaTranscript",
     "SavePersonas",
     "AttachPersonaPortrait",
+    "AssignPersonaPortraits",
     "EmbedPersonaPortraits",
     "SaveStudySynthesis",
     "SaveValidationQuestionnaire",

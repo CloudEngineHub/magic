@@ -1242,5 +1242,9 @@
     "embed_persona_portraits": {
         "zh_CN": "同步报告头像",
         "en_US": "Sync report avatars"
+    },
+    "assign_persona_portraits": {
+        "zh_CN": "匹配人设头像",
+        "en_US": "Match persona avatars"
     }
 }

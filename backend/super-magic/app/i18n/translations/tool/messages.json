@@ -7452,5 +7452,9 @@
     "persona_portraits.failed": {
         "zh_CN": "头像未能更新，继续使用原显示。研究内容不受影响。",
         "en_US": "Avatars could not be updated. The existing display and research content are retained."
+    },
+    "persona_portraits.library_summary": {
+        "zh_CN": "已绑定或复用 {bound} 个头像，{unresolved} 个继续保留原显示。没有新增生图费用。人设仍为 AI 模拟。",
+        "en_US": "Bound or reused {bound} avatars; {unresolved} keep their existing display. No images were generated. Personas remain AI-simulated."
     }
 }

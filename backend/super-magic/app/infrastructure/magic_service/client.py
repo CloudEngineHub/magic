@@ -348,6 +348,54 @@ class MagicServiceClient:
             params=self._filter_query_params(access_context),
         )
 
+    async def get_persona_avatar_catalog(
+        self,
+        access_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Fetch the compact catalog of official persona avatars: {"items": [{"id", "tags"}]}."""
+        return await self._request_json(
+            "GET",
+            "/api/v1/open-api/persona-avatars",
+            operation_name="人设头像清单获取",
+            params=self._filter_query_params(access_context),
+        )
+
+    async def get_persona_avatar_file_url(
+        self,
+        avatar_id: str,
+        access_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Resolve one persona avatar into its signed download URL: {"id", "file_url", "expires_at"}."""
+        normalized_id = avatar_id.strip() if isinstance(avatar_id, str) else ""
+        if not normalized_id:
+            raise ApiError("persona avatar id is required")
+        return await self._request_json(
+            "GET",
+            f"/api/v1/open-api/persona-avatars/{quote(normalized_id, safe='')}/file-url",
+            operation_name="人设头像文件链接获取",
+            params=self._filter_query_params(access_context),
+        )
+
+    async def download_url_bytes(self, download_url: str, max_bytes: int) -> bytes:
+        """把小文件下载到内存；超过 max_bytes 立即中止，不落盘。"""
+        session_to_use = self.session or aiohttp.ClientSession()
+        should_close_session = self.session is None
+        try:
+            async with session_to_use.get(download_url, timeout=aiohttp.ClientTimeout(total=60)) as response:
+                if response.status < 200 or response.status >= 300:
+                    raise ApiError(f"文件下载失败，HTTP {response.status}")
+                chunks: list[bytes] = []
+                total = 0
+                async for chunk in response.content.iter_chunked(64 * 1024):
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ApiError(f"文件超过 {max_bytes} 字节上限")
+                    chunks.append(chunk)
+                return b"".join(chunks)
+        finally:
+            if should_close_session:
+                await session_to_use.close()
+
     async def _request_json(
         self,
         method: str,

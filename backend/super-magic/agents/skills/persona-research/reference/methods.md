@@ -49,7 +49,7 @@ Persona self-check, before calling `save_personas` (the tool also runs keyword a
 
 ### Optional Generated Portraits
 
-When the user requests photographic persona avatars, read [persona-portraits.md](persona-portraits.md). Choose a photographic direction from each saved persona's situation; a panel may mix everyday, outdoor, and simple editorial portraits. Generate through the product's `generate_images` tool, reuse an existing suitable portrait, and keep the AI-simulation disclosure. Portraits are presentation assets, never research evidence or a reason to change the persona.
+When the user requests photographic persona avatars, read [persona-portraits.md](persona-portraits.md). Choose a photographic direction from each saved persona's situation; a panel may mix everyday, outdoor, and simple editorial portraits. Match from the official library with `assign_persona_portraits` first, generate through the product's `generate_images` tool only for gaps, reuse an existing suitable portrait, and keep the AI-simulation disclosure. Portraits are presentation assets, never research evidence or a reason to change the persona.
 
 ## Interview Guide
 
