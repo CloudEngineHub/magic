@@ -56,6 +56,11 @@ export interface TopicDesktopPanelsHistoryLayout {
 interface TopicDesktopPanelsProps {
 	containerClassName: string
 	detailPanelClassName: string
+	/**
+	 * Extra classes for the detail panel's rounded surface, applied after its defaults so they can
+	 * override them (e.g. the AI canvas frames its canvas with a larger radius and an outline).
+	 */
+	detailPanelSurfaceClassName?: string
 	isDetailPanelFullscreen: boolean
 	sidebar:
 		ReactNode | ((controller: { onCollapse?: () => void; isCollapsed: boolean }) => ReactNode)
@@ -106,6 +111,7 @@ interface TopicDesktopPanelsProps {
 function TopicDesktopPanels({
 	containerClassName,
 	detailPanelClassName,
+	detailPanelSurfaceClassName,
 	isDetailPanelFullscreen,
 	sidebar,
 	enableProjectCollapse = false,
@@ -616,6 +622,7 @@ function TopicDesktopPanels({
 									detailPanelClassName,
 									"h-full overflow-hidden rounded-lg bg-background",
 									shouldShowDetailPanel && "opacity-100",
+									detailPanelSurfaceClassName,
 								)}
 								style={{
 									...(!isDetailPanelFullscreen && {

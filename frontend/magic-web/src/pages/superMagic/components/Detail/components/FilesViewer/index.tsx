@@ -1018,8 +1018,16 @@ const FilesViewer = memo(
 									: props.hideTabBar
 										? "0.5rem"
 										: "0px 0px 0.5rem 0.5rem"
-								: "0px"
+								: effectiveIsFullscreen
+									? "0px"
+									: (props.previewSurfaceFrame?.radius ?? "0px")
 						}
+						outlineColor={
+							effectiveIsFullscreen
+								? undefined
+								: props.previewSurfaceFrame?.outlineColor
+						}
+						overlay={effectiveIsFullscreen ? undefined : props.previewSurfaceOverlay}
 						enabled={Boolean(currentTab) && !isRestoringFileTabs && hasStableTabs}
 						isFullscreen={effectiveIsFullscreen}
 						isPpt={isActivePptPreview}

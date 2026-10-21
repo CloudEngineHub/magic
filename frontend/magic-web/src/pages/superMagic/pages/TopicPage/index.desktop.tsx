@@ -8,6 +8,7 @@ import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } f
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Detail, { type DetailRef } from "../../components/Detail"
+import ProjectCardContainer from "../../components/ProjectCardContainer"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
 import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
@@ -863,6 +864,15 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			<TopicDesktopPanels
 				containerClassName={styles.container}
 				detailPanelClassName={styles.detailPanel}
+				// The AI canvas frames its canvas as a card: larger radius and a light grey outline,
+				// dropped in fullscreen so the canvas fills the screen edge to edge. The outline is
+				// drawn inside the box (no border), so the canvas layer above covers exactly this box
+				// and draws the same frame (see previewSurfaceFrame on Detail).
+				detailPanelSurfaceClassName={
+					isAiCanvas && !isDetailPanelFullscreen
+						? "rounded-xl outline outline-1 -outline-offset-1 outline-border"
+						: undefined
+				}
 				isDetailPanelFullscreen={isDetailPanelFullscreen}
 				enableProjectCollapse={canCollapseFileSidebar}
 				showProjectSidebar={!isAiCanvas}
@@ -919,6 +929,32 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 							onPreviewOpen={expandDetailPanel}
 							isPreviewCollapsed={isDetailPanelCollapsed}
 							canLocateFile={!isReadOnly && !isAiCanvas}
+							// The canvas is the project's only document, so its tab strip (tab, add,
+							// menu, close) adds nothing; the canvas fills the panel instead.
+							hideTabBar={isAiCanvas}
+							// The canvas lives in a floating layer above the panel, out of reach of the
+							// panel's clip, so the layer draws the same rounded-xl frame itself.
+							// The canvas page has no project sidebar, so the project card (name, share,
+							// more) floats over the canvas's top-left corner instead.
+							previewSurfaceOverlay={
+								isAiCanvas ? (
+									<ProjectCardContainer
+										variant="compact"
+										selectedProject={selectedProject}
+										selectedWorkspace={selectedWorkspace}
+										className="w-auto min-w-[220px] max-w-[360px] shadow-sm"
+									/>
+								) : undefined
+							}
+							previewSurfaceFrame={
+								isAiCanvas
+									? {
+											radius: "0.75rem",
+											outlineColor:
+												"rgb(var(--border-rgb) / var(--border-alpha))",
+										}
+									: undefined
+							}
 							onFullscreenChange={setIsDetailPanelFullscreen}
 							onFileTabsCacheLoaded={onFileTabsCacheLoaded}
 						/>

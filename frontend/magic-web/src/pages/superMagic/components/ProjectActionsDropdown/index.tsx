@@ -46,6 +46,7 @@ function ProjectActionsDropdown<T extends ProjectItemLike>({
 	onCancelWorkspaceShortcut,
 	onShortcutNavigateToWorkspace,
 	onTransferProject,
+	onOpenShareManagement,
 	trigger = ["contextMenu"],
 	placement,
 	getPopupContainer,
@@ -81,6 +82,7 @@ function ProjectActionsDropdown<T extends ProjectItemLike>({
 		onOpenInNewWindow,
 		onCopyCollaborationLink,
 		onTransferProject,
+		onOpenShareManagement,
 	})
 
 	const triggerContextMenu = (event: React.MouseEvent<HTMLElement>) => {

@@ -14,6 +14,18 @@ interface StablePreviewPortalSurfaceProps {
 	enabled: boolean
 	isFullscreen: boolean
 	isPpt?: boolean
+	/**
+	 * CSS color of a 1px frame drawn by the surface itself. The surface floats above its anchor,
+	 * so an outline on the anchor's container sits underneath the preview, and even an outline on
+	 * this host is covered by composited content such as a canvas. The frame is therefore a
+	 * click-through layer above the content that inherits the host's radius.
+	 */
+	outlineColor?: string
+	/**
+	 * Host UI floated over the top-left of the preview (e.g. the AI canvas project card). It has
+	 * to live in this surface: anything in the panel underneath is covered by the floating layer.
+	 */
+	overlay?: ReactNode
 	visible: boolean
 }
 
@@ -46,6 +58,8 @@ export default function StablePreviewPortalSurface({
 	enabled,
 	isFullscreen,
 	isPpt = false,
+	outlineColor,
+	overlay,
 	visible,
 }: StablePreviewPortalSurfaceProps) {
 	const parentOverlayZIndex = useCurrentOverlayZIndex()
@@ -101,8 +115,8 @@ export default function StablePreviewPortalSurface({
 		)
 		const layoutSignature =
 			isVisible && rect
-				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${isPpt}|${usesViewport}|${window.innerWidth}|${window.innerHeight}`
-				: `hidden|${isFullscreen}|${borderRadius}|${isPpt}`
+				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${outlineColor}|${isPpt}|${usesViewport}|${window.innerWidth}|${window.innerHeight}`
+				: `hidden|${isFullscreen}|${borderRadius}|${outlineColor}|${isPpt}`
 		if (layoutSignatureRef.current === layoutSignature) return
 		layoutSignatureRef.current = layoutSignature
 
@@ -139,7 +153,7 @@ export default function StablePreviewPortalSurface({
 		host.style.left = usesViewport ? "0px" : `${rect.left}px`
 		host.style.width = `${usesViewport ? window.innerWidth : rect.width}px`
 		host.style.height = `${usesViewport ? window.innerHeight : rect.height}px`
-	}, [anchor, borderRadius, host, isFullscreen, isPpt, visible])
+	}, [anchor, borderRadius, host, isFullscreen, isPpt, outlineColor, visible])
 
 	useLayoutEffect(() => {
 		if (!host || !enabled) return
@@ -227,6 +241,22 @@ export default function StablePreviewPortalSurface({
 					}
 				>
 					{children}
+					{overlay ? (
+						// Click-through wrapper; only the overlay's own content takes the pointer.
+						<div className="pointer-events-none absolute left-3 top-3 z-10 max-w-[calc(100%-24px)] [&>*]:pointer-events-auto">
+							{overlay}
+						</div>
+					) : null}
+					{outlineColor ? (
+						<div
+							aria-hidden="true"
+							className="pointer-events-none absolute inset-0 z-10"
+							style={{
+								borderRadius: "inherit",
+								boxShadow: `inset 0 0 0 1px ${outlineColor}`,
+							}}
+						/>
+					) : null}
 				</OverlayZIndexProvider>,
 				host,
 				"files-viewer-stable-preview",

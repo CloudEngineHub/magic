@@ -23,6 +23,7 @@ export function useProjectActionMenu<T extends ProjectItemLike>({
 	onOpenInNewWindow,
 	onCopyCollaborationLink,
 	onTransferProject,
+	onOpenShareManagement,
 }: UseProjectActionMenuParams<T>) {
 	const { t } = useTranslation("super")
 
@@ -44,6 +45,7 @@ export function useProjectActionMenu<T extends ProjectItemLike>({
 				onOpenInNewWindow,
 				onCopyCollaborationLink,
 				onTransferProject,
+				onOpenShareManagement,
 			}),
 		[
 			item,
@@ -61,6 +63,7 @@ export function useProjectActionMenu<T extends ProjectItemLike>({
 			onOpenInNewWindow,
 			onCopyCollaborationLink,
 			onTransferProject,
+			onOpenShareManagement,
 		],
 	)
 
@@ -71,6 +74,9 @@ export function useProjectActionMenu<T extends ProjectItemLike>({
 				break
 			case ProjectActionMenuKey.CopyCollaborationLink:
 				void onCopyCollaborationLink?.(item)
+				break
+			case ProjectActionMenuKey.ShareManagement:
+				onOpenShareManagement?.(item)
 				break
 			case ProjectActionMenuKey.Transfer:
 				onTransferProject?.(item)

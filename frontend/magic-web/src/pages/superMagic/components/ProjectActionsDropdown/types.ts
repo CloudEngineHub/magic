@@ -15,6 +15,7 @@ export enum ProjectActionMenuKey {
 	Pin = "pin",
 	ShortcutNavigateToWorkspace = "ShortcutNavigateToWorkspace",
 	Transfer = "transfer",
+	ShareManagement = "shareManagement",
 }
 
 export interface ProjectActionHandlers<T extends ProjectItemLike> {
@@ -30,6 +31,8 @@ export interface ProjectActionHandlers<T extends ProjectItemLike> {
 	onCancelWorkspaceShortcut?: (projectId: string, workspaceId?: string) => void
 	onShortcutNavigateToWorkspace?: (project: T) => void
 	onTransferProject?: (project: T) => void
+	/** Opens the project's share management; shown only when provided. */
+	onOpenShareManagement?: (project: T) => void
 	renderTransferModal?: (fallbackProjectName?: string) => React.ReactNode
 }
 

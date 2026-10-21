@@ -16,6 +16,7 @@ import { isCollaborationProject, isWorkspaceShortcutProject } from "../../consta
 import { isOwner, canManageProject } from "../../utils/permission"
 import { ProjectItemLike, ProjectActionHandlers, ProjectActionMenuKey } from "./types"
 import { normalizeVisibleMenuItems } from "./utils"
+import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 
 interface BuildProjectActionMenuItemsParams<
 	T extends ProjectItemLike,
@@ -41,6 +42,7 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 	onOpenInNewWindow,
 	onCopyCollaborationLink,
 	onTransferProject,
+	onOpenShareManagement,
 }: BuildProjectActionMenuItemsParams<T>): Exclude<MenuProps["items"], undefined> {
 	const isCollaborationProjectStatus = isCollaborationProject(item)
 	const isOwnerStatus = isOwner(item.user_role)
@@ -102,6 +104,19 @@ export function buildProjectActionMenuItems<T extends ProjectItemLike>({
 				!!onRenameStart &&
 				!!onRenameProject &&
 				(!isWorkspaceShortcutProjectStatus || canRenameWorkspaceShortcut),
+		},
+		{
+			key: ProjectActionMenuKey.ShareManagement,
+			label: (
+				<div
+					className="flex cursor-pointer items-center gap-1 rounded text-sm font-normal leading-5 text-foreground transition-colors hover:bg-muted active:bg-accent [&_svg]:shrink-0"
+					data-testid="project-context-share-management"
+				>
+					<IconShareCog size={16} color="currentColor" className="text-foreground" />
+					<span>{t("project.shareManagement")}</span>
+				</div>
+			),
+			visible: !!onOpenShareManagement,
 		},
 		{
 			key: ProjectActionMenuKey.MoveTo,
