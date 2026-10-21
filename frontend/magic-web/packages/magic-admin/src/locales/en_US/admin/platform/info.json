@@ -135,7 +135,6 @@
 	"multiplier.invalidAmount": "Enter a positive decimal with up to 12 integer and 12 fractional digits.",
 	"multiplier.invalidCurrency": "Select CNY or USD.",
 	"multiplier.invalidPrices": "Enter non-negative decimal prices, not both zero, with up to 12 integer and 12 fractional digits.",
-	"multiplier.legacyHint": "Only a reference amount was previously saved; input and output prices cannot be inferred. Enter both to update the benchmark, or leave them unchanged to keep the saved amount.",
 	"multiplier.livePreview": "Live preview",
 	"multiplier.missingPriceDescription": "Skip providers without input/output prices or a convertible currency. Explicit zero prices participate. All prices missing displays 0.00x, which does not necessarily mean free.",
 	"multiplier.missingPriceTitle": "Missing and zero prices differ",

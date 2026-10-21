@@ -135,7 +135,6 @@
 	"multiplier.invalidAmount": "请填写大于零的十进制数，整数和小数均最多 12 位。",
 	"multiplier.invalidCurrency": "请选择人民币或美元。",
 	"multiplier.invalidPrices": "请填写非负十进制单价，两项不能同时为零；整数和小数均最多 12 位。",
-	"multiplier.legacyHint": "当前配置仅保存了参考金额，无法反推输入、输出单价。填写两项单价后将更新基准；未修改时继续使用已保存金额。",
 	"multiplier.livePreview": "实时预览",
 	"multiplier.missingPriceDescription": "缺少输入价、输出价或可换算币种的服务商不参与平均，明确零价正常参与。全部缺价显示 0.00x，不一定表示免费。",
 	"multiplier.missingPriceTitle": "缺价与零价分别处理",

@@ -28,7 +28,7 @@ describe("管理端参考倍率预览", () => {
 				{ ...config, input_price: undefined, output_price: undefined },
 				true,
 			),
-			"0.8",
+			null,
 		)
 	})
 	it("保持十二位单价精度，零值、缺项、非法输入不会伪造金额", () => {

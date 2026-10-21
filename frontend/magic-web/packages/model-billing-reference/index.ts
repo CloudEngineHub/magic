@@ -5,9 +5,18 @@ export interface ModelBillingMultiplierSettings {
 	currency?: "CNY" | "USD" | null
 	input_price?: string | null
 	output_price?: string | null
-	input_price_cny?: string | null
-	output_price_cny?: string | null
 	usd_to_cny_rate: string | null
+}
+
+/** 两个后台保存同一套源字段，响应中的派生金额和未知字段不会进入写请求。 */
+export function toModelMultiplierUpdate(value: ModelBillingMultiplierSettings) {
+	return {
+		enabled: value.enabled,
+		currency: value.currency ?? "CNY",
+		input_price: value.input_price ?? null,
+		output_price: value.output_price ?? null,
+		usd_to_cny_rate: value.usd_to_cny_rate,
+	}
 }
 
 const DECIMAL_SCALE = 12
@@ -36,7 +45,7 @@ function referenceUnits(input: string | null | undefined, output: string | null 
 	return inputUnits === null || outputUnits === null ? null : inputUnits * TEN + outputUnits
 }
 
-/** 仅用于草稿预览；缺少任一单价时不反推历史金额或填充业务默认值。 */
+/** 仅用于草稿预览，缺少任一单价时不填充业务默认值。 */
 export function previewReferenceAmount(value: ModelBillingMultiplierSettings): string | null {
 	const amount = referenceUnits(value.input_price, value.output_price)
 	if (amount === null || amount <= ZERO) return null
@@ -49,20 +58,16 @@ export function previewReferenceAmount(value: ModelBillingMultiplierSettings): s
 
 /** 读取后端参考金额或编辑中的完整单价，两个模式分别遵循各自的数据来源。 */
 export function getReferenceAmount(value: ModelBillingMultiplierSettings, editing: boolean) {
-	const hasPrices = value.input_price != null || value.output_price != null
-	return editing && hasPrices ? previewReferenceAmount(value) : value.base_price_cny
+	return editing ? previewReferenceAmount(value) : value.base_price_cny
 }
 
-/** 配置错误对应实际输入字段，历史仅存金额的配置允许继续保存。 */
+/** 只校验源单价和汇率，后端派生金额不能代替用户填写单价。 */
 export function validateMultiplierSettings(value: ModelBillingMultiplierSettings) {
 	const fields: ("input_price" | "output_price" | "usd_to_cny_rate" | "currency")[] = []
 	const hasPrices = value.input_price != null || value.output_price != null
 	if ((hasPrices || value.enabled) && value.currency !== "CNY" && value.currency !== "USD")
 		fields.push("currency")
-	if (
-		hasPrices ||
-		(value.enabled && !((readReferenceAmount(value.base_price_cny) ?? ZERO) > ZERO))
-	) {
+	if (hasPrices || value.enabled) {
 		if (readDecimal(value.input_price) === null) fields.push("input_price")
 		if (readDecimal(value.output_price) === null) fields.push("output_price")
 		if (referenceUnits(value.input_price, value.output_price) === ZERO)
@@ -72,13 +77,6 @@ export function validateMultiplierSettings(value: ModelBillingMultiplierSettings
 	if ((value.enabled || value.usd_to_cny_rate != null) && (rate === null || rate === ZERO))
 		fields.push("usd_to_cny_rate")
 	return fields
-}
-
-/** 参考金额含固定用量和换汇精度，统一转为二十七位定点数。 */
-function readReferenceAmount(value: string | null): bigint | null {
-	if (typeof value !== "string" || !/^\d{1,24}(?:\.\d{1,27})?$/.test(value)) return null
-	const [integer, fraction = ""] = value.split(".")
-	return BigInt(integer + fraction.padEnd(27, "0"))
 }
 
 export * from "./system-model-price-preview"

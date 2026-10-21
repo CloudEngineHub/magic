@@ -26,7 +26,15 @@ describe("模型参考倍率配置", () => {
 		assert.deepEqual(values.model_billing_multiplier, config)
 		assert.deepEqual(
 			toChangedPlatformInfoParams(values, { model_billing_multiplier: { enabled: true } }),
-			{ model_billing_multiplier: config },
+			{
+				model_billing_multiplier: {
+					enabled: true,
+					currency: "CNY",
+					input_price: "2.000000000001",
+					output_price: "3",
+					usd_to_cny_rate: "7.123456789012",
+				},
+			},
 		)
 		assert.equal(
 			"model_billing_multiplier" in
@@ -34,7 +42,7 @@ describe("模型参考倍率配置", () => {
 			false,
 		)
 	})
-	it("关闭允许未填写，启用必须同时具有正数基准价和汇率", () => {
+	it("关闭允许未填写，启用必须填写两项源单价和正汇率", () => {
 		const schema = createPlatformInfoSchema((key) => key, "modelMultiplier")
 		const values = createEmptyPlatformInfoFormState()
 		assert.equal(schema.safeParse(values).success, true)
@@ -83,7 +91,7 @@ describe("模型参考倍率配置", () => {
 					usd_to_cny_rate: "7",
 				},
 			}).success,
-			true,
+			false,
 		)
 	})
 	it("新单价按原文提交，不要求前端生成后端参考金额", () => {
@@ -102,7 +110,15 @@ describe("模型参考倍率配置", () => {
 			toChangedPlatformInfoParams(values, {
 				model_billing_multiplier: { input_price: true },
 			}),
-			{ model_billing_multiplier: values.model_billing_multiplier },
+			{
+				model_billing_multiplier: {
+					enabled: true,
+					currency: "CNY",
+					input_price: "0",
+					output_price: "3.000000000001",
+					usd_to_cny_rate: "5",
+				},
+			},
 		)
 		assert.equal(
 			schema.safeParse({

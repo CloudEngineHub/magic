@@ -1,3 +1,4 @@
+import { toModelMultiplierUpdate } from "../../../../model-billing-reference";
 import { RequestUrl } from "@magic-admin-v2/api/constants";
 import type { HttpClient, RequestOptions } from "@magic-admin-v2/api/types";
 import type {
@@ -152,7 +153,7 @@ export function toUpdatePlatformInfoParams(
     favicon_url: values.favicon,
     default_language: values.default_language,
     footer: values.footer,
-    model_billing_multiplier: values.model_billing_multiplier,
+    model_billing_multiplier: toModelMultiplierUpdate(values.model_billing_multiplier),
     watermark: values.watermark,
     name_i18n: values.name_i18n,
     title_i18n: values.title_i18n,
@@ -181,7 +182,7 @@ export function toChangedPlatformInfoParams(
   if (dirtyFields.footer) params.footer = values.footer;
   // 开关、基准价及汇率相互依赖，任一变化都提交完整展示配置。
   if (dirtyFields.model_billing_multiplier)
-    params.model_billing_multiplier = values.model_billing_multiplier;
+    params.model_billing_multiplier = toModelMultiplierUpdate(values.model_billing_multiplier);
   // 水印的 enabled、fields、depth 相互依赖（开启时必须有内容），
   // 因此任一子字段变化都提交完整水印对象，后端按 array_replace 合并。
   if (dirtyFields.watermark) params.watermark = values.watermark;

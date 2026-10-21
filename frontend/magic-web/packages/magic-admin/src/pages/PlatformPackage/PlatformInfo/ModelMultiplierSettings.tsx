@@ -120,14 +120,7 @@ export default function ModelMultiplierSettings({
 							<p className={styles.fieldHint}>{t("multiplier.enabledHint")}</p>
 						</div>
 					</div>
-					{/* 旧金额仅保留在表单中，预览结果不会覆盖服务端字段。 */}
-					<Form.Item
-						name={["model_billing_multiplier", "base_price_cny"]}
-						hidden
-						getValueProps={(amount) => ({ value: amount ?? "" })}
-					>
-						<MagicInput />
-					</Form.Item>
+
 					<div className={pageStyles.formItem}>
 						<label
 							className={pageStyles.formItemLabel}
@@ -255,11 +248,6 @@ export default function ModelMultiplierSettings({
 								{t("multiplier.referenceUsageSummary")}
 							</p>
 							<p className={styles.fieldHint}>{t("multiplier.previewHint")}</p>
-							{value?.base_price_cny != null &&
-							value.input_price == null &&
-							value.output_price == null ? (
-								<p className={styles.fieldHint}>{t("multiplier.legacyHint")}</p>
-							) : null}
 						</div>
 					</div>
 					<DefaultModelPriceTable
