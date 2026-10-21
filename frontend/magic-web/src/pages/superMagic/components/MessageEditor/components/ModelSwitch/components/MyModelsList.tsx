@@ -16,26 +16,46 @@ import {
 	MODEL_TYPE_IMAGE,
 	MODEL_TYPE_LLM,
 	MODEL_TYPE_VIDEO,
+	type ServiceProviderModel,
 } from "@/apis/modules/org-ai-model-provider"
 import { useOptionalAddModelStore } from "./AddModel/context"
 import type { ModelItem } from "../types"
-import MyModelsIcon from "../assets/my-models-icon.svg"
 import { MyModelRow } from "./my-models-list/MyModelRow"
+import { ModelSectionHeader } from "./ModelSectionHeader"
 import { buildMyModelGroups } from "./my-models-list/utils"
 import { userStore } from "@/models/user"
+import { cn } from "@/utils/cn"
 
-const MODEL_TYPE_BY_KEY: Record<"models" | "image_models" | "video_models", number> = {
+type MyModelsListKey = "models" | "image_models" | "video_models"
+
+const MODEL_TYPE_BY_KEY: Record<MyModelsListKey, number> = {
 	models: MODEL_TYPE_LLM,
 	image_models: MODEL_TYPE_IMAGE,
 	video_models: MODEL_TYPE_VIDEO,
 }
 
+/**
+ * 当前分页要展示的「我的模型 / 企业模型」分组。列表本身和 ModelListContent
+ * （判断平台模型是否需要分组标题）共用这一份过滤规则，两边结论不会不一致。
+ */
+export function getVisibleMyModelGroups(
+	myModels: ServiceProviderModel[],
+	modelKey: MyModelsListKey,
+) {
+	const targetModelType = MODEL_TYPE_BY_KEY[modelKey]
+	return buildMyModelGroups({
+		models: myModels.filter((model) => model.model_type === targetModelType),
+	})
+}
+
 interface MyModelsListProps {
-	modelKey?: "models" | "image_models" | "video_models"
+	modelKey?: MyModelsListKey
 	selectedModel?: ModelItem | null
 	onModelClick?: (model: ModelItem) => void
 	selectedItemRef?: React.RefObject<HTMLDivElement>
 	onModelsLoaded?: () => Promise<void> | void
+	/** 桌面紧凑布局：分组标题与模型行对齐供应商分组；移动端弹层保持原布局。 */
+	compact?: boolean
 }
 
 function MyModelsListInner({
@@ -44,6 +64,7 @@ function MyModelsListInner({
 	onModelClick,
 	selectedItemRef,
 	onModelsLoaded,
+	compact = false,
 }: MyModelsListProps) {
 	const { t } = useTranslation("super")
 	const store = useOptionalAddModelStore()
@@ -69,31 +90,25 @@ function MyModelsListInner({
 
 	if (!store) return null
 
-	const targetModelType = MODEL_TYPE_BY_KEY[modelKey]
-	const visibleModels = store.myModels.filter((model) => model.model_type === targetModelType)
-	const groupedModels = buildMyModelGroups({
-		models: visibleModels,
-	})
+	const groupedModels = getVisibleMyModelGroups(store.myModels, modelKey)
 
 	if (groupedModels.length === 0) return null
 
 	return (
 		<>
-			<div className="last:border-b-0 last:pb-0" data-testid="my-models-list">
-				<div className="flex items-center gap-1 pb-1">
-					<img
-						src={MyModelsIcon}
-						alt=""
-						className="size-4"
-						data-testid="my-models-list-image"
-					/>
-					<span className="text-xs text-foreground">
-						{isPersonalOrganization
+			<div
+				className="flex flex-col gap-1 last:border-b-0 last:pb-0"
+				data-testid="my-models-list"
+			>
+				<ModelSectionHeader
+					title={
+						isPersonalOrganization
 							? t("messageEditor.addModel.myModels")
-							: t("messageEditor.addModel.teamModels")}
-					</span>
-				</div>
-				<div className="flex flex-col gap-1">
+							: t("messageEditor.addModel.teamModels")
+					}
+					testId="my-models-list-header"
+				/>
+				<div className={cn("flex flex-col", compact ? "gap-0.5" : "gap-1")}>
 					{groupedModels.map((group) => (
 						<MyModelRow
 							key={group.representativeModel.model_id}
@@ -105,6 +120,7 @@ function MyModelsListInner({
 							selectedItemRef={selectedItemRef}
 							onEdit={store.openEditModel}
 							onDelete={store.openDeleteModel}
+							compact={compact}
 						/>
 					))}
 				</div>

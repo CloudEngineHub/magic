@@ -7,6 +7,7 @@ import { getSelectableReasoningLevels } from "../utils"
 import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
 import { hasModelInfo } from "./ModelInfoContent"
 import { ModelInfoSheet } from "./ModelInfoSheet"
+import ModelIcon from "./ModelIcon"
 
 interface MobileModelRowProps {
 	model: ModelItem
@@ -17,11 +18,13 @@ interface MobileModelRowProps {
 	onSelect: (model: ModelItem) => void
 	/** 介绍弹层里选档位时回调，语义与桌面悬停卡一致：当作选中该模型。 */
 	onReasoningEffortChange?: (model: ModelItem) => void
+	/** 行内显示模型自己的图标（不按供应商分组时使用）。 */
+	showIcon?: boolean
 }
 
 /**
  * 移动端模型行，和桌面行同一结构：分组标题带供应商图标，行内不再重复图标并向右缩进一级；
- * 选中态靠勾号与名称加重表达，倍率用小字放右侧。
+ * 选中态用勾号、名称加粗和整行浅灰底表达，倍率用小字放右侧。
  * 行尾的「›」打开介绍弹层，内容与桌面悬停卡相同；它和选中按钮是两个并列控件，不互相触发。
  */
 export function MobileModelRow({
@@ -32,6 +35,7 @@ export function MobileModelRow({
 	selectedItemRef,
 	onSelect,
 	onReasoningEffortChange,
+	showIcon = false,
 }: MobileModelRowProps) {
 	const { t } = useTranslation("super")
 	const [infoOpen, setInfoOpen] = useState(false)
@@ -43,7 +47,14 @@ export function MobileModelRow({
 	return (
 		<div
 			ref={selected ? selectedItemRef : null}
-			className={cn("ml-6 flex min-w-0 items-center rounded-xl", disabled && "opacity-50")}
+			className={cn(
+				"flex min-w-0 items-center rounded-xl",
+				// 按供应商分组时缩进一级；带模型图标平铺时不缩进。
+				!showIcon && "ml-6",
+				// 底色加在整行（含「›」），与桌面选中行一致。
+				selected && "bg-muted",
+				disabled && "opacity-50",
+			)}
 			data-testid="mobile-model-row"
 		>
 			<button
@@ -61,10 +72,15 @@ export function MobileModelRow({
 				data-model-name={model.model_name}
 				data-selected={selected}
 			>
+				{showIcon ? (
+					<ModelIcon model={model} size={18} className="shrink-0 rounded" />
+				) : null}
 				<span
 					className={cn(
-						"block min-w-0 flex-1 truncate text-[15px] font-medium",
-						selected ? "text-foreground" : "text-foreground/80",
+						"block min-w-0 flex-1 truncate text-[15px]",
+						selected
+							? "font-semibold text-foreground"
+							: "font-normal text-foreground/80",
 					)}
 				>
 					{name}

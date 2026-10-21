@@ -2,9 +2,11 @@ import { Check } from "lucide-react"
 import FlexBox from "@/components/base/FlexBox"
 import { cn } from "@/utils/cn"
 import type React from "react"
+import type { ReactNode } from "react"
 import type { ModelItem, ModelListGroup, MessageEditorSize } from "../types"
 import { isModelDisabled } from "../utils"
 import { ModelInfoHoverCard } from "./ModelInfoHoverCard"
+import ModelIcon from "./ModelIcon"
 import ModelName from "./ModelName"
 import ModelTags from "./ModelTags"
 import ProviderName from "./ProviderName"
@@ -26,6 +28,10 @@ interface ModelGroupSectionProps {
 	getModelDescription: (model: ModelItem) => string | undefined
 	/** 桌面行悬停显示信息卡；移动端弹层没有悬停，传 false。 */
 	showModelInfo?: boolean
+	/** 替换默认的供应商标题（例如「平台模型」分组）；传 null 表示不显示标题。 */
+	header?: ReactNode
+	/** 行内显示模型自己的图标；按供应商分组时标题已带图标，不需要。 */
+	showModelIcon?: boolean
 }
 
 export function ModelGroupSection({
@@ -37,12 +43,14 @@ export function ModelGroupSection({
 	selectedItemRef,
 	getModelDescription,
 	showModelInfo = true,
+	header,
+	showModelIcon = false,
 }: ModelGroupSectionProps) {
 	const isMobile = size === "mobile"
 
 	return (
 		<FlexBox gap={1} vertical className="last:border-b-0 last:pb-0">
-			<ProviderName item={item.group} />
+			{header === undefined ? <ProviderName item={item.group} /> : header}
 			<div className="flex flex-col gap-0.5">
 				{item.displayModels.map((model) => {
 					const isSelected = selectedModel?.model_id === model.model_id
@@ -59,6 +67,7 @@ export function ModelGroupSection({
 								selectedItemRef={selectedItemRef}
 								onSelect={onModelClick}
 								onReasoningEffortChange={onReasoningEffortChange}
+								showIcon={showModelIcon}
 							/>
 						)
 					}
@@ -67,16 +76,21 @@ export function ModelGroupSection({
 						: model.model_name || model.model_id
 
 					// 桌面紧凑行，语言、生图、视频三个 Tab 共用：
-					// 分组标题已经带供应商图标，行内不再重复，并整体向右缩进一级形成层级；
-					// 选中态只靠勾号和名称加重表达，浅灰底留给悬停，两种状态不会混淆；描述放进悬停信息卡。
+					// 按供应商分组时标题已带供应商图标，行内不再重复并缩进一级；平台模型平铺时行内显示模型图标、不缩进；
+					// 选中态用勾号、名称加粗和比悬停更深一档的底色表达，未选中名称为常规字重；描述放进悬停信息卡。
 					const row = (
 						<div
 							key={model.model_id}
 							ref={isSelected ? selectedItemRef : null}
 							className={cn(
-								"ml-5 flex h-8 items-center gap-2 rounded-lg px-2",
+								"flex h-8 items-center gap-2 rounded-lg px-2",
+								// 按供应商分组时行缩进一级形成层级；平台模型平铺带图标，不缩进，图标与分组标题左对齐。
+								!showModelIcon && "ml-5",
 								"cursor-pointer transition-colors duration-100",
-								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/60",
+								// 选中底色比悬停（muted/60）深一档，悬停在选中行上也保持选中底色。
+								isSelected
+									? "bg-muted"
+									: "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/60",
 								"outline-none focus-visible:ring-2 focus-visible:ring-ring",
 								isDisabled && "cursor-not-allowed opacity-50",
 							)}
@@ -97,13 +111,23 @@ export function ModelGroupSection({
 							data-selected={isSelected}
 						>
 							<FlexBox gap={2} align="center" flex={1} className="min-w-0">
+								{showModelIcon ? (
+									<ModelIcon
+										model={model}
+										size={16}
+										// FlexBox 的 gap 只有 2px，补到 8px，与企业模型行的图标间距一致。
+										className="mr-1.5 shrink-0 rounded"
+									/>
+								) : null}
 								<ModelName
 									model={model}
 									isSelected={false}
 									className={cn(
 										// 覆盖 ModelName 自带的 120px 上限，名称尽量完整显示，只在真的放不下时截断。
-										"min-w-0 !max-w-none flex-1 !text-[13px] !font-medium",
-										isSelected ? "!text-foreground" : "text-foreground/80",
+										"min-w-0 !max-w-none flex-1 !text-[13px]",
+										isSelected
+											? "!font-semibold !text-foreground"
+											: "!font-normal text-foreground/80",
 										isDisabled && "opacity-50",
 									)}
 								/>

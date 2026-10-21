@@ -3600,7 +3600,7 @@
 			"provider": "Provider",
 			"providerAlias": "Provider Alias",
 			"selectPlaceholder": "Select",
-			"teamModels": "Enterprise Built-in",
+			"teamModels": "Enterprise Models",
 			"typeImage": "Image",
 			"typeText": "Text",
 			"typeVideo": "Video",
@@ -3678,6 +3678,7 @@
 			"noModelsFound": "No matching models found",
 			"noVideoModels": "No video models available",
 			"noVideoModelsDesc": "No video models are available for the current mode",
+			"platformModels": "Platform Models",
 			"reasoning": {
 				"default": "Default",
 				"high": "High",

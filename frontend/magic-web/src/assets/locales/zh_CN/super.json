@@ -3599,7 +3599,7 @@
 			"provider": "厂商",
 			"providerAlias": "厂商别名",
 			"selectPlaceholder": "请选择",
-			"teamModels": "企业内置模型",
+			"teamModels": "企业模型",
 			"typeImage": "图像",
 			"typeText": "文本",
 			"typeVideo": "视频",
@@ -3677,6 +3677,7 @@
 			"noModelsFound": "未找到匹配的模型",
 			"noVideoModels": "暂无视频模型",
 			"noVideoModelsDesc": "当前模式暂无可用的视频模型",
+			"platformModels": "平台模型",
 			"reasoning": {
 				"default": "默认",
 				"high": "高",
