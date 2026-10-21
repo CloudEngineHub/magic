@@ -440,9 +440,13 @@ readonly class MagicUserRepository implements MagicUserRepositoryInterface
     public function getUserByMagicIds(array $magicIds): array
     {
         $users = $this->userModel::query()
-            ->whereIn('magic_id', $magicIds)
-            ->where('status', AccountStatus::Normal->value)
-            ->whereNull('deleted_at');
+            ->join('magic_contact_accounts', 'magic_contact_accounts.magic_id', '=', 'magic_contact_users.magic_id')
+            ->whereIn('magic_contact_users.magic_id', $magicIds)
+            ->where('magic_contact_users.status', UserStatus::Activated->value)
+            ->whereNull('magic_contact_users.deleted_at')
+            ->where('magic_contact_accounts.status', AccountStatus::Normal->value)
+            ->whereNull('magic_contact_accounts.deleted_at')
+            ->select('magic_contact_users.*');
         $users = Db::select($users->toSql(), $users->getBindings());
         $userEntities = [];
         foreach ($users as $user) {
