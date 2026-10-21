@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import io
 import re
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -31,11 +32,13 @@ from app.utils.async_file_utils import (
     async_read_bytes,
     async_realpath,
     async_stat,
+    async_scandir,
     async_write_bytes,
     get_file_id_from_xattr,
 )
 
 PERSONA_ID = r"^p_[a-zA-Z0-9_-]+$"
+PORTRAIT_FILE = re.compile(r"^personas/portraits/p_[a-zA-Z0-9_-]+/([a-f0-9]{20})\.webp$")
 MAX_SOURCE_BYTES = 20 * 1024 * 1024
 
 
@@ -51,6 +54,58 @@ def to_portrait_webp(data: bytes) -> bytes:
         output = io.BytesIO()
         image.save(output, format="WEBP", quality=85, method=4)
         return output.getvalue()
+
+
+class DuplicatePortraitError(StudyFilesError):
+    """候选头像与其它人设已有的头像是同一张图。"""
+
+
+@dataclass(frozen=True)
+class PortraitInUse:
+    persona_id: str
+    digest: str  # 头像文件名即内容摘要的前 20 位
+    library_id: str | None  # 来自头像库时记录的素材 ID；生成的头像没有
+
+
+async def portraits_in_use(base: Path) -> list[PortraitInUse]:
+    """工作区里所有人设已绑定的头像。
+
+    `personas/` 是工作区级目录，所有研究共用，所以这里天然覆盖「用户工作区下的所有人设」。
+    只读各人设文件里的 portrait 引用，不读图片本身：同一张图无论来自头像库、
+    重复入库的副本还是生成结果，只要字节相同，文件名摘要就相同。
+    """
+    result: list[PortraitInUse] = []
+    personas_dir = await resolve_in_workspace(base, "personas")
+    if not await async_exists(personas_dir):
+        return result
+    for entry in await async_scandir(personas_dir):
+        if not entry.is_file() or not entry.name.endswith(".json"):
+            continue
+        try:
+            persona = await read_json_file(Path(entry.path))
+        except (StudyFilesError, OSError, ValueError):
+            continue  # 单个人设文件暂时不可读时不影响判断，其余人设照常检查
+        portrait = persona.get("portrait") if isinstance(persona, dict) else None
+        file = portrait.get("file") if isinstance(portrait, dict) else None
+        match = PORTRAIT_FILE.match(file) if isinstance(file, str) else None
+        if match:
+            library_id = portrait.get("library_id")
+            result.append(
+                PortraitInUse(
+                    persona_id=entry.name.removesuffix(".json"),
+                    digest=match.group(1),
+                    library_id=library_id if isinstance(library_id, str) and library_id else None,
+                )
+            )
+    return result
+
+
+async def other_portrait_digests(base: Path, persona_id: str) -> set[str]:
+    """其它人设已用头像的内容摘要，用来在绑定时兜底拦截重复。
+
+    例：周敏已用 3fa9...webp，再给王雪梅绑定同一张图时摘要命中，被拒绝。
+    """
+    return {item.digest for item in await portraits_in_use(base) if item.persona_id != persona_id}
 
 
 async def existing_portrait(base: Path, profile: dict) -> dict | None:
@@ -74,12 +129,19 @@ async def existing_portrait(base: Path, profile: dict) -> dict | None:
     return None
 
 
-async def bind_portrait_bytes(base: Path, profile_path: Path, profile: dict, data: bytes) -> dict:
+async def bind_portrait_bytes(
+    base: Path, profile_path: Path, profile: dict, data: bytes, library_id: str | None = None
+) -> dict:
     """把已校验的 WebP 写入人设目录并绑定；调用者必须已持有该人设的锁。
 
     内容寻址的新文件先写完再更新人设；失败不会覆盖旧头像或其引用，也不在网络目录 rename。
     """
     digest = hashlib.sha256(data).hexdigest()[:20]
+    # 同一份研究里的人设不能共用一张脸，否则一眼就能看出是模拟的。
+    if digest in await other_portrait_digests(base, profile["id"]):
+        raise DuplicatePortraitError(
+            "Another persona already uses this exact portrait; every persona needs a distinct avatar."
+        )
     relative = f"personas/portraits/{profile['id']}/{digest}.webp"
     target = await resolve_in_workspace(base, relative)
     await async_mkdir(target.parent, parents=True, exist_ok=True)
@@ -88,6 +150,9 @@ async def bind_portrait_bytes(base: Path, profile_path: Path, profile: dict, dat
     if await async_read_bytes(target) != data:
         raise StudyFilesError("The portrait file is not fully written; the previous portrait is unchanged.")
     portrait = {"file": relative, "updated_at": now_iso()}
+    if library_id:
+        # 记录来自头像库的哪一张，之后选图时可以在下载之前就把已被占用的排除。
+        portrait["library_id"] = library_id
     file_id = await get_file_id_from_xattr(target)
     if file_id:
         portrait["file_id"] = str(file_id)

@@ -218,3 +218,36 @@ async def test_saving_personas_preserves_a_concurrent_portrait_binding(tmp_path,
     assert result.ok, result.content
     saved = json.loads(await async_read_text(tmp_path / f"personas/{PID}.json"))
     assert saved["portrait"] == portrait
+
+
+async def second_profile(root, persona_id="p_second_cd34"):
+    await write(root, f"personas/{persona_id}.json", {"schema_version": 1, "id": persona_id, "name": "Second", "tier": "generated", "evidence": []})
+    return persona_id
+
+
+@pytest.mark.asyncio
+async def test_two_personas_cannot_share_the_same_portrait(tmp_path):
+    await profile(tmp_path)
+    other = await second_profile(tmp_path)
+    await source(tmp_path)
+    assert (await attach(tmp_path)).ok
+    duplicate = await AttachPersonaPortrait(base_dir=tmp_path).execute(
+        ToolContext(), AttachPersonaPortraitParams(persona_id=other, image_path="source.png")
+    )
+    assert not duplicate.ok and "distinct avatar" in duplicate.content
+    assert "portrait" not in json.loads(await async_read_text(tmp_path / f"personas/{other}.json"))
+    # 换一张不同的图就可以
+    await source(tmp_path, "other.png", "blue")
+    different = await AttachPersonaPortrait(base_dir=tmp_path).execute(
+        ToolContext(), AttachPersonaPortraitParams(persona_id=other, image_path="other.png")
+    )
+    assert different.ok, different.content
+
+
+@pytest.mark.asyncio
+async def test_a_persona_can_rebind_its_own_portrait(tmp_path):
+    await profile(tmp_path)
+    await source(tmp_path)
+    first = await attach(tmp_path)
+    again = await attach(tmp_path, replace=True)
+    assert first.ok and again.ok and again.data["portrait"]["file"] == first.data["portrait"]["file"]

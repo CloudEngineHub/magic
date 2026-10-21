@@ -145,10 +145,12 @@ async def test_no_match_is_valid_and_leaves_persona_unchanged(tmp_path, monkeypa
 @pytest.mark.asyncio
 async def test_replace_rebinds_and_unknown_persona_fails_alone(tmp_path, monkeypatch):
     await profile(tmp_path)
-    catalog = {"items": [item("a1", age_band=["25_34"])]}
-    install(monkeypatch, FakeClient(catalog, {"a1": png("red")}))
+    # 换形象要选另一张库图：原来那张（及其素材 ID）不再参与选择。
+    catalog = {"items": [item("a1", age_band=["25_34"]), item("a2", age_band=["25_34"])]}
+    files = {"a1": png("red"), "a2": png("yellow")}
+    install(monkeypatch, FakeClient(catalog, files))
     first = await run(tmp_path)
-    install(monkeypatch, FakeClient(catalog, {"a1": png("yellow")}))
+    install(monkeypatch, FakeClient(catalog, files))
     second = await run(tmp_path, replace=True)
     assert second.data["results"][0]["status"] == "assigned"
     assert second.data["results"][0]["portrait"]["file"] != first.data["results"][0]["portrait"]["file"]
@@ -160,3 +162,97 @@ async def test_replace_rebinds_and_unknown_persona_fails_alone(tmp_path, monkeyp
 def test_duplicate_persona_ids_are_rejected():
     with pytest.raises(ValueError):
         AssignPersonaPortraitsParams(requests=[PersonaPortraitRequest(persona_id=PID)] * 2)
+
+
+async def add_persona(root, persona_id):
+    target = root / f"personas/{persona_id}.json"
+    await async_mkdir(target.parent, parents=True, exist_ok=True)
+    await async_write_text(target, json.dumps({"schema_version": 1, "id": persona_id, "name": persona_id}))
+
+
+async def run_many(root, ids, replace=False, **request):
+    params = AssignPersonaPortraitsParams(
+        requests=[PersonaPortraitRequest(persona_id=i, **request) for i in ids], replace=replace
+    )
+    return await AssignPersonaPortraits(base_dir=root).execute(ToolContext(), params)
+
+
+@pytest.mark.asyncio
+async def test_personas_in_one_batch_never_share_an_avatar(tmp_path, monkeypatch):
+    ids = ["p_a_01", "p_b_02", "p_c_03"]
+    for persona_id in ids:
+        await add_persona(tmp_path, persona_id)
+    catalog = {"items": [item(f"a{i}", gender=["feminine"], age_band=["25_34"]) for i in range(5)]}
+    install(
+        monkeypatch,
+        FakeClient(
+            catalog, {f"a{i}": png(color) for i, color in enumerate(["red", "green", "blue", "yellow", "black"])}
+        ),
+    )
+    result = await run_many(tmp_path, ids, gender="feminine", age=30)
+    assert result.ok and result.data["bound"] == 3
+    files = [r["portrait"]["file"] for r in result.data["results"]]
+    assert len(set(files)) == 3
+    assert len({r["asset_id"] for r in result.data["results"]}) == 3
+
+
+@pytest.mark.asyncio
+async def test_duplicate_content_under_different_catalog_ids_is_still_rejected(tmp_path, monkeypatch):
+    ids = ["p_a_01", "p_b_02"]
+    for persona_id in ids:
+        await add_persona(tmp_path, persona_id)
+    # a1 和 a2 是库里重复入库的同一张图；a3 是另一张。
+    catalog = {
+        "items": [item("a1", age_band=["25_34"]), item("a2", age_band=["25_34"]), item("a3", age_band=["25_34"])]
+    }
+    same, other = png("red"), png("blue")
+    install(monkeypatch, FakeClient(catalog, {"a1": same, "a2": same, "a3": other}))
+    result = await run_many(tmp_path, ids)
+    files = [r["portrait"]["file"] for r in result.data["results"] if r["status"] == "assigned"]
+    assert len(files) == 2 and len(set(files)) == 2
+
+
+@pytest.mark.asyncio
+async def test_a_later_call_does_not_reuse_an_avatar_already_bound_to_another_persona(tmp_path, monkeypatch):
+    await add_persona(tmp_path, "p_a_01")
+    await add_persona(tmp_path, "p_b_02")
+    catalog = {"items": [item("only", age_band=["25_34"])]}
+    install(monkeypatch, FakeClient(catalog, {"only": png("red")}))
+    first = await run_many(tmp_path, ["p_a_01"])
+    assert first.data["results"][0]["status"] == "assigned"
+    second = await run_many(tmp_path, ["p_b_02"])
+    outcome = second.data["results"][0]
+    # 库里只有这一张：宁可留空让上层决定是否另行生成，也不能让两个人同脸。
+    assert second.ok and outcome["status"] == "no_match" and "already used" in outcome["reason"]
+    assert "portrait" not in json.loads(await async_read_text(tmp_path / "personas/p_b_02.json"))
+
+
+@pytest.mark.asyncio
+async def test_replace_never_picks_the_current_portrait_again(tmp_path, monkeypatch):
+    await add_persona(tmp_path, "p_a_01")
+    catalog = {"items": [item("a1", age_band=["25_34"]), item("a2", age_band=["25_34"])]}
+    install(monkeypatch, FakeClient(catalog, {"a1": png("red"), "a2": png("blue")}))
+    first = await run_many(tmp_path, ["p_a_01"])
+    install(monkeypatch, FakeClient(catalog, {"a1": png("red"), "a2": png("blue")}))
+    second = await run_many(tmp_path, ["p_a_01"], replace=True)
+    assert second.data["results"][0]["status"] == "assigned"
+    assert second.data["results"][0]["asset_id"] != first.data["results"][0]["asset_id"]
+
+
+@pytest.mark.asyncio
+async def test_used_library_avatars_are_excluded_before_any_download(tmp_path, monkeypatch):
+    await add_persona(tmp_path, "p_a_01")
+    await add_persona(tmp_path, "p_b_02")
+    catalog = {"items": [item("a1", age_band=["25_34"]), item("a2", age_band=["25_34"])]}
+    files = {"a1": png("red"), "a2": png("blue")}
+    install(monkeypatch, FakeClient(catalog, files))
+    first = await run_many(tmp_path, ["p_a_01"])
+    used = first.data["results"][0]["asset_id"]
+    # 绑定时记下了来源素材 ID，下一次选图在下载之前就把它排除，只会取另一张。
+    saved = json.loads(await async_read_text(tmp_path / "personas/p_a_01.json"))
+    assert saved["portrait"]["library_id"] == used
+    client = FakeClient(catalog, files)
+    install(monkeypatch, client)
+    second = await run_many(tmp_path, ["p_b_02"])
+    assert second.data["results"][0]["asset_id"] != used
+    assert f"download:{used}" not in client.calls

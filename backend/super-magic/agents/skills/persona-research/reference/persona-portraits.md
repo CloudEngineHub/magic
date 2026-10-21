@@ -65,9 +65,9 @@ Read each result's `match`:
 - `exact`: the country and industry you supplied both matched.
 - `family`: the industry fell back to a similar work setting. Acceptable.
 - `generic`: only gender and age matched, or you supplied neither country nor industry. It is usable; do not describe it as a precise match. Consider generation only when the user wants a closer fit and has authorized the image cost.
-- `no_match` or `unavailable`: keep the existing avatar or SVG fallback. A missing library is not a reason to generate automatically.
+- `no_match` or `unavailable`: keep the existing avatar or SVG fallback. A missing library is not a reason to generate automatically. Running out of unused suitable avatars (`no_match`, "already used by another persona") is a coverage gap; generate for that persona only within the user's authorized image budget.
 
-Existing portraits are reused. The same avatar may serve several personas because it stands for a kind of person, not an individual. Unmet preferences are listed in `unmet` so you can tell the user what was approximated.
+Existing portraits are reused. No two personas in the workspace may share an avatar: `assign_persona_portraits` and `attach_persona_portrait` both refuse an image that another persona already uses, so the tools guarantee distinct faces. When the library has no unused suitable avatar left, the result is `no_match` with an explanation; that persona keeps its fallback unless you generate one for it. Unmet preferences are listed in `unmet` so you can tell the user what was approximated.
 
 ```python
 from sdk.tool import tool

@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import random
 from typing import Any, Literal
 
@@ -27,10 +28,13 @@ from app.tools.core import BaseToolParams, tool
 from app.tools.persona_research.contracts import MAX_PERSONAS
 from app.tools.persona_research.persona_portraits import (
     PERSONA_ID,
+    PORTRAIT_FILE,
+    DuplicatePortraitError,
     bind_portrait_bytes,
     existing_portrait,
     portrait_detail,
     portrait_feedback,
+    portraits_in_use,
     to_portrait_webp,
 )
 from app.tools.persona_research.portrait_matching import (
@@ -52,8 +56,8 @@ logger = get_logger(__name__)
 
 # 单张头像库图片是 320px 的小 WebP；放宽到 2 MB 只是防止异常大文件占满内存。
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
-# 同一人设最多尝试几张候选：个别图下载失败时顺延，不无限重试。
-MAX_CANDIDATES_PER_PERSONA = 5
+# 同一人设最多尝试几张候选：个别图下载失败、或与其它人设重复时顺延，不无限重试。
+MAX_CANDIDATES_PER_PERSONA = 8
 
 IndustryCode = Literal[
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K",
@@ -118,6 +122,9 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
         catalog: list[PortraitEntry] | None = None
         catalog_error = ""
         rng = random.Random()
+        # 工作区里所有人设已占用的头像库素材，加上本次分配出去的，都不再参与选择；
+        # 要换形象的人设自己的旧头像也在其中，所以不会选回原来那张。
+        taken_ids: set[str] = {item.library_id for item in await portraits_in_use(base) if item.library_id}
         async with MagicServiceClient() as client:
             for request in params.requests:
                 persona_id = request.persona_id
@@ -144,19 +151,32 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
                             results.append({"persona_id": persona_id, "status": "unavailable", "reason": catalog_error})
                             continue
                         fields = request.model_dump(exclude={"persona_id"}, exclude_none=True)
-                        candidates = rank(catalog, query_from_fields(fields), rng)
+                        ranked = rank(catalog, query_from_fields(fields), rng)
+                        candidates = [match for match in ranked if match.entry.id not in taken_ids]
                         if not candidates:
                             results.append(
                                 {
                                     "persona_id": persona_id,
                                     "status": "no_match",
-                                    "reason": "No avatar satisfies the explicit age and gender constraints.",
+                                    "reason": (
+                                        "Every suitable avatar is already used by another persona; a distinct one is needed."
+                                        if ranked
+                                        else "No avatar satisfies the explicit age and gender constraints."
+                                    ),
                                 }
                             )
                             continue
                         results.append(
                             await self._bind_first_available(
-                                client, access, base, path, profile, persona_id, candidates[:MAX_CANDIDATES_PER_PERSONA]
+                                client,
+                                access,
+                                base,
+                                path,
+                                profile,
+                                persona_id,
+                                candidates[:MAX_CANDIDATES_PER_PERSONA],
+                                taken_ids,
+                                self._digest_of(old) if params.replace else None,
                             )
                         )
                 except (StudyFilesError, OSError, ValueError) as exc:
@@ -177,9 +197,16 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
         )
 
     @staticmethod
-    async def _bind_first_available(client, access, base, path, profile, persona_id, candidates) -> dict[str, Any]:
+    async def _bind_first_available(
+        client, access, base, path, profile, persona_id, candidates, taken_ids: set[str], previous_digest: str | None
+    ) -> dict[str, Any]:
         errors: list[str] = []
+        duplicates = 0
         for match in candidates:
+            # 本次已分给别的人设的头像直接跳过，不再下载；跨次、跨来源的重复由绑定函数按内容摘要拦截。
+            if match.entry.id in taken_ids:
+                duplicates += 1
+                continue
             try:
                 payload = await client.get_persona_avatar_file_url(match.entry.id, access)
                 url = str(payload.get("file_url") or "").strip()
@@ -187,6 +214,14 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
                     raise ValueError("no file_url")
                 raw = await client.download_url_bytes(url, MAX_DOWNLOAD_BYTES)
                 data = await asyncio.to_thread(to_portrait_webp, raw)
+                # 用户要求换形象时，选回原来那张等于没换。
+                if previous_digest and hashlib.sha256(data).hexdigest()[:20] == previous_digest:
+                    raise DuplicatePortraitError("Same portrait as the current one.")
+                portrait = await bind_portrait_bytes(base, path, profile, data, library_id=match.entry.id)
+            except DuplicatePortraitError:
+                duplicates += 1
+                taken_ids.add(match.entry.id)
+                continue
             except (StudyFilesError, ValueError, Image.DecompressionBombError) as exc:
                 errors.append(f"{match.entry.id}: {exc}")
                 continue
@@ -194,7 +229,7 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
                 logger.warning(f"Persona avatar {match.entry.id} unavailable: {exc}")
                 errors.append(f"{match.entry.id}: download failed")
                 continue
-            portrait = await bind_portrait_bytes(base, path, profile, data)
+            taken_ids.add(match.entry.id)
             return {
                 "persona_id": persona_id,
                 "status": "assigned",
@@ -203,7 +238,19 @@ class AssignPersonaPortraits(WorkspaceTool[AssignPersonaPortraitsParams]):
                 "match": match.level.value,
                 "unmet": list(match.unmet),
             }
+        if duplicates and not errors:
+            # 合适的头像都被别的人设用掉了：这是库的覆盖不足，不是故障，交给调用方决定是否另行生成。
+            return {
+                "persona_id": persona_id,
+                "status": "no_match",
+                "reason": "Every suitable avatar is already used by another persona; a distinct one is needed.",
+            }
         return {"persona_id": persona_id, "status": "unavailable", "reason": "; ".join(errors[:3])}
+
+    @staticmethod
+    def _digest_of(portrait: dict | None) -> str | None:
+        match = PORTRAIT_FILE.match(portrait.get("file", "")) if portrait else None
+        return match.group(1) if match else None
 
     @staticmethod
     def _line(item: dict[str, Any]) -> str:
