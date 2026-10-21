@@ -5,6 +5,10 @@ import { MobileModelRow } from "../MobileModelRow"
 import { ModelStatusEnum, type ModelItem } from "../../types"
 
 vi.mock("../ModelIcon", () => ({ default: () => <span /> }))
+vi.mock("@/components/base-mobile/MagicPopup", () => ({
+	default: ({ visible, children }: { visible: boolean; children: React.ReactNode }) =>
+		visible ? <div data-testid="magic-popup">{children}</div> : null,
+}))
 
 beforeEach(() => {
 	vi.stubGlobal(
@@ -54,14 +58,25 @@ function setup(overrides: Partial<Parameters<typeof MobileModelRow>[0]> = {}) {
 }
 
 describe("移动端模型行", () => {
-	it("只展示模型行，不渲染展开入口或内嵌详情", () => {
+	it("只展示模型行，介绍弹层默认收起", () => {
 		setup()
 
 		expect(screen.getByTestId("mobile-model-row")).toBeTruthy()
 		expect(screen.getByText("0.00×")).toBeTruthy()
 		expect(screen.queryByText("Mock description")).toBeNull()
-		expect(screen.queryByRole("button", { name: /details/i })).toBeNull()
-		expect(screen.queryByTestId("mobile-model-details")).toBeNull()
+		expect(screen.queryByTestId("mobile-model-info-sheet")).toBeNull()
+	})
+
+	it("行尾的介绍入口打开与桌面悬停卡相同内容的弹层，且不触发选中", () => {
+		const { props } = setup()
+
+		fireEvent.click(screen.getByTestId("mobile-model-info-trigger"))
+
+		expect(props.onSelect).not.toHaveBeenCalled()
+		const sheet = screen.getByTestId("mobile-model-info-sheet")
+		expect(sheet).toHaveTextContent("mock-model")
+		expect(sheet).toHaveTextContent("Mock description")
+		expect(sheet).toHaveTextContent("messageEditor.modelSwitch.billingMultiplier")
 	})
 
 	it("点击模型行只触发模型选择", () => {

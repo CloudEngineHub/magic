@@ -1,26 +1,20 @@
 import { useState, type ReactElement } from "react"
-import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
 import type { ModelItem } from "../types"
-import { hasBillingMultiplier, ModelBillingMultiplier } from "./ModelBillingMultiplier"
 import { getSelectableReasoningLevels } from "../utils"
+import { hasModelInfo, ModelInfoContent } from "./ModelInfoContent"
 import { ReasoningEffortSelect } from "./ReasoningEffortSelect"
+
+export { formatContextWindow } from "./ModelInfoContent"
 
 /** 卡片贴在面板右侧外缘，留出面板内边距与阴影的距离。 */
 const MODEL_INFO_HOVER_SIDE_OFFSET = 14
 /**
- * 信息卡里有可点的强度档位，属于带操作的悬浮面板而不是普通文字提示，
+ * 信息卡里有可操作的强度选择器，属于带操作的悬浮面板而不是普通文字提示，
  * 因此不用 Tooltip 规范的 700ms，而是在鼠标停稳后尽快出现；关闭保留一小段过渡，方便从行移到卡片上。
  */
 export const MODEL_INFO_HOVER_OPEN_DELAY_MS = 150
 const MODEL_INFO_HOVER_CLOSE_DELAY_MS = 200
-
-export function formatContextWindow(value?: number | null) {
-	if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null
-	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 ? 1 : 0)}M`
-	if (value >= 1_000) return `${Math.round(value / 1_000)}K`
-	return String(value)
-}
 
 interface ModelInfoHoverCardProps {
 	model: ModelItem
@@ -35,7 +29,7 @@ interface ModelInfoHoverCardProps {
 }
 
 /**
- * 桌面模型行的悬停信息卡：名称、描述、上下文窗口、消耗倍率，以及该模型的思考强度档位。
+ * 桌面模型行的悬停信息卡：模型介绍加该模型的思考强度选择器。
  * 思考强度用与底栏相同的选择器；它的菜单打开期间卡片保持不关闭。
  */
 export function ModelInfoHoverCard({
@@ -44,9 +38,6 @@ export function ModelInfoHoverCard({
 	onReasoningEffortChange,
 	children,
 }: ModelInfoHoverCardProps) {
-	const { t } = useTranslation("super")
-	const contextWindow = formatContextWindow(model.max_context_tokens)
-	const showMultiplier = hasBillingMultiplier(model.billing_multiplier)
 	const canSelectEffort =
 		getSelectableReasoningLevels(model).length > 0 && !!onReasoningEffortChange
 	// 卡片受控：鼠标离开卡片会请求关闭，但强度菜单（挂在 Portal 里）打开期间要忽略这次关闭。
@@ -54,7 +45,7 @@ export function ModelInfoHoverCard({
 	const [effortMenuOpen, setEffortMenuOpen] = useState(false)
 
 	// 没有任何可补充的信息时不挂卡片，避免悬停弹出一张只有名称的空卡。
-	if (!description && !contextWindow && !showMultiplier && !canSelectEffort) return children
+	if (!hasModelInfo(model, description) && !canSelectEffort) return children
 
 	return (
 		<HoverCard
@@ -73,48 +64,9 @@ export function ModelInfoHoverCard({
 				sideOffset={MODEL_INFO_HOVER_SIDE_OFFSET}
 				collisionPadding={12}
 				// 层级不低于 DropdownMenu 本身，碰撞翻转到面板上方时不会被面板挡住。
-				className="z-dropdown w-60 max-w-[calc(100vw-24px)] rounded-xl border-border/80 bg-card p-0 text-xs shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100"
+				className="z-dropdown w-60 max-w-[calc(100vw-24px)] rounded-xl border-border/80 bg-card p-0 shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100"
 			>
-				<div className="px-3.5 pb-3 pt-3.5">
-					<div className="break-words text-sm font-medium leading-5 text-foreground">
-						{model.model_name || model.model_id}
-					</div>
-					{description ? (
-						<p className="mt-1 break-words leading-5 text-muted-foreground">
-							{description}
-						</p>
-					) : null}
-				</div>
-				{contextWindow || showMultiplier ? (
-					<dl className="flex flex-col gap-2 border-t border-border/70 px-3.5 py-3">
-						{contextWindow ? (
-							<div className="flex items-center justify-between gap-3">
-								<dt className="text-muted-foreground">
-									{t("messageEditor.modelSwitch.contextWindow")}
-								</dt>
-								<dd className="tabular-nums text-foreground">{contextWindow}</dd>
-							</div>
-						) : null}
-						{showMultiplier ? (
-							<div className="flex flex-col gap-0.5">
-								<div className="flex items-center justify-between gap-3">
-									<dt className="text-muted-foreground">
-										{t("messageEditor.modelSwitch.billingMultiplier")}
-									</dt>
-									<dd>
-										<ModelBillingMultiplier
-											value={model.billing_multiplier}
-											className="text-xs text-foreground"
-										/>
-									</dd>
-								</div>
-								<p className="leading-4 text-muted-foreground/80">
-									{t("messageEditor.modelSwitch.billingMultiplierHint")}
-								</p>
-							</div>
-						) : null}
-					</dl>
-				) : null}
+				<ModelInfoContent model={model} description={description} size="card" />
 				{canSelectEffort && onReasoningEffortChange ? (
 					<div className="border-t border-border/70 px-2 py-1.5">
 						<ReasoningEffortSelect

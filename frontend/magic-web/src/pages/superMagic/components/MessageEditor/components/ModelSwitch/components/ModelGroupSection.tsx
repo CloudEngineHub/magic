@@ -55,8 +55,10 @@ export function ModelGroupSection({
 								model={model}
 								selected={isSelected}
 								disabled={isDisabled}
+								description={description}
 								selectedItemRef={selectedItemRef}
 								onSelect={onModelClick}
+								onReasoningEffortChange={onReasoningEffortChange}
 							/>
 						)
 					}

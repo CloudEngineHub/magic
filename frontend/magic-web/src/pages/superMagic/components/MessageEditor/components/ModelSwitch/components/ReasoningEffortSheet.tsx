@@ -6,11 +6,56 @@ import { useReasoningEffortLabels } from "../hooks/useReasoningEffortLabels"
 import type { ModelItem, ReasoningEffort } from "../types"
 import { getModelDisplayedReasoningEffort, getSelectableReasoningLevels } from "../utils"
 
+interface ReasoningEffortOptionListProps {
+	model: ModelItem
+	/** 选中档位后回调带 reasoning_effort 的模型快照；「默认」回传 null 表示跟随后台。 */
+	onReasoningEffortChange: (model: ModelItem) => void
+}
+
+/** 移动端的档位列表：「默认」加模型支持的档位，整行可点，选中项带勾号。 */
+export function ReasoningEffortOptionList({
+	model,
+	onReasoningEffortChange,
+}: ReasoningEffortOptionListProps) {
+	const { labels, defaultLabel, title } = useReasoningEffortLabels()
+	const levels = getSelectableReasoningLevels(model)
+	const selected = getModelDisplayedReasoningEffort(model)
+	const options: Array<ReasoningEffort | undefined> = [undefined, ...levels]
+
+	function selectEffort(effort?: ReasoningEffort) {
+		modelCache.setReasoningEffort(model, effort)
+		onReasoningEffortChange({ ...model, reasoning_effort: effort ?? null })
+	}
+
+	return (
+		<div role="group" aria-label={title} className="flex flex-col px-2">
+			{options.map((level) => {
+				const pressed = selected === level
+				return (
+					<button
+						key={level ?? "default"}
+						type="button"
+						aria-pressed={pressed}
+						onClick={() => selectEffort(level)}
+						className={cn(
+							"flex h-12 items-center justify-between rounded-xl px-3 text-base text-foreground transition-colors active:bg-muted/70",
+							pressed && "font-medium",
+						)}
+						data-testid={`model-switch-reasoning-option-${level ?? "default"}`}
+					>
+						<span>{level ? labels[level] : defaultLabel}</span>
+						{pressed ? <Check className="size-5" aria-hidden="true" /> : null}
+					</button>
+				)
+			})}
+		</div>
+	)
+}
+
 interface ReasoningEffortSheetProps {
 	visible: boolean
 	onClose: () => void
 	model: ModelItem
-	/** 选中档位后回调带 reasoning_effort 的模型快照；「默认」回传 null 表示跟随后台。 */
 	onReasoningEffortChange: (model: ModelItem) => void
 }
 
@@ -24,16 +69,7 @@ export function ReasoningEffortSheet({
 	model,
 	onReasoningEffortChange,
 }: ReasoningEffortSheetProps) {
-	const { labels, defaultLabel, title } = useReasoningEffortLabels()
-	const levels = getSelectableReasoningLevels(model)
-	const selected = getModelDisplayedReasoningEffort(model)
-	const options: Array<ReasoningEffort | undefined> = [undefined, ...levels]
-
-	function selectEffort(effort?: ReasoningEffort) {
-		modelCache.setReasoningEffort(model, effort)
-		onReasoningEffortChange({ ...model, reasoning_effort: effort ?? null })
-		onClose()
-	}
+	const { title } = useReasoningEffortLabels()
 
 	return (
 		<MagicPopup
@@ -49,27 +85,13 @@ export function ReasoningEffortSheet({
 				<div className="px-5 pb-1 pt-4 text-sm font-medium text-muted-foreground">
 					{title}
 				</div>
-				<div role="group" aria-label={title} className="flex flex-col px-2">
-					{options.map((level) => {
-						const pressed = selected === level
-						return (
-							<button
-								key={level ?? "default"}
-								type="button"
-								aria-pressed={pressed}
-								onClick={() => selectEffort(level)}
-								className={cn(
-									"flex h-12 items-center justify-between rounded-xl px-3 text-base text-foreground transition-colors active:bg-muted/70",
-									pressed && "font-medium",
-								)}
-								data-testid={`model-switch-reasoning-option-${level ?? "default"}`}
-							>
-								<span>{level ? labels[level] : defaultLabel}</span>
-								{pressed ? <Check className="size-5" aria-hidden="true" /> : null}
-							</button>
-						)
-					})}
-				</div>
+				<ReasoningEffortOptionList
+					model={model}
+					onReasoningEffortChange={(next) => {
+						onReasoningEffortChange(next)
+						onClose()
+					}}
+				/>
 			</div>
 		</MagicPopup>
 	)

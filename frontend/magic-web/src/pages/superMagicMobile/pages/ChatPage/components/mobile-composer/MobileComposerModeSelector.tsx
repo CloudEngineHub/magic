@@ -523,6 +523,7 @@ function MobileComposerModeSelectorComponent({
 										searchKeyword={modelSearchKeyword}
 										size="mobile"
 										onModelClick={handleModelSelect}
+										onReasoningEffortChange={handleReasoningEffortChange}
 										selectedItemRef={selectedModelItemRef}
 										getModelDescription={getModelDescription}
 										modelKey={currentModelKey}

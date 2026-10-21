@@ -3608,7 +3608,8 @@
 			"tooltipImageModel": "Image Model",
 			"tooltipLanguageModel": "Text Model",
 			"tooltipVideoModel": "Video Model",
-			"videoModel": "Video"
+			"videoModel": "Video",
+			"viewModelInfo": "View model details"
 		},
 		"newTopicButton": "New Topic",
 		"placeholder": "Type a message...",

@@ -3608,7 +3608,8 @@
 			"tooltipImageModel": "生图模型",
 			"tooltipLanguageModel": "语言模型",
 			"tooltipVideoModel": "视频模型",
-			"videoModel": "视频模型"
+			"videoModel": "视频模型",
+			"viewModelInfo": "查看模型介绍"
 		},
 		"newTopicButton": "新建话题",
 		"placeholder": "输入消息...",

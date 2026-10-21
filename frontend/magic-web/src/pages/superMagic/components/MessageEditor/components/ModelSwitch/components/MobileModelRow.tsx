@@ -1,34 +1,49 @@
-import { Check } from "lucide-react"
-import type { RefObject } from "react"
+import { Check, Info } from "lucide-react"
+import { useState, type RefObject } from "react"
+import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { ModelItem } from "../types"
+import { getSelectableReasoningLevels } from "../utils"
 import { ModelBillingMultiplier } from "./ModelBillingMultiplier"
+import { hasModelInfo } from "./ModelInfoContent"
+import { ModelInfoSheet } from "./ModelInfoSheet"
 
 interface MobileModelRowProps {
 	model: ModelItem
 	selected: boolean
 	disabled: boolean
+	description?: string
 	selectedItemRef: RefObject<HTMLDivElement>
 	onSelect: (model: ModelItem) => void
+	/** 介绍弹层里选档位时回调，语义与桌面悬停卡一致：当作选中该模型。 */
+	onReasoningEffortChange?: (model: ModelItem) => void
 }
 
 /**
  * 移动端模型行，和桌面行同一结构：分组标题带供应商图标，行内不再重复图标并向右缩进一级；
- * 选中态靠勾号与名称加重表达，倍率用小字放右侧。思考强度不在列表里改，由模式选择页的独立行负责。
+ * 选中态靠勾号与名称加重表达，倍率用小字放右侧。
+ * 行尾的「i」打开介绍弹层，内容与桌面悬停卡相同；它和选中按钮是两个并列控件，不互相触发。
  */
 export function MobileModelRow({
 	model,
 	selected,
 	disabled,
+	description = model.model_description,
 	selectedItemRef,
 	onSelect,
+	onReasoningEffortChange,
 }: MobileModelRowProps) {
+	const { t } = useTranslation("super")
+	const [infoOpen, setInfoOpen] = useState(false)
 	const name = model.model_name || model.model_id
+	const canSelectEffort =
+		!disabled && getSelectableReasoningLevels(model).length > 0 && !!onReasoningEffortChange
+	const showInfo = hasModelInfo(model, description) || canSelectEffort
 
 	return (
 		<div
 			ref={selected ? selectedItemRef : null}
-			className={cn("ml-6 min-w-0 rounded-xl transition-colors", disabled && "opacity-50")}
+			className={cn("ml-6 flex min-w-0 items-center rounded-xl", disabled && "opacity-50")}
 			data-testid="mobile-model-row"
 		>
 			<button
@@ -38,7 +53,7 @@ export function MobileModelRow({
 				aria-label={name}
 				aria-pressed={selected}
 				className={cn(
-					"flex h-11 w-full min-w-0 items-center gap-3 rounded-xl px-2 text-left",
+					"flex h-11 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 text-left",
 					"transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-muted/60 disabled:cursor-not-allowed",
 				)}
 				data-testid="model-switch-item"
@@ -66,6 +81,32 @@ export function MobileModelRow({
 					{selected ? <Check className="size-4 text-foreground" strokeWidth={2} /> : null}
 				</span>
 			</button>
+			{showInfo ? (
+				<>
+					{/* 44px 触控区，图标保持 16px；放在选中按钮之外，避免按钮嵌套。 */}
+					<button
+						type="button"
+						onClick={() => setInfoOpen(true)}
+						aria-label={t("messageEditor.modelSwitch.viewModelInfo")}
+						className="flex size-11 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:bg-muted/60"
+						data-testid="mobile-model-info-trigger"
+					>
+						<Info size={16} aria-hidden="true" />
+					</button>
+					<ModelInfoSheet
+						visible={infoOpen}
+						onClose={() => setInfoOpen(false)}
+						model={model}
+						description={description}
+						onReasoningEffortChange={
+							canSelectEffort ? onReasoningEffortChange : undefined
+						}
+					/>
+				</>
+			) : (
+				// 没有介绍时留出同宽占位，让所有行的倍率和勾号仍在同一条基线上。
+				<span className="size-11 shrink-0" aria-hidden="true" />
+			)}
 		</div>
 	)
 }
