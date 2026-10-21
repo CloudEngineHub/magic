@@ -52,11 +52,22 @@ class DisableMagicAccountCommand extends HyperfCommand
 
         try {
             $accounts = Db::table('magic_contact_accounts')
-                ->select(['magic_id', 'phone', 'email', 'status'])
-                ->whereNull('deleted_at')
-                ->when($magicId !== '', static fn ($query) => $query->where('magic_id', $magicId))
-                ->when($phone !== '', static fn ($query) => $query->where('phone', $phone))
-                ->when($emailDomain !== '', static fn ($query) => $query->where('email', 'like', '%@' . $emailDomain))
+                ->leftJoin('magic_environments as e', 'e.id', '=', 'magic_contact_accounts.magic_environment_id')
+                ->select([
+                    'magic_contact_accounts.magic_id',
+                    'magic_contact_accounts.phone',
+                    'magic_contact_accounts.email',
+                    'magic_contact_accounts.real_name',
+                    'magic_contact_accounts.magic_environment_id',
+                    'magic_contact_accounts.status',
+                    'e.deployment as environment_deployment',
+                    'e.environment as environment_name',
+                    'e.environment_code',
+                ])
+                ->whereNull('magic_contact_accounts.deleted_at')
+                ->when($magicId !== '', static fn ($query) => $query->where('magic_contact_accounts.magic_id', $magicId))
+                ->when($phone !== '', static fn ($query) => $query->where('magic_contact_accounts.phone', $phone))
+                ->when($emailDomain !== '', static fn ($query) => $query->where('magic_contact_accounts.email', 'like', '%@' . $emailDomain))
                 ->get();
         } catch (Throwable $e) {
             $this->error('查询账号失败: ' . $e->getMessage());
@@ -68,10 +79,28 @@ class DisableMagicAccountCommand extends HyperfCommand
             return self::FAILURE;
         }
 
+        $userNames = Db::table('magic_contact_users')
+            ->select(['magic_id', 'nickname'])
+            ->whereIn('magic_id', $accounts->pluck('magic_id')->all())
+            ->whereNull('deleted_at')
+            ->get()
+            ->groupBy('magic_id')
+            ->map(static fn ($users): string => $users
+                ->pluck('nickname')
+                ->filter(static fn ($nickname): bool => trim((string) $nickname) !== '')
+                ->unique()
+                ->implode(', '));
+
+        if ($emailDomain !== '') {
+            $this->line("目标邮箱域名: {$emailDomain}");
+            $this->line("匹配账号数: {$accounts->count()}");
+        }
+        $this->line('预检查账号信息:');
+        $this->printAccountTable($accounts, $userNames);
+
         if ($phone !== '' && $accounts->count() > 1) {
-            $magicIds = $accounts->pluck('magic_id')->implode(', ');
-            $this->error("手机号匹配到多个账号（{$magicIds}），请改用 --magic-id 精确指定。");
-            return self::FAILURE;
+            $this->error('手机号匹配到多个账号，预检查已完成；请改用 --magic-id 精确指定后再执行。');
+            return $this->input->getOption('execute') ? self::FAILURE : self::SUCCESS;
         }
 
         foreach ($accounts as $account) {
@@ -80,22 +109,6 @@ class DisableMagicAccountCommand extends HyperfCommand
                 $this->error("账号 {$account->magic_id} 的状态值 {$currentStatus} 不受支持，已停止操作。");
                 return self::FAILURE;
             }
-        }
-
-        if ($emailDomain !== '') {
-            $this->line("目标邮箱域名: {$emailDomain}");
-            $this->line("匹配账号数: {$accounts->count()}");
-        }
-        $this->line('预检查账号信息:');
-        foreach ($accounts as $account) {
-            $status = (int) $account->status === AccountStatus::Normal->value ? '正常' : '已禁用';
-            $this->line(sprintf(
-                '  magic_id=%s, phone=%s, email=%s, status=%s',
-                (string) $account->magic_id,
-                (string) ($account->phone ?? ''),
-                (string) ($account->email ?? ''),
-                $status
-            ));
         }
 
         if (! $this->input->getOption('execute')) {
@@ -127,5 +140,64 @@ class DisableMagicAccountCommand extends HyperfCommand
                 : [$emailDomain, $accounts->count(), $summary['account_tokens'], $summary['user_tokens'], $summary['api_keys']])
         ));
         return self::SUCCESS;
+    }
+
+    private function printAccountTable($accounts, $userNames): void
+    {
+        $headers = ['magic-id', '用户名', '手机号', '邮箱', '关联环境', '状态'];
+        $rows = [];
+        foreach ($accounts as $account) {
+            $status = (int) $account->status === AccountStatus::Normal->value ? '正常' : '已禁用';
+            $username = trim((string) ($account->real_name ?? ''));
+            if ($username === '') {
+                $username = (string) ($userNames->get((string) $account->magic_id) ?? '');
+            }
+            $environment = trim(implode('/', array_filter([
+                (string) ($account->environment_deployment ?? ''),
+                (string) ($account->environment_name ?? ''),
+                (string) ($account->environment_code ?? ''),
+            ])), '/');
+            if ($environment === '') {
+                $environment = 'id=' . (string) ($account->magic_environment_id ?? 0);
+            }
+            $rows[] = [
+                (string) $account->magic_id,
+                $username,
+                (string) ($account->phone ?? ''),
+                (string) ($account->email ?? ''),
+                $environment,
+                $status,
+            ];
+        }
+
+        $widths = array_map(fn (string $value): int => $this->displayWidth($value), $headers);
+        foreach ($rows as $row) {
+            foreach ($row as $index => $value) {
+                $widths[$index] = max($widths[$index], $this->displayWidth($value));
+            }
+        }
+        $separator = '+' . implode('+', array_map(static fn (int $width): string => str_repeat('-', $width + 2), $widths)) . '+';
+        $this->line($separator);
+        $this->line($this->formatTableRow($headers, $widths));
+        $this->line($separator);
+        foreach ($rows as $row) {
+            $this->line($this->formatTableRow($row, $widths));
+        }
+        $this->line($separator);
+    }
+
+    private function formatTableRow(array $values, array $widths): string
+    {
+        $cells = [];
+        foreach ($values as $index => $value) {
+            $padding = max(0, $widths[$index] - $this->displayWidth($value));
+            $cells[] = ' ' . $value . str_repeat(' ', $padding) . ' ';
+        }
+        return '|' . implode('|', $cells) . '|';
+    }
+
+    private function displayWidth(string $value): int
+    {
+        return function_exists('mb_strwidth') ? mb_strwidth($value, 'UTF-8') : strlen($value);
     }
 }
