@@ -229,9 +229,6 @@ export function DefaultModelPriceTable({
 								) : (
 									<p className={classes.muted}>— · {labels[benchmark.status]}</p>
 								)}
-								<p className={classes.muted}>
-									{t("modelPricePreview.overrideFooter")}
-								</p>
 							</section>
 						) : null}
 					</div>
@@ -241,14 +238,15 @@ export function DefaultModelPriceTable({
 						</span>
 						{result?.multiplier ?? "—"}
 					</div>
-					<div>
+					<div className={classes.manual}>
 						<span className={classes.mobile}>
 							{t("modelPricePreview.manualRatio")}:{" "}
 						</span>
 						{onOverridesChange ? (
 							<div>
-								<div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+								<div className={classes.manualControl}>
 									<MultiplierInput
+										className={classes.manualInput}
 										aria-label={`${row.name}: ${t("modelPricePreview.manualRatio")}`}
 										aria-invalid={invalidManual}
 										inputMode="decimal"
@@ -485,6 +483,9 @@ export function DefaultModelPriceTable({
 						</div>
 					)}
 				</>
+			) : null}
+			{snapshot && groups.length > 0 ? (
+				<p className={classes.muted}>{t("modelPricePreview.overrideFooter")}</p>
 			) : null}
 		</section>
 	)

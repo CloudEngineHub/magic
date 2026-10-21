@@ -148,6 +148,25 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 		font-variant-numeric: tabular-nums;
 		text-align: right;
 	`,
+	// 查看值和编辑输入框统一向数值列右侧对齐。
+	manual: css`
+		min-width: 0;
+		overflow-wrap: anywhere;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	`,
+	manualControl: css`
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 8px;
+	`,
+	manualInput: css`
+		width: 100%;
+		max-width: 160px;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	`,
 	ratio: css`
 		min-width: 0;
 		overflow-wrap: anywhere;
