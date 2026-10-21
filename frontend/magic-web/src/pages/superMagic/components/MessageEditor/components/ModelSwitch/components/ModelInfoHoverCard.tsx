@@ -1,11 +1,10 @@
-import type { ReactElement } from "react"
+import { useState, type ReactElement } from "react"
 import { useTranslation } from "react-i18next"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/shadcn-ui/hover-card"
-import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
-import { cn } from "@/utils/cn"
-import { reasoningEffortLevels, type ModelItem, type ReasoningEffort } from "../types"
-import { getModelDisplayedReasoningEffort } from "../utils"
+import type { ModelItem } from "../types"
 import { hasBillingMultiplier, ModelBillingMultiplier } from "./ModelBillingMultiplier"
+import { getSelectableReasoningLevels } from "../utils"
+import { ReasoningEffortSelect } from "./ReasoningEffortSelect"
 
 /** 卡片贴在面板右侧外缘，留出面板内边距与阴影的距离。 */
 const MODEL_INFO_HOVER_SIDE_OFFSET = 14
@@ -37,7 +36,7 @@ interface ModelInfoHoverCardProps {
 
 /**
  * 桌面模型行的悬停信息卡：名称、描述、上下文窗口、消耗倍率，以及该模型的思考强度档位。
- * 档位直接铺成一行胶囊，不再套第二层菜单。
+ * 思考强度用与底栏相同的选择器；它的菜单打开期间卡片保持不关闭。
  */
 export function ModelInfoHoverCard({
 	model,
@@ -48,33 +47,19 @@ export function ModelInfoHoverCard({
 	const { t } = useTranslation("super")
 	const contextWindow = formatContextWindow(model.max_context_tokens)
 	const showMultiplier = hasBillingMultiplier(model.billing_multiplier)
-	const labels: Record<ReasoningEffort, string> = {
-		none: t("messageEditor.modelSwitch.reasoning.none"),
-		minimal: t("messageEditor.modelSwitch.reasoning.minimal"),
-		low: t("messageEditor.modelSwitch.reasoning.low"),
-		medium: t("messageEditor.modelSwitch.reasoning.medium"),
-		high: t("messageEditor.modelSwitch.reasoning.high"),
-		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
-		max: t("messageEditor.modelSwitch.reasoning.max"),
-	}
-	const levels = reasoningEffortLevels.filter((level) =>
-		model.reasoning_effort_levels?.includes(level),
-	)
-	const canSelectEffort = levels.length > 0 && !!onReasoningEffortChange
-	// 显示值直接从持久化偏好和后台默认推导；选择后父组件重渲染，这里不需要本地状态。
-	const selectedEffort = canSelectEffort ? getModelDisplayedReasoningEffort(model) : undefined
-	const effortOptions: Array<ReasoningEffort | undefined> = [undefined, ...levels]
+	const canSelectEffort =
+		getSelectableReasoningLevels(model).length > 0 && !!onReasoningEffortChange
+	// 卡片受控：鼠标离开卡片会请求关闭，但强度菜单（挂在 Portal 里）打开期间要忽略这次关闭。
+	const [open, setOpen] = useState(false)
+	const [effortMenuOpen, setEffortMenuOpen] = useState(false)
 
 	// 没有任何可补充的信息时不挂卡片，避免悬停弹出一张只有名称的空卡。
 	if (!description && !contextWindow && !showMultiplier && !canSelectEffort) return children
 
-	function selectEffort(effort?: ReasoningEffort) {
-		modelCache.setReasoningEffort(model, effort)
-		onReasoningEffortChange?.({ ...model, reasoning_effort: effort ?? null })
-	}
-
 	return (
 		<HoverCard
+			open={open || effortMenuOpen}
+			onOpenChange={setOpen}
 			openDelay={MODEL_INFO_HOVER_OPEN_DELAY_MS}
 			closeDelay={MODEL_INFO_HOVER_CLOSE_DELAY_MS}
 		>
@@ -130,39 +115,19 @@ export function ModelInfoHoverCard({
 						) : null}
 					</dl>
 				) : null}
-				{canSelectEffort ? (
-					<div className="border-t border-border/70 px-3.5 py-3">
-						<div className="mb-2 text-muted-foreground">
-							{t("messageEditor.modelSwitch.reasoning.label")}
-						</div>
-						<div
-							className="flex flex-wrap gap-1.5"
-							role="group"
-							aria-label={t("messageEditor.modelSwitch.reasoning.label")}
-						>
-							{effortOptions.map((level) => {
-								const pressed = selectedEffort === level
-								return (
-									<button
-										key={level ?? "default"}
-										type="button"
-										aria-pressed={pressed}
-										data-testid={`model-info-reasoning-option-${level ?? "default"}`}
-										className={cn(
-											"h-6 rounded-md px-2 text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-											pressed
-												? "bg-foreground font-medium text-background"
-												: "bg-muted text-foreground hover:bg-muted/70",
-										)}
-										onClick={() => selectEffort(level)}
-									>
-										{level
-											? labels[level]
-											: t("messageEditor.modelSwitch.reasoning.default")}
-									</button>
-								)
-							})}
-						</div>
+				{canSelectEffort && onReasoningEffortChange ? (
+					<div className="border-t border-border/70 px-2 py-1.5">
+						<ReasoningEffortSelect
+							model={model}
+							onReasoningEffortChange={onReasoningEffortChange}
+							side="bottom"
+							align="end"
+							onOpenChange={(menuOpen) => {
+								setEffortMenuOpen(menuOpen)
+								// 菜单收起（选完或点到外面）后，鼠标多半已不在卡片上，直接收起卡片。
+								if (!menuOpen) setOpen(false)
+							}}
+						/>
 					</div>
 				) : null}
 			</HoverCardContent>

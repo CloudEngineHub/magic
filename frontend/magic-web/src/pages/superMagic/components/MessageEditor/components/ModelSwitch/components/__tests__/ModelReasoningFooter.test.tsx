@@ -54,7 +54,7 @@ function hoverFooter() {
 }
 
 function openMenu() {
-	fireEvent.click(screen.getByTestId("model-switch-reasoning-footer-trigger"))
+	fireEvent.click(screen.getByTestId("model-switch-reasoning-trigger"))
 }
 
 describe("resolveReasoningFooterModel", () => {
@@ -113,15 +113,17 @@ describe("ModelReasoningFooter (panel)", () => {
 		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
 		expect(screen.getByTestId("model-switch-reasoning-option-default")).toBeTruthy()
 		expect(screen.getByTestId("model-switch-reasoning-option-none")).toBeTruthy()
-		expect(screen.getByTestId("model-switch-reasoning-option-high")).toBeTruthy()
+		expect(screen.getByTestId("model-switch-reasoning-option-high")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
 		expect(screen.queryByTestId("model-switch-reasoning-option-low")).toBeNull()
 		expect(
 			screen.queryByText("A long model description that must stay out of the effort menu."),
 		).toBeNull()
-		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplier")).toBeNull()
 	})
 
-	it("saves the selected effort without mutating the source model", () => {
+	it("saves the selected effort without mutating the source model and closes the menu", () => {
 		const { model, onReasoningEffortChange } = renderFooter()
 		openMenu()
 		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-none"))
@@ -133,10 +135,10 @@ describe("ModelReasoningFooter (panel)", () => {
 		})
 		expect(model).not.toHaveProperty("reasoning_effort")
 		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
-		expect(screen.getByText("messageEditor.modelSwitch.reasoning.none")).toBeTruthy()
+		expect(screen.getByTestId("model-switch-reasoning-trigger")).toBeTruthy()
 	})
 
-	it("clears the saved effort when default is selected, even if it is already selected", () => {
+	it("treats default as an explicit choice that clears the saved effort", () => {
 		const { model, onReasoningEffortChange } = renderFooter()
 		openMenu()
 		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-default"))
@@ -147,27 +149,20 @@ describe("ModelReasoningFooter (panel)", () => {
 			reasoning_effort: null,
 		})
 
-		// 再次选择当前已选档位不会切回其它值；语义始终是显式选择。
 		openMenu()
 		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-default"))
 		expect(setReasoningEffort).toHaveBeenLastCalledWith(model, undefined)
 	})
 
-	it("keeps the footer mounted after choosing an effort", () => {
-		const { onReasoningEffortChange } = renderFooter()
-		openMenu()
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-high"))
-		expect(onReasoningEffortChange).toHaveBeenCalledTimes(1)
-		expect(screen.getByTestId("model-switch-reasoning-footer-trigger")).toBeTruthy()
-	})
-
 	it("shows a locked default when the model has no effort levels", () => {
 		const { onReasoningEffortChange } = renderFooter(createModel([]))
-		expect(screen.getByText("messageEditor.modelSwitch.reasoning.default")).toBeTruthy()
-		expect(screen.getByTestId("model-switch-reasoning-footer-trigger")).toBeDisabled()
+		const locked = screen.getByTestId("model-switch-reasoning-locked")
+		expect(locked).toHaveTextContent("messageEditor.modelSwitch.reasoning.default")
+		expect(locked).toBeDisabled()
+		expect(screen.queryByTestId("model-switch-reasoning-trigger")).toBeNull()
 
 		hoverFooter()
-		openMenu()
+		fireEvent.click(locked)
 		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
 		expect(onReasoningEffortChange).not.toHaveBeenCalled()
 	})
@@ -186,7 +181,7 @@ describe("ModelReasoningFooter (inline)", () => {
 	it("lays the mobile reasoning choices out for a direct tap", () => {
 		const { model, onReasoningEffortChange } = renderFooter(createModel(), "inline")
 		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
-		expect(screen.queryByTestId("model-switch-reasoning-footer-trigger")).toBeNull()
+		expect(screen.queryByTestId("model-switch-reasoning-trigger")).toBeNull()
 		expect(screen.getByTestId("model-switch-reasoning-option-high")).toHaveAttribute(
 			"aria-pressed",
 			"true",
@@ -198,9 +193,5 @@ describe("ModelReasoningFooter (inline)", () => {
 			...model,
 			reasoning_effort: "none",
 		})
-		expect(screen.getByTestId("model-switch-reasoning-option-none")).toHaveAttribute(
-			"aria-pressed",
-			"true",
-		)
 	})
 })

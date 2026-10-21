@@ -80,7 +80,7 @@ describe("formatContextWindow", () => {
 })
 
 describe("ModelInfoHoverCard", () => {
-	it("opens quickly with the model facts and no reasoning controls for models without levels", () => {
+	it("opens quickly with the model facts and no reasoning control for models without levels", () => {
 		renderCard()
 		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
 
@@ -105,7 +105,7 @@ describe("ModelInfoHoverCard", () => {
 		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
 	})
 
-	it("lets the user pick a reasoning effort for the hovered model in one click", () => {
+	it("offers the same reasoning selector as the footer and keeps the card open while its menu is up", () => {
 		const onReasoningEffortChange = vi.fn()
 		const { model } = renderCard(
 			createModel({
@@ -118,30 +118,37 @@ describe("ModelInfoHoverCard", () => {
 
 		const card = screen.getByTestId("model-info-hover-card")
 		expect(card).toHaveTextContent("messageEditor.modelSwitch.reasoning.label")
-		expect(screen.getByTestId("model-info-reasoning-option-default")).toBeTruthy()
-		expect(screen.queryByTestId("model-info-reasoning-option-medium")).toBeNull()
-		// 后台默认是 low，没有用户覆盖时它显示为已选。
-		expect(screen.getByTestId("model-info-reasoning-option-low")).toHaveAttribute(
-			"aria-pressed",
-			"true",
+		// 后台默认是 low，没有用户覆盖时触发器上显示它。
+		expect(screen.getByTestId("model-switch-reasoning-trigger")).toHaveTextContent(
+			"messageEditor.modelSwitch.reasoning.low",
 		)
 
-		fireEvent.click(screen.getByTestId("model-info-reasoning-option-high"))
+		fireEvent.click(screen.getByTestId("model-switch-reasoning-trigger"))
+		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
+		expect(screen.queryByTestId("model-switch-reasoning-option-medium")).toBeNull()
+
+		// 菜单打开期间鼠标离开卡片，卡片仍保持打开。
+		fireEvent.pointerLeave(screen.getByTestId("model-switch-item"), { pointerType: "mouse" })
+		act(() => {
+			vi.advanceTimersByTime(1000)
+		})
+		expect(screen.getByTestId("model-info-hover-card")).toBeTruthy()
+
+		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-high"))
 		expect(setReasoningEffort).toHaveBeenCalledWith(model, "high")
 		expect(onReasoningEffortChange).toHaveBeenCalledWith({
 			...model,
 			reasoning_effort: "high",
 		})
-
-		fireEvent.click(screen.getByTestId("model-info-reasoning-option-default"))
-		expect(setReasoningEffort).toHaveBeenLastCalledWith(model, undefined)
-		expect(onReasoningEffortChange).toHaveBeenLastCalledWith({
-			...model,
-			reasoning_effort: null,
+		// 选完菜单关闭，卡片随之收起。
+		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
+		act(() => {
+			vi.advanceTimersByTime(1000)
 		})
+		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
 	})
 
-	it("hides the reasoning section when the card is read-only, even if the model has levels", () => {
+	it("hides the reasoning selector when the card is read-only, even if the model has levels", () => {
 		renderCard(createModel({ reasoning_effort_levels: ["low", "high"] }))
 		hoverRow()
 		expect(screen.getByTestId("model-info-hover-card")).not.toHaveTextContent(

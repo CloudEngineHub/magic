@@ -52,6 +52,11 @@ export function getModelDefaultReasoningEffort(
 	)
 }
 
+/** 返回模型实际可选的档位，按统一顺序排列；空数组表示该模型不支持调强度。 */
+export function getSelectableReasoningLevels(model?: ModelItem | null): ReasoningEffort[] {
+	return reasoningEffortLevels.filter((level) => model?.reasoning_effort_levels?.includes(level))
+}
+
 /** 读取有效用户覆盖，显式 null 表示继承，不能回读旧缓存。 */
 export function getModelReasoningEffort(model?: ModelItem | null): ReasoningEffort | undefined {
 	if (!model?.reasoning_effort_levels?.length) return undefined
