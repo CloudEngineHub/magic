@@ -91,7 +91,6 @@ export const ModelListContent = observer(function ModelListContent({
 					}
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
-					isLanguageModel={modelKey === "models"}
 					showModelInfo={showModelInfo}
 				/>
 			))}

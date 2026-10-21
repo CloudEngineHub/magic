@@ -8,6 +8,7 @@ interface ProviderNameProps {
 	item: ModeModelGroup
 }
 
+/** 分组标题：供应商图标加名称；模型行不再带图标，这里是供应商身份的唯一出处。 */
 function ProviderName({ item }: ProviderNameProps) {
 	const isMobile = useIsMobile()
 
@@ -17,9 +18,10 @@ function ProviderName({ item }: ProviderNameProps) {
 				"flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-muted-foreground",
 				// 桌面列表滚动时分组标题吸在顶部；面板与弹层底色都是 card，吸顶时不会露出下面的行。
 				!isMobile && "sticky top-0 z-[1] bg-card",
+				isMobile && "pt-2.5",
 			)}
 		>
-			{!isMobile ? <ProviderIcon provider={item} size={16} /> : null}
+			<ProviderIcon provider={item} size={16} />
 			<EllipsisTooltip title={item.name}>
 				<div className="text-xs font-semibold leading-4 tracking-[0.01em] [font-family:Inter,sans-serif]">
 					{item.name}

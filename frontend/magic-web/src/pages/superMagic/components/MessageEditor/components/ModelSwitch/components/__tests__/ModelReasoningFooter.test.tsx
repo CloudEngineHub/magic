@@ -33,15 +33,11 @@ function createModel(levels: ModelItem["reasoning_effort_levels"] = ["none", "hi
 	}
 }
 
-function renderFooter(model = createModel(), layout: "panel" | "inline" = "panel") {
+function renderFooter(model = createModel()) {
 	const onReasoningEffortChange = vi.fn()
 	render(
 		<div className="flex h-40 flex-col">
-			<ModelReasoningFooter
-				model={model}
-				onReasoningEffortChange={onReasoningEffortChange}
-				layout={layout}
-			/>
+			<ModelReasoningFooter model={model} onReasoningEffortChange={onReasoningEffortChange} />
 		</div>,
 	)
 	return { model, onReasoningEffortChange }
@@ -165,33 +161,5 @@ describe("ModelReasoningFooter (panel)", () => {
 		fireEvent.click(locked)
 		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
 		expect(onReasoningEffortChange).not.toHaveBeenCalled()
-	})
-})
-
-describe("ModelReasoningFooter (inline)", () => {
-	it("places the mobile bar in normal flow with a locked default", () => {
-		renderFooter(createModel([]), "inline")
-		const footer = screen.getByTestId("model-switch-reasoning-footer")
-		expect(footer.className).not.toContain("absolute")
-		expect(screen.getByText("messageEditor.modelSwitch.reasoning.default")).toBeTruthy()
-		expect(screen.queryByText("Qwen3.7 Max")).toBeNull()
-		expect(screen.queryByTestId("model-switch-reasoning-option-default")).toBeNull()
-	})
-
-	it("lays the mobile reasoning choices out for a direct tap", () => {
-		const { model, onReasoningEffortChange } = renderFooter(createModel(), "inline")
-		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
-		expect(screen.queryByTestId("model-switch-reasoning-trigger")).toBeNull()
-		expect(screen.getByTestId("model-switch-reasoning-option-high")).toHaveAttribute(
-			"aria-pressed",
-			"true",
-		)
-
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-none"))
-		expect(setReasoningEffort).toHaveBeenCalledWith(model, "none")
-		expect(onReasoningEffortChange).toHaveBeenCalledWith({
-			...model,
-			reasoning_effort: "none",
-		})
 	})
 })

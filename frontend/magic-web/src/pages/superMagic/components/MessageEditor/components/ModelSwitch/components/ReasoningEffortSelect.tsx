@@ -1,11 +1,11 @@
 import { useState } from "react"
 import { Check, ChevronDown } from "lucide-react"
-import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { cn } from "@/utils/cn"
+import { useReasoningEffortLabels } from "../hooks/useReasoningEffortLabels"
 import { type ModelItem, type ReasoningEffort } from "../types"
 import { getModelDisplayedReasoningEffort, getSelectableReasoningLevels } from "../utils"
 
@@ -34,18 +34,8 @@ export function ReasoningEffortSelect({
 	onOpenChange,
 	className,
 }: ReasoningEffortSelectProps) {
-	const { t } = useTranslation("super")
 	const [open, setOpen] = useState(false)
-	const labels: Record<ReasoningEffort, string> = {
-		none: t("messageEditor.modelSwitch.reasoning.none"),
-		minimal: t("messageEditor.modelSwitch.reasoning.minimal"),
-		low: t("messageEditor.modelSwitch.reasoning.low"),
-		medium: t("messageEditor.modelSwitch.reasoning.medium"),
-		high: t("messageEditor.modelSwitch.reasoning.high"),
-		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
-		max: t("messageEditor.modelSwitch.reasoning.max"),
-	}
-	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
+	const { labels, defaultLabel, title } = useReasoningEffortLabels()
 	const levels = getSelectableReasoningLevels(model)
 	const canSelect = levels.length > 0
 	const selected = canSelect ? getModelDisplayedReasoningEffort(model) : undefined
@@ -79,9 +69,7 @@ export function ReasoningEffortSelect({
 				canSelect ? "model-switch-reasoning-trigger" : "model-switch-reasoning-locked"
 			}
 		>
-			<span className="shrink-0 text-muted-foreground">
-				{t("messageEditor.modelSwitch.reasoning.label")}
-			</span>
+			<span className="shrink-0 text-muted-foreground">{title}</span>
 			<span
 				className={cn(
 					"flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-foreground",
@@ -114,11 +102,7 @@ export function ReasoningEffortSelect({
 				className="z-dropdown w-36 rounded-lg p-0 duration-100"
 			>
 				<ScrollArea viewportClassName="max-h-64">
-					<div
-						className="flex flex-col p-1"
-						role="group"
-						aria-label={t("messageEditor.modelSwitch.reasoning.label")}
-					>
+					<div className="flex flex-col p-1" role="group" aria-label={title}>
 						{options.map((level, index) => (
 							<div
 								key={level ?? "default"}
