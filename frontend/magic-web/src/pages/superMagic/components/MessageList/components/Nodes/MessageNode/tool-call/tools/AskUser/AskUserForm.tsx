@@ -232,6 +232,13 @@ function useWriteAnswer() {
 	return ctx.writeAnswer
 }
 
+/** XML 实体解码后比较题干，避免正式解析的转义差异清空同次填写。 */
+function normalizeDraftLabel(label: string): string {
+	const element = document.createElement("textarea")
+	element.innerHTML = label.replace(/</g, "&lt;").replace(/>/g, "&gt;")
+	return element.value.trim()
+}
+
 function AskUserFormImpl({
 	questions,
 	locale,
@@ -251,6 +258,8 @@ function AskUserFormImpl({
 }: AskUserFormProps) {
 	// answersRef 是 submit 时的唯一真源；按键路径只写不读，避免触发父 render
 	const answersRef = useRef<Record<string, AnswerValue>>({})
+	const loadedCacheKey = useRef("")
+	const previousQuestions = useRef<readonly ParsedQuestion[]>([])
 	const [draftAnswers, setDraftAnswers] = useState<Readonly<Record<string, AnswerValue>>>()
 	const [remark, setRemark] = useState("")
 	const [isLocallyExpired, setIsLocallyExpired] = useState(false)
@@ -344,29 +353,57 @@ function AskUserFormImpl({
 	}, [onProgressChange, questions, submittedAnswers])
 
 	useEffect(() => {
-		if (!draftCacheKey) {
-			setDraftAnswers(undefined)
-			return
-		}
 		if (submittedAnswers || isTerminal) {
-			clearAskUserDraftAnswers(draftCacheKey)
+			if (draftCacheKey) clearAskUserDraftAnswers(draftCacheKey)
 			setDraftAnswers(undefined)
 			return
 		}
-
-		const nextDraftAnswers = readAskUserDraftAnswers(draftCacheKey) as Readonly<
-			Record<string, AnswerValue>
-		> | null
-		answersRef.current = nextDraftAnswers ? { ...nextDraftAnswers } : {}
-		setDraftAnswers(nextDraftAnswers || undefined)
-		setRemark(readAskUserDraftRemark(draftCacheKey))
-		onProgressChange?.(getAnsweredQuestionCount(questions, answersRef.current))
+		// 首次正式题目到达前可能已有填写；同次输入优先，不能被空缓存覆盖。
+		if (draftCacheKey && loadedCacheKey.current !== draftCacheKey) {
+			const cached = readAskUserDraftAnswers(draftCacheKey) ?? {}
+			const isNewCard = Boolean(loadedCacheKey.current)
+			answersRef.current = isNewCard ? { ...cached } : { ...cached, ...answersRef.current }
+			setRemark((current) =>
+				isNewCard
+					? readAskUserDraftRemark(draftCacheKey)
+					: current || readAskUserDraftRemark(draftCacheKey),
+			)
+			loadedCacheKey.current = draftCacheKey
+			if (isNewCard) previousQuestions.current = []
+		}
+		const retained: Record<string, AnswerValue> = {}
+		for (const question of questions) {
+			const previous = previousQuestions.current.find((item) => item.id === question.id)
+			const answer = answersRef.current[question.id]
+			if (answer === undefined) continue
+			if (
+				previous &&
+				(previous.type !== question.type ||
+					normalizeDraftLabel(previous.label) !== normalizeDraftLabel(question.label))
+			)
+				continue
+			// 候选被移除时清掉对应答案，自由输入只在原本就是自由输入时保留。
+			const values = typeof answer === "string" ? [answer] : answer
+			if (
+				previous &&
+				values.some(
+					(value) =>
+						previous.options.includes(value) && !question.options.includes(value),
+				)
+			)
+				continue
+			retained[question.id] = answer
+		}
+		answersRef.current = retained
+		previousQuestions.current = questions
+		setDraftAnswers(retained)
+		onProgressChange?.(getAnsweredQuestionCount(questions, retained))
 	}, [draftCacheKey, isTerminal, onProgressChange, questions, submittedAnswers])
 
 	useEffect(() => {
 		if (!draftCacheKey || submittedAnswers || isTerminal) return
 		writeAskUserDraftAnswers(draftCacheKey, answersRef.current as AskUserDraftAnswers, remark)
-	}, [draftCacheKey, isTerminal, remark, submittedAnswers])
+	}, [draftCacheKey, isTerminal, questions, remark, submittedAnswers])
 
 	const displayRemark = submittedRemark || (isTerminal ? "" : remark)
 	const showRemarkField = Boolean(displayRemark.trim()) || shouldShowActions
@@ -390,7 +427,11 @@ function AskUserFormImpl({
 					>
 						{questions.map((question, index) => (
 							<QuestionItem
-								key={question.id}
+								key={JSON.stringify([
+									question.id,
+									question.type,
+									normalizeDraftLabel(question.label),
+								])}
 								index={index}
 								locale={locale}
 								total={questions.length}
