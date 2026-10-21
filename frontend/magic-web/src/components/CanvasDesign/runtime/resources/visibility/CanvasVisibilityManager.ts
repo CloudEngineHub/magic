@@ -127,7 +127,7 @@ const MIN_VISIBLE_SCREEN_LONG_EDGE_FOR_LOAD = 64
 const MIN_NEAR_SCREEN_LONG_EDGE_FOR_LOAD = 96
 const LOW_DETAIL_VISIBLE_FALLBACK_LIMIT = 48
 const MAX_VISIBLE_LOAD_REQUESTS_PER_QUERY = 96
-const MAX_NEAR_LOAD_REQUESTS_PER_QUERY = 48
+const MAX_NEAR_LOAD_REQUESTS_PER_QUERY = 24
 const MAX_FULL_LOAD_REQUESTS_PER_REFRESH = 4
 const MAX_FULL_LOADING_REQUESTS = 4
 const BACKGROUND_IMAGE_LOAD_REQUESTS_PER_REFRESH = 12
@@ -141,6 +141,7 @@ const MIN_NEAR_AUDIO_SCREEN_LONG_EDGE_FOR_LOAD = MIN_NEAR_VIDEO_SCREEN_LONG_EDGE
 const MAX_VISIBLE_AUDIO_LOAD_REQUESTS_PER_QUERY = MAX_VISIBLE_VIDEO_LOAD_REQUESTS_PER_QUERY
 const MAX_NEAR_AUDIO_LOAD_REQUESTS_PER_QUERY = MAX_NEAR_VIDEO_LOAD_REQUESTS_PER_QUERY
 const VISIBILITY_DRAIN_DELAY_MS = 80
+const IMAGE_ONLY_DRAIN_DELAY_MS = 160
 const INITIAL_VISIBLE_CRITICAL_WINDOW_MS = 5000
 const MAX_INITIAL_VISIBLE_CONTAINER_MEDIA_REQUESTS = 48
 const VIEWPORT_MOVEMENT_SCALE_REFRESH_RATIO = 1.15
@@ -149,7 +150,9 @@ const DECODED_IMAGE_RETENTION_GRACE_MS = 5000
 const FAR_VISIBILITY_DRAIN_GRACE_MS = 3000
 const CONTENT_LAYER_HIT_GRAPH_RESTORE_DELAY_MS = 160
 const VIEWPORT_IDLE_MEDIA_DELAY_MS = 160
+const BOOTSTRAP_NEAR_HYDRATION_DELAY_MS = 400
 const VIEWPORT_IDLE_MEDIA_REFRESH_REASON = "viewport:idle-media"
+const BOOTSTRAP_NEAR_HYDRATION_REASON = "bootstrap:near-hydrate"
 const IMAGE_LOW_FALLBACK_REFRESH_REASON = "image:low-fallback"
 const FAR_VISIBILITY_DRAIN_REFRESH_REASON = "visibility:far-drain"
 // Current default: Konva-only far culling. Far elements stop participating in drawing / hit
@@ -441,6 +444,8 @@ export class CanvasVisibilityManager {
 	private contentLayerHitGraphRestoreTimerId: ReturnType<typeof setTimeout> | null = null
 	private variantSwitchCooldownTimerId: ReturnType<typeof setTimeout> | null = null
 	private viewportIdleMediaTimerId: ReturnType<typeof setTimeout> | null = null
+	private bootstrapNearHydrationTimerId: ReturnType<typeof setTimeout> | null = null
+	private bootstrapNearHydrationAt = 0
 	private scheduledRequiresFullRefresh = false
 	private scheduledReason = "unknown"
 	private lastQueryCoverRect: Rect | null = null
@@ -536,6 +541,7 @@ export class CanvasVisibilityManager {
 		this.invalidateContainerRootCache()
 		this.invalidateViewportMediaCandidateCache()
 		this.initialVisibleCriticalUntil = now() + INITIAL_VISIBLE_CRITICAL_WINDOW_MS
+		this.scheduleBootstrapNearHydration()
 		this.scheduleRefresh("document:loaded", true)
 	}
 
@@ -1172,12 +1178,17 @@ export class CanvasVisibilityManager {
 		if (this.viewportIdleMediaTimerId !== null) {
 			clearTimeout(this.viewportIdleMediaTimerId)
 		}
+		if (this.bootstrapNearHydrationTimerId !== null) {
+			clearTimeout(this.bootstrapNearHydrationTimerId)
+		}
 		this.rafId = null
 		this.drainTimerId = null
 		this.farVisibilityDrainTimerId = null
 		this.contentLayerHitGraphRestoreTimerId = null
 		this.variantSwitchCooldownTimerId = null
 		this.viewportIdleMediaTimerId = null
+		this.bootstrapNearHydrationTimerId = null
+		this.bootstrapNearHydrationAt = 0
 		this.restoreContentLayerHitGraph()
 		this.registeredImages.clear()
 		this.registeredVideos.clear()
@@ -1405,6 +1416,19 @@ export class CanvasVisibilityManager {
 			},
 			Math.max(0, delayMs),
 		)
+	}
+
+	private scheduleBootstrapNearHydration(): void {
+		this.bootstrapNearHydrationAt = now() + BOOTSTRAP_NEAR_HYDRATION_DELAY_MS
+		if (this.bootstrapNearHydrationTimerId !== null) {
+			clearTimeout(this.bootstrapNearHydrationTimerId)
+		}
+		this.bootstrapNearHydrationTimerId = setTimeout(() => {
+			this.bootstrapNearHydrationTimerId = null
+			this.bootstrapNearHydrationAt = 0
+			if (this.destroyed) return
+			this.scheduleRefresh(BOOTSTRAP_NEAR_HYDRATION_REASON, true)
+		}, BOOTSTRAP_NEAR_HYDRATION_DELAY_MS)
 	}
 
 	private markViewportMoving(currentTime = now()): void {
@@ -2240,7 +2264,9 @@ export class CanvasVisibilityManager {
 			this.shouldRequestAudioCandidate(candidate),
 		)
 		const shouldDeferNearLoads =
-			this.imagePresentationPhase === "moving" || isViewportMovementReason(reason)
+			this.imagePresentationPhase === "moving" ||
+			isViewportMovementReason(reason) ||
+			this.shouldDeferBootstrapNearLoads()
 
 		const selectedImageLoads = this.selectImageCandidatesToLoad({
 			pendingLowDetailVisibleCandidates,
@@ -2411,6 +2437,13 @@ export class CanvasVisibilityManager {
 			lastViewportHeight: viewportRect.height,
 			skippedViewportQueryCount: previousSnapshot.skippedViewportQueryCount,
 			queryCount: previousSnapshot.queryCount + 1,
+		}
+
+		if (
+			reason === VIEWPORT_IDLE_MEDIA_REFRESH_REASON ||
+			reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON
+		) {
+			this.canvas.imageResourceManager?.enforceDecodedCacheBudget(`visibility:${reason}`)
 		}
 	}
 
@@ -2673,12 +2706,24 @@ export class CanvasVisibilityManager {
 		const hasMoreAudios =
 			options.pendingAudioLoadCandidateCount > options.requestedAudioLoadCount
 		if (!hasMoreImages && !hasMoreVideos && !hasMoreAudios) return
+		if (
+			this.shouldDeferBootstrapNearLoads() &&
+			hasMoreImages &&
+			!hasMoreVideos &&
+			!hasMoreAudios
+		) {
+			return
+		}
 
 		this.statsSnapshot.drainScheduledCount += 1
+		const delayMs =
+			hasMoreImages && !hasMoreVideos && !hasMoreAudios
+				? IMAGE_ONLY_DRAIN_DELAY_MS
+				: VISIBILITY_DRAIN_DELAY_MS
 		this.drainTimerId = setTimeout(() => {
 			this.drainTimerId = null
 			this.scheduleRefresh("visibility:drain", true)
-		}, VISIBILITY_DRAIN_DELAY_MS)
+		}, delayMs)
 	}
 
 	private scheduleFarVisibilityDrain(): void {
@@ -2736,6 +2781,10 @@ export class CanvasVisibilityManager {
 			reason === "visibility:drain" ||
 			reason === FAR_VISIBILITY_DRAIN_REFRESH_REASON
 		)
+	}
+
+	private shouldDeferBootstrapNearLoads(): boolean {
+		return this.bootstrapNearHydrationAt > 0 && now() < this.bootstrapNearHydrationAt
 	}
 
 	private shouldScanVisibleContainerMedia(reason: string): boolean {
