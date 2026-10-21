@@ -169,17 +169,19 @@ class Leak:
 
 
 _LEAK_JUDGE_PROMPT = """\
-You audit AI personas for a consumer research study before they are interviewed. A persona leaks a hypothesis when one of its stance fields states or clearly predicts how this persona will answer what the hypothesis tests: an attitude, preference, worry, intention, or verdict about the tested outcome, in any wording.
+You audit AI personas for a consumer research study before they are interviewed. A persona leaks a hypothesis only when one of its stance fields states or predicts the persona's attitude, preference, worry, intention, or verdict about what the hypothesis tests, as a general conclusion rather than a concrete event.
 
-Situation facts are not leaks: age, job, schedule, budget, current tools, and past events stated as what happened.
+Concrete past events are never leaks, even when they are about the same topic as the hypothesis. A dated, specific thing that happened (when, what, at what cost) describes a situation; the persona's later answer is still open. The study is about these situations, so topic overlap alone is not a leak.
 - Leak: needs_pains "afraid of buying another card and leaving sessions unused again", for a hypothesis about unused sessions.
+- Leak: needs_pains "schedules change every week, so my commute keeps breaking" (a standing conclusion with no event), for a hypothesis about schedule changes breaking commutes.
+- Not a leak: needs_pains "last month moved to the night shift and found the bus runs every 30 minutes at that hour" (a dated event).
 - Not a leak: behavior "last year's 10-session card: used 6, the rest expired".
 - Leak: tagline "only trusts tools that peers have used for months", for a hypothesis about peer referrals.
 - Leak: expression "I can't know what other people washed in there, so I won't go", for a hypothesis about hygiene worries outweighing price. Quotes in expression count as the persona's stated attitude.
 
-Check every field, including each expression line. When unsure, flag it: the research lead can keep a flagged field by writing down why it is a plain situation fact.
+Check every field, including each expression line. When unsure, do not flag: only flag a field when you can name the attitude or verdict it states.
 
-Reply with JSON only: {"leaks": [{"persona": "<label such as P1>", "field": "<field name>", "hypothesis_id": "<such as H1>", "text": "<the leaking text, copied>", "why": "<one short sentence>"}]}. Use an empty list when nothing leaks."""
+Reply with JSON only: {"leaks": [{"persona": "<label such as P1>", "field": "<field name>", "hypothesis_id": "<such as H1>", "text": "<the leaking text, copied>", "why": "<one short sentence in English>"}]}. Use an empty list when nothing leaks."""
 
 
 async def judge_persona_leaks(

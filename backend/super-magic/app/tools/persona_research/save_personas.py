@@ -221,7 +221,7 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
                 if already:
                     raise StudyFilesError(f"{', '.join(already)} is already on this study's panel; invite them directly")
             leak_check = (
-                await _semantic_leak_check(tool_context, study, files, params.leak_overrides)
+                await _semantic_leak_check(tool_context, str(study_path), study, files, params.leak_overrides)
                 if outcome_terms
                 else None
             )
@@ -281,6 +281,11 @@ class SavePersonas(WorkspaceTool[SavePersonasParams]):
         )
         if leak_check is not None and leak_check["status"] == "skipped":
             lines.append(f"The semantic leak check did not run ({leak_check['note']}); only the keyword check was applied.")
+        if leak_check is not None and leak_check["status"] == "flagged":
+            lines.append(
+                f"The semantic leak check still flagged {len(leak_check['flagged'])} fields and was not blocking this time; "
+                "state them in the report limitations."
+            )
         if leak_check is not None and leak_check["overrides"]:
             lines.append(
                 f"Kept {len(leak_check['overrides'])} flagged fields by override; state them in the report limitations."
@@ -501,8 +506,15 @@ def _check_no_outcome(persona: Dict[str, Any], outcome_terms: List[tuple[str, st
     )
 
 
+# 同一研究里语义检查只拦截一次：模型判定会随改写波动，反复拦截会让 agent 陷入「改写 → 再被拦」循环。
+# 第一次拦截后同一研究的后续保存只提醒，命中项记入 panel.json 并要求写进报告局限。进程内记录即可，
+# 拦截发生在写任何文件之前，没有持久状态要同步。
+_leak_blocked_studies: set[str] = set()
+
+
 async def _semantic_leak_check(
     tool_context: ToolContext,
+    study_key: str,
     study,
     files: List[tuple[str, Dict[str, Any]]],
     overrides: List[LeakOverride],
@@ -511,6 +523,7 @@ async def _semantic_leak_check(
 
     例：H1 测「低频者用不完」，人设 needs_pains 写「怕再办一张又剩着」→ 拒绝，提示改写成事实
     或写 leak_overrides。判定不可用时返回 status=skipped，不拦截。
+    同一研究第二次起命中项不再拦截：status=flagged，flagged 记录未覆盖的命中项。
     """
     labels = {f"P{index}": persona for index, (_, persona) in enumerate(files, start=1)}
     hypotheses = [
@@ -535,15 +548,24 @@ async def _semantic_leak_check(
         )
 
     blocking = [leak for leak in leaks if not overridden(leak)]
+    if blocking and study_key in _leak_blocked_studies:
+        flagged = [
+            {"persona": labels[leak.persona].get("name"), "field": leak.field, "hypothesis_id": leak.hypothesis_id, "why": leak.why}
+            for leak in blocking
+        ]
+        return {"status": "flagged", "note": "", "overrides": applied, "flagged": flagged}
     if blocking:
+        _leak_blocked_studies.add(study_key)
         details = "; ".join(
             f"{labels[leak.persona].get('name')} {leak.field} ({leak.hypothesis_id}): \"{leak.text[:60]}\" - {leak.why}"
             for leak in blocking
         )
         raise StudyFilesError(
-            f"the semantic leak check found stance fields that predict a hypothesis answer: {details}. Rewrite them as "
-            "past facts (what happened, when, at what cost), or, if a flag is a plain situation fact, pass "
-            "leak_overrides with persona, field, hypothesis_id, and the reason"
+            f"the semantic leak check found stance fields that predict a hypothesis answer: {details}. "
+            "Fix everything in one retry. If a flagged text is already a dated, concrete event, keep it by passing "
+            "leak_overrides with persona, field, hypothesis_id, and the reason; otherwise rewrite it as a past fact "
+            "(what happened, when, at what cost). This check blocks a study only once; a later save is recorded "
+            "with the remaining flags instead of rejected"
         )
     return {"status": "passed", "note": "", "overrides": applied}
 

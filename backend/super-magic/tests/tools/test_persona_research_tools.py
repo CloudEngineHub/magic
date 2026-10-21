@@ -739,12 +739,32 @@ async def test_expression_line_reaches_the_leak_judge_and_blocks(tmp_path, monke
     assert kept.ok is True and _read(tmp_path, f"{study_dir}/panel.json")["leak_check"]["overrides"][0]["field"] == "expression"
 
 
-def test_leak_judge_prompt_flags_when_unsure_and_names_expression():
+def test_leak_judge_prompt_passes_concrete_events_and_names_expression():
     from app.tools.persona_research import semantic_checks
 
     prompt = semantic_checks._LEAK_JUDGE_PROMPT
-    assert "When unsure, flag it" in prompt and "When unsure, do not flag" not in prompt
+    assert "When unsure, do not flag" in prompt and "When unsure, flag it" not in prompt
+    assert "Concrete past events are never leaks" in prompt
     assert "each expression line" in prompt
+
+
+async def test_semantic_leak_check_blocks_a_study_only_once(tmp_path, monkeypatch):
+    """线上：同一研究连续 3 次被拦，改成具体事件后仍被判泄漏，agent 陷入改写循环。"""
+    study_dir = await _study_at(tmp_path, ["clarified", "plan_confirmed", "desk_research_done"])
+    _leak_judge(monkeypatch, [Leak("P1", "needs_pains", "H1", "上个月临时被调小夜", "a specific shift change")])
+    params = SavePersonasParams(study_dir=study_dir, panel_name="p", personas=[_persona("Zhang", "Owners")])
+
+    first = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), params)
+    second = await SavePersonas(base_dir=tmp_path).execute(ToolContext(), params)
+
+    assert first.ok is False
+    assert second.ok is True, second.content
+    leak_check = _read(tmp_path, f"{study_dir}/panel.json")["leak_check"]
+    assert leak_check["status"] == "flagged"
+    assert leak_check["flagged"] == [
+        {"persona": "Zhang", "field": "needs_pains", "hypothesis_id": "H1", "why": "a specific shift change"}
+    ]
+    assert "report limitations" in second.content
 
 
 async def test_leak_judge_drops_items_outside_its_input(monkeypatch):
