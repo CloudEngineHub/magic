@@ -37,6 +37,9 @@ final class ProjectMemberParticipatedQueryTest extends TestCase
 
         self::assertStringContainsString('`p`.`project_mode` not in', $sql);
         self::assertContains(ProjectMode::MICRO_APP->value, ProjectMode::getQueryFilterModes());
+        // 研究项目只经特殊项目接口访问，不能出现在项目列表和最近列表里。
+        self::assertContains(ProjectMode::PERSONA_RESEARCH->value, ProjectMode::getQueryFilterModes());
+        self::assertNotContains(ProjectMode::PERSONA_RESEARCH->value, ProjectMode::getRecentListSpecialModes());
         self::assertStringNotContainsString('magic_super_agent_micro_apps', $sql);
     }
 }
