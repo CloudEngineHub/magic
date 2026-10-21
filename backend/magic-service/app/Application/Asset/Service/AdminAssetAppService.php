@@ -30,9 +30,9 @@ use Qbhy\HyperfAuth\Authenticatable;
 class AdminAssetAppService extends AbstractAssetAppService
 {
     public function __construct(
-        private readonly AssetDomainService $assetDomainService,
+        protected readonly AssetDomainService $assetDomainService,
         ResourceVisibilityDomainService $resourceVisibilityDomainService,
-        private readonly AssetTagDomainService $assetTagDomainService,
+        protected readonly AssetTagDomainService $assetTagDomainService,
     ) {
         parent::__construct($resourceVisibilityDomainService);
     }
@@ -163,7 +163,7 @@ class AdminAssetAppService extends AbstractAssetAppService
     /**
      * 公开资产的可见性跟着启用状态走：下架即撤销，重新上架再补回。
      */
-    private function syncPublicVisibility(AssetDataIsolation $dataIsolation, AssetEntity $asset): void
+    protected function syncPublicVisibility(AssetDataIsolation $dataIsolation, AssetEntity $asset): void
     {
         $visibility = $this->publicVisibility($dataIsolation);
         if ($asset->getStatus()->isEnabled()) {
@@ -173,19 +173,19 @@ class AdminAssetAppService extends AbstractAssetAppService
         $this->revokeAssetVisibility($dataIsolation, $asset, $visibility);
     }
 
-    private function publicVisibility(AssetDataIsolation $dataIsolation): AssetVisibility
+    protected function publicVisibility(AssetDataIsolation $dataIsolation): AssetVisibility
     {
         return AssetVisibility::organization($this->officialOrganizationCode($dataIsolation));
     }
 
-    private function officialDataIsolation(Authenticatable|BaseDataIsolation $authorization): AssetDataIsolation
+    protected function officialDataIsolation(Authenticatable|BaseDataIsolation $authorization): AssetDataIsolation
     {
         $dataIsolation = $this->createAssetDataIsolation($authorization);
         $this->assertOfficialOrganization($dataIsolation);
         return $dataIsolation;
     }
 
-    private function assertOfficialOrganization(AssetDataIsolation $dataIsolation): void
+    protected function assertOfficialOrganization(AssetDataIsolation $dataIsolation): void
     {
         if (! $dataIsolation->isOfficialOrganization()) {
             ExceptionBuilder::throw(AssetErrorCode::ADMIN_DENIED);

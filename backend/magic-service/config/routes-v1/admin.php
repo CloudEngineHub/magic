@@ -9,6 +9,7 @@ use App\Interfaces\Admin\Facade\Agent\AdminAgentApi;
 use App\Interfaces\Admin\Facade\Agent\AgentGlobalSettingsApi;
 use App\Interfaces\Admin\Facade\AppMenu\AppMenuAdminApi;
 use App\Interfaces\Asset\Facade\AdminAssetApi;
+use App\Interfaces\Asset\Facade\AdminPersonaAvatarApi;
 use App\Interfaces\Audit\Facade\AdminOperationLogApi;
 use App\Interfaces\Contact\Facade\Admin\PlatformUserApi;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
@@ -217,6 +218,14 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::delete('/tags/{tagId:\d+}', [AdminAssetApi::class, 'deleteTag']);
         Router::patch('/{assetId:\d+}', [AdminAssetApi::class, 'update']);
         Router::delete('/{assetId:\d+}', [AdminAssetApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
+
+    // 人设头像库管理：只管理业务类型为 PERSONA_AVATAR 的官方素材，暂无界面，供导入脚本使用。
+    Router::addGroup('/persona-avatars', static function (): void {
+        Router::post('', [AdminPersonaAvatarApi::class, 'create']);
+        Router::post('/queries', [AdminPersonaAvatarApi::class, 'queries']);
+        Router::patch('/{assetId:\d+}', [AdminPersonaAvatarApi::class, 'update']);
+        Router::delete('/{assetId:\d+}', [AdminPersonaAvatarApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
 });
 
