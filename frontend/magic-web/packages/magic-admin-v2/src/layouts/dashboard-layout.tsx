@@ -750,10 +750,14 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 			data-testid="dashboard-brand-link"
 			to={href}
 		>
-			{brand.isLoading ? (
+			{brand.isLoading && !brand.logoUrl ? (
 				<BrandLogoPlaceholder isCollapsed={isCollapsed} />
 			) : (
-				<BrandLogo isCollapsed={isCollapsed} logoUrl={brand.logoUrl} name={brand.name} />
+				<BrandLogo
+					isCollapsed={isCollapsed}
+					logoUrl={brand.logoUrl}
+					name={brand.isLoading ? "" : brand.name}
+				/>
 			)}
 			{!isCollapsed ? (
 				<div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
@@ -863,11 +867,13 @@ function getPlatformBrand(
 	isLoading: boolean,
 	organizationLogo?: string,
 ): PlatformBrand {
+	const organizationLogoUrl = organizationLogo?.trim() || ""
+
 	if (isLoading) {
 		return {
 			name: "",
-			logoUrl: "",
-			favicon: "",
+			logoUrl: organizationLogoUrl,
+			favicon: organizationLogoUrl,
 			isLoading: true,
 		}
 	}
@@ -879,13 +885,14 @@ function getPlatformBrand(
 		platformInfo?.minimal_logo ||
 		getLocalizedValue(platformInfo?.logo, locale, fallbackLocale) ||
 		""
-	const organizationLogoUrl = organizationLogo?.trim() || ""
-	const logoUrl = platformLogoUrl || organizationLogoUrl
+	const logoUrl = organizationLogoUrl || platformLogoUrl
+	const favicon =
+		organizationLogoUrl || platformInfo?.favicon || platformLogoUrl || ""
 
 	return {
 		name,
 		logoUrl,
-		favicon: platformInfo?.favicon || logoUrl,
+		favicon,
 		isLoading: false,
 	}
 }
