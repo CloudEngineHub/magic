@@ -53,7 +53,9 @@ export function pptBuildRuntime(
 		})
 	}
 	function send(data: Record<string, unknown>) {
-		window.parent.postMessage({ ...data, documentKey }, parentOrigin)
+		// No object spread: this function is serialized into the iframe, where the build's
+		// down-leveling helper for spread does not exist.
+		window.parent.postMessage(Object.assign({}, data, { documentKey }), parentOrigin)
 	}
 	function onMessage(event: MessageEvent) {
 		const data = event.data
