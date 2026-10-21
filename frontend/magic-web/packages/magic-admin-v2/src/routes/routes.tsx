@@ -14,6 +14,7 @@ import {
 	platformAppMenuAccess,
 	platformCustomProviderLicenseAccess,
 	platformInfoAccess,
+	platformModelMultiplierAccess,
 	platformMaintenanceAccess,
 	platformResourceAlertsAccess,
 	platformMarketplaceAccess,
@@ -197,7 +198,7 @@ function createBaseFeatureRoutes(mode: RuntimeMode): Route[] {
 		path: RoutePath.PlatformModelMultiplier,
 		element: <PlatformModelMultiplierPage />,
 		titleKey: "nav.item.modelMultiplier",
-		validate: platformInfoAccess,
+		validate: platformModelMultiplierAccess,
 		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
 	},
 	{

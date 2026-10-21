@@ -1,5 +1,6 @@
 /** Endpoints that are available in the open-source edition and backed by Magic. */
 export const BaseRequestUrl = {
+	modelBillingMultiplier: "/api/v1/platform/setting/model-billing-multiplier",
 	platformInfo: "/api/v1/platform/setting",
 	modelBillingPreview: "/api/v1/platform/setting/model-billing-preview",
 	officialOrganizationInfo: "/api/v1/admin/service-providers/office-info",
