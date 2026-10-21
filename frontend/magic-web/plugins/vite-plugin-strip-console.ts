@@ -3,13 +3,19 @@ import {
 	createSourceFile,
 	getTrailingCommentRanges,
 	isCallExpression,
+	isAsExpression,
 	isElementAccessExpression,
 	isIdentifier,
+	isNonNullExpression,
+	isParenthesizedExpression,
 	isPropertyAccessExpression,
+	isSatisfiesExpression,
+	isTypeAssertionExpression,
 	ScriptKind,
 	ScriptTarget,
 	SyntaxKind,
 	type CallExpression,
+	type Expression,
 	type Node,
 	type SourceFile,
 } from "typescript"
@@ -21,12 +27,19 @@ import {
  * ts/tsx/js/jsx module, ~29k of them including node_modules, although only a few percent
  * mention `console`. This plugin keeps the same semantics but:
  * - skips modules without `console.` via a native hook filter (no JS call at all);
- * - parses the remaining ones with the TypeScript parser (no type-check, no parent pointers);
+ * - parses the remaining ones with the TypeScript parser (no type-check);
  * - edits by source ranges instead of regenerating code, so untouched code stays byte-identical.
  *
  * Semantics (same as before): every `console.x(...)` / `console[x](...)` call is removed unless
  * a comment containing the keep marker sits before/after the call or its statement, or inside
- * the call. A removed expression statement disappears; a call used as a value becomes `undefined`.
+ * the call. A removed expression statement becomes an empty statement; a call used as a value
+ * becomes `undefined`. `console` wrapped in parentheses or a TS assertion is recognised too.
+ *
+ * Every replacement keeps the original length and line breaks (see `blankOut`). That keeps all
+ * untouched positions valid, so returning `map: null` stays accurate when sourcemaps are on, and
+ * leaving a `;` behind keeps the statement terminator that ASI-sensitive neighbours rely on
+ * (prettier's no-semi style puts a leading `;` before `[`/`(` lines, which belongs to the
+ * previous statement and would otherwise be deleted with it).
  */
 
 const DEFAULT_KEEP_MARKER = "keep-console"
@@ -59,7 +72,41 @@ function isConsoleCall(node: Node): node is CallExpression {
 	// Optional chains (`console?.log`) were never matched by the old plugin; keep that.
 	if (!isPropertyAccessExpression(callee) && !isElementAccessExpression(callee)) return false
 	if (callee.questionDotToken) return false
-	return isIdentifier(callee.expression) && callee.expression.text === "console"
+	const target = skipTransparentWrappers(callee.expression)
+	return isIdentifier(target) && target.text === "console"
+}
+
+/** `(console)`, `console!`, `console as X`, `<X>console`, `console satisfies X` are still `console`. */
+function skipTransparentWrappers(node: Expression): Expression {
+	let current = node
+	while (
+		isParenthesizedExpression(current) ||
+		isNonNullExpression(current) ||
+		isAsExpression(current) ||
+		isTypeAssertionExpression(current) ||
+		isSatisfiesExpression(current)
+	) {
+		current = current.expression
+	}
+	return current
+}
+
+/**
+ * Replaces `[start, end)` with `text` padded by spaces to the original length. Line breaks are
+ * kept so the line count never changes, even if one sits inside the first `text.length` chars.
+ */
+function blankOut(source: string, start: number, end: number, text: string): Edit {
+	const original = source.slice(start, end)
+	const blanked = original.replace(/[^\r\n]/g, " ")
+	// Line breaks inside the first `text.length` chars would be overwritten; re-add them after the
+	// text and shorten the padding by the same amount so the total length stays unchanged.
+	const swallowed =
+		original
+			.slice(0, text.length)
+			.match(/\r\n|\r|\n/g)
+			?.join("") ?? ""
+	const padding = blanked.slice(text.length + swallowed.length)
+	return { start, end, text: text + swallowed + padding }
 }
 
 /** Text that the old Babel logic considered: leading/trailing/inner comments of call and statement. */
@@ -79,32 +126,20 @@ function collectEdits(sourceFile: SourceFile, source: string, marker: string): E
 	const visit = (node: Node) => {
 		if (isConsoleCall(node)) {
 			const parent = node.parent
-			const isStatement = parent.kind === SyntaxKind.ExpressionStatement
-			const statement = isStatement ? parent : undefined
+			const statement = parent.kind === SyntaxKind.ExpressionStatement ? parent : undefined
 
 			if (!hasKeepMarker(node, statement, source, marker)) {
-				if (statement) {
-					// Statement lists can drop the node; single-statement bodies (`if (x) console.log()`)
-					// need an empty statement to stay syntactically valid.
-					const inList = [
-						SyntaxKind.Block,
-						SyntaxKind.SourceFile,
-						SyntaxKind.ModuleBlock,
-						SyntaxKind.CaseClause,
-						SyntaxKind.DefaultClause,
-					].includes(statement.parent.kind)
-					edits.push({
-						start: statement.getStart(sourceFile),
-						end: statement.getEnd(),
-						text: inList ? "" : ";",
-					})
-				} else {
-					edits.push({
-						start: node.getStart(sourceFile),
-						end: node.getEnd(),
-						text: "undefined",
-					})
-				}
+				// Always `;` for statements: valid in lists and single-statement bodies
+				// (`if (x) console.log()`), and it preserves the terminator for ASI neighbours.
+				const target = statement ?? node
+				edits.push(
+					blankOut(
+						source,
+						target.getStart(sourceFile),
+						target.getEnd(),
+						statement ? ";" : "undefined",
+					),
+				)
 			}
 			// Nested console calls live inside the replaced range (or are kept with their parent).
 			return
@@ -156,7 +191,7 @@ export default function vitePluginStripConsole({
 			filter: { id: SCRIPT_ID_FILTER, code: CONSOLE_CODE_FILTER },
 			handler(code, id) {
 				const transformed = stripConsole(code, id, keepMarker)
-				// Sourcemaps are off in production by default; removed ranges are statement-granular.
+				// Replacements preserve length and line breaks, so a null map keeps positions accurate.
 				return transformed === null ? null : { code: transformed, map: null }
 			},
 		},
