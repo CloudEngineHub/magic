@@ -11,6 +11,8 @@ use App\Application\Kernel\DTO\PlatformSettings;
 use App\Application\Kernel\Enum\MagicOperationEnum;
 use App\Application\Kernel\Enum\MagicResourceEnum;
 use App\Application\Kernel\Service\PlatformSettingsAppService;
+use App\Application\Permission\Service\RoleAppService;
+use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\Traits\MagicUserAuthorizationTrait;
@@ -26,6 +28,7 @@ class PlatformSettingsApi
 
     public function __construct(
         private readonly PlatformSettingsAppService $platformSettingsAppService,
+        private readonly RoleAppService $roleAppService,
     ) {
     }
 
@@ -40,10 +43,22 @@ class PlatformSettingsApi
     #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_PLATFORM_INFO, MagicOperationEnum::EDIT)]
     public function update(PlatformSettingsUpdateRequest $request): array
     {
-        $existing = $this->platformSettingsAppService->get();
-        $data = $existing->toArray();
-
         $payload = $request->validated();
+        if (isset($payload['model_billing_multiplier'])) {
+            $authorization = $this->getAuthorization();
+            $dataIsolation = PermissionDataIsolation::create($authorization->getOrganizationCode(), $authorization->getId());
+            if (! $this->roleAppService->hasPermission($dataIsolation, $authorization->getId(), MagicResourceEnum::PLATFORM_AI_MODEL_MULTIPLIER->value . '.' . MagicOperationEnum::EDIT->value)) {
+                ExceptionBuilder::throw(PermissionErrorCode::AccessDenied, 'permission.error.access_denied');
+            }
+        }
+        $settings = $this->platformSettingsAppService->update(fn (PlatformSettings $existing): PlatformSettings => $this->applyUpdate($existing, $payload));
+        return self::platformSettingsToResponse($settings->toArray());
+    }
+
+    /** 只合并当前请求提供的字段，读取与保存处于同一更新临界区。 */
+    private function applyUpdate(PlatformSettings $existing, array $payload): PlatformSettings
+    {
+        $data = $existing->toArray();
 
         // 允许部分字段更新：仅当传入非空时替换
         if (array_key_exists('logo_zh_url', $payload) && $payload['logo_zh_url'] !== null) {
@@ -103,9 +118,7 @@ class PlatformSettingsApi
         $this->validateUrls($data);
         $this->validateFooter($data);
 
-        $settings = PlatformSettings::fromArray($data);
-        $this->platformSettingsAppService->save($settings);
-        return self::platformSettingsToResponse($settings->toArray());
+        return PlatformSettings::fromArray($data);
     }
 
     /**

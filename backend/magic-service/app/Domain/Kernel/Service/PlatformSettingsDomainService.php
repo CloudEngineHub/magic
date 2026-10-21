@@ -11,6 +11,8 @@ use App\Application\Contact\UserSetting\UserSettingKey;
 use App\Application\Kernel\DTO\PlatformSettings;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
 use App\Domain\Contact\Repository\Facade\MagicUserSettingRepositoryInterface;
+use App\Infrastructure\Util\Locker\Excpetion\LockException;
+use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Infrastructure\Util\Redis\GlobalConfigCacheUtil;
 use Hyperf\Redis\Redis;
 
@@ -25,6 +27,7 @@ class PlatformSettingsDomainService
     public function __construct(
         private readonly MagicUserSettingRepositoryInterface $magicUserSettingRepository,
         private readonly Redis $redis,
+        private readonly LockerInterface $locker,
     ) {
     }
 
@@ -97,10 +100,32 @@ class PlatformSettingsDomainService
         return ! empty($descriptionI18n) ? reset($descriptionI18n) : '';
     }
 
-    /**
-     * Save platform settings.
-     */
+    /** 在统一互斥范围内读取最新配置并应用字段更新，防止不同页面互相覆盖。 */
+    public function update(callable $updater): PlatformSettings
+    {
+        $name = 'platform_settings_update';
+        $owner = bin2hex(random_bytes(16));
+        if (! $this->locker->spinLock($name, $owner, 180, 3)) {
+            throw new LockException();
+        }
+        try {
+            $entity = $this->magicUserSettingRepository->getGlobal(UserSettingKey::PlatformSettings->value);
+            $current = $entity ? PlatformSettings::fromArray($entity->getValue()) : new PlatformSettings();
+            $settings = $updater($current);
+            return $this->persist($settings);
+        } finally {
+            $this->locker->release($name, $owner);
+        }
+    }
+
+    /** 保留全量保存契约；管理端部分更新必须使用 update，在锁内合并最新状态。 */
     public function save(PlatformSettings $settings): PlatformSettings
+    {
+        return $this->update(static fn (PlatformSettings $current): PlatformSettings => $settings);
+    }
+
+    /** 保存已归一化配置并清除平台缓存，仅供更新临界区调用。 */
+    private function persist(PlatformSettings $settings): PlatformSettings
     {
         $entity = new MagicUserSettingEntity();
         $entity->setKey(UserSettingKey::PlatformSettings->value);

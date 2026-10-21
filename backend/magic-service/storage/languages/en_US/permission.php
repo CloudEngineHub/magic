@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 return [
     'resource' => [
+        'model_multiplier' => 'Model Multiplier',
         'admin' => 'Admin',
         'admin_ai' => 'AI Management',
         'admin_safe' => 'Security & Permission',

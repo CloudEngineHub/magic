@@ -41,6 +41,14 @@ return [
             ],
             'tag' => '平台模型',
         ],
+        'platform.ai.model_multiplier' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
+                ['key' => 'model_management', 'label' => '模型管理', 'order' => 6],
+                ['key' => 'model_multiplier', 'label' => '模型倍率', 'order' => 3],
+            ],
+            'tag' => '模型管理',
+        ],
         'platform.ai.model_management' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],

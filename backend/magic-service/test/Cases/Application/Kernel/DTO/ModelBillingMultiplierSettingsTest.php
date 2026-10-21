@@ -12,8 +12,9 @@ use App\Application\Kernel\DTO\PlatformSettings;
 use App\Application\Kernel\Service\PlatformSettingsAppService;
 use App\Application\Mode\Service\ModelBillingMultiplierCalculator;
 use App\Domain\Provider\Entity\ProviderModelEntity;
+use App\Interfaces\Kernel\DTO\Request\ModelBillingMultiplierUpdateRequest;
 use App\Interfaces\Kernel\DTO\Request\PlatformSettingsUpdateRequest;
-use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
+use App\Interfaces\Kernel\Facade\ModelBillingMultiplierApi;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -191,18 +192,20 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $stored = new PlatformSettings();
         $service = $this->createMock(PlatformSettingsAppService::class);
         $service->method('get')->willReturnCallback(static function () use (&$stored) { return $stored; });
-        $service->expects($this->exactly(2))->method('save')->willReturnCallback(static function (PlatformSettings $settings) use (&$stored) {
-            $stored = $settings;
+        $service->expects($this->exactly(2))->method('updateModelBillingMultiplier')->willReturnCallback(static function (array $overrides) use (&$stored) {
+            $data = $stored->toArray();
+            $data['model_billing_multiplier'] = $stored->getModelBillingMultiplier()->withOverrides($overrides)->toArray();
+            $stored = PlatformSettings::fromArray($data);
             return $stored;
         });
-        $api = new PlatformSettingsApi($service);
-        $request = $this->createMock(PlatformSettingsUpdateRequest::class);
+        $api = new ModelBillingMultiplierApi($service);
+        $request = $this->createMock(ModelBillingMultiplierUpdateRequest::class);
         $request->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => true, 'input_price_cny' => '2.000000000001', 'output_price_cny' => '3', 'base_price_cny' => null]]);
         $response = $api->update($request);
         $this->assertSame('0.02300000000001', $response['model_billing_multiplier']['base_price_cny']);
         $this->assertSame('2.000000000001', $response['model_billing_multiplier']['input_price_cny']);
         $this->assertSame('7', $response['model_billing_multiplier']['usd_to_cny_rate']);
-        $disable = $this->createMock(PlatformSettingsUpdateRequest::class);
+        $disable = $this->createMock(ModelBillingMultiplierUpdateRequest::class);
         $disable->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => false]]);
         $api->update($disable);
         $after = $api->show()['model_billing_multiplier'];

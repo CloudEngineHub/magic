@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 return [
     'resource' => [
+        'model_multiplier' => '模型倍率',
         'admin' => '管理后台',
         'admin_ai' => 'AI管理',
         'admin_safe' => '安全与权限',
