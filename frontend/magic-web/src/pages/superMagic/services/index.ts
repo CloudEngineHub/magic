@@ -26,6 +26,7 @@ import {
 	DEFAULT_TOPIC_ID,
 } from "@/services/superMagic/topicModel"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
+import { isPersonaResearchEnabled } from "@/services/personaResearchFeature"
 import { SuperMagicApi } from "@/apis"
 import type { TopicStore } from "../stores/core/topic"
 import topicReadProgressService from "./topicReadProgressService"
@@ -543,6 +544,14 @@ class SuperMagicService {
 			this.route.navigateToMicroApp(resolvedProject.micro_app_id)
 			return
 		}
+		if (
+			resolvedProject.project_mode === TopicMode.PersonaResearch &&
+			isPersonaResearchEnabled()
+		) {
+			// 项目名是内部标识，工作区页无法呈现研究内容，统一进研究首页。
+			this.route.navigateToPersonaResearch()
+			return
+		}
 
 		// 1. 同步设置与检查
 		const _isReadOnlyProject = isReadOnlyProject(resolvedProject.user_role)
@@ -715,6 +724,11 @@ class SuperMagicService {
 			this.project.recordProjectVisit(project)
 			projectStore.setSelectedProject(project)
 			this.route.navigateToMicroApp(project.micro_app_id)
+			return
+		}
+		if (project.project_mode === TopicMode.PersonaResearch && isPersonaResearchEnabled()) {
+			// 项目名是内部标识，工作区页无法呈现研究内容，统一进研究首页。
+			this.route.navigateToPersonaResearch()
 			return
 		}
 		// 1. 同步设置与检查

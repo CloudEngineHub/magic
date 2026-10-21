@@ -673,6 +673,11 @@ class RouteManageService {
 		})
 	}
 
+	/** 研究是每个用户一个的特殊项目，入口是研究首页而不是项目工作区。 */
+	navigateToPersonaResearch(replace?: boolean) {
+		this.safeNavigate({ name: RouteName.PersonaResearch, replace })
+	}
+
 	navigateToChatProject(
 		project: ProjectListItem,
 		topicId?: string,
