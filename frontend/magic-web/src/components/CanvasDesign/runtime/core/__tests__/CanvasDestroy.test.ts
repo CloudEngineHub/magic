@@ -54,7 +54,6 @@ describe("Canvas destroy", () => {
 			selectionManager: destroyable("selectionManager"),
 			transformManager: destroyable("transformManager"),
 			hoverManager: destroyable("hoverManager"),
-			videoSelectionPlaybackManager: destroyable("videoSelectionPlaybackManager"),
 			videoPlaybackInteractionManager: destroyable("videoPlaybackInteractionManager"),
 			toolManager: destroyable("toolManager"),
 			inputManager: destroyable("inputManager"),

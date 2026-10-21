@@ -189,4 +189,30 @@ describe("VideoRenderer player controls", () => {
 		expect(renderer.createPlayerNode(640, 360, canvas)).toBeNull()
 		renderer.destroy()
 	})
+
+	it("stops and resumes the playback render loop with render visibility", () => {
+		let nextRafId = 1
+		const requestAnimationFrameSpy = vi
+			.spyOn(globalThis, "requestAnimationFrame")
+			.mockImplementation(() => nextRafId++)
+		const cancelAnimationFrameSpy = vi
+			.spyOn(globalThis, "cancelAnimationFrame")
+			.mockImplementation(() => undefined)
+		const renderer = new VideoRenderer()
+		const canvas = createCanvasMock()
+		const video = createFakeVideo({ paused: false })
+		renderer.attachPlayback(video)
+		renderer.createPlayerNode(640, 360, canvas)
+
+		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(1)
+		renderer.setRenderVisibility(false)
+		expect(cancelAnimationFrameSpy).toHaveBeenCalledWith(1)
+
+		renderer.setRenderVisibility(true)
+		expect(requestAnimationFrameSpy).toHaveBeenCalledTimes(2)
+
+		renderer.destroy()
+		requestAnimationFrameSpy.mockRestore()
+		cancelAnimationFrameSpy.mockRestore()
+	})
 })

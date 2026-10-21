@@ -41,6 +41,7 @@ import {
 } from "../../resources/video/videoPlaybackConsumerIds"
 import { VIDEO_CONFIG } from "./VideoElement.config"
 import type { Canvas } from "../../core/Canvas"
+import type { CanvasConsumerVisibility } from "../../resources/visibility/CanvasVisibilityManager"
 import type { VideoPlaybackConsumerState } from "../../resources/video/VideoPlaybackManager"
 import type {
 	LoadedVideoResource,
@@ -124,6 +125,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	private isRetryEditing = false
 	private generationRuntimeUnsubscribe?: () => void
 	private mediaReplaceStateUnsubscribe?: () => void
+	private consumerVisibility: CanvasConsumerVisibility = "visible"
+	private consumerVisibilityUnsubscribe?: () => void
 
 	constructor(data: VideoElementData, canvas: Canvas) {
 		super(data, canvas)
@@ -219,6 +222,8 @@ export class VideoElement extends BaseElement<VideoElementData> {
 		this.mediaReplaceStateUnsubscribe = undefined
 		this.contentPreviewUnsubscribe?.()
 		this.contentPreviewUnsubscribe = undefined
+		this.consumerVisibilityUnsubscribe?.()
+		this.consumerVisibilityUnsubscribe = undefined
 		super.destroy()
 	}
 
@@ -1022,10 +1027,28 @@ export class VideoElement extends BaseElement<VideoElementData> {
 
 		this.syncRenderLayout(this.data.width, this.data.height)
 		this.mainVersionTagDecorator?.refreshLayout()
+		this.syncRenderVisibility()
+		if (!this.consumerVisibilityUnsubscribe) {
+			this.consumerVisibilityUnsubscribe =
+				this.canvas.visibilityManager?.registerConsumerVisibility?.(
+					this.data.id,
+					(state) => {
+						this.consumerVisibility = state
+						this.syncRenderVisibility()
+						if (state === "far") this.pausePreview()
+					},
+				)
+		}
 		const src = this.getVideoSrc()
 		if (src) {
 			this.canvas.visibilityManager.registerVideoElement(this.data.id, src)
 		}
+	}
+
+	private syncRenderVisibility(): void {
+		const enabled = this.consumerVisibility !== "far"
+		this.renderer.setRenderVisibility(enabled)
+		this.borderDecorator?.setRenderVisibility(enabled)
 	}
 
 	update(newData: VideoElementData): boolean {
@@ -1079,6 +1102,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 	}
 
 	private renderPreview(group: Konva.Group, width: number, height: number): void {
+		this.syncRenderVisibility()
 		const playerGroup = this.renderer.createPlayerNode(width, height, this.canvas, {
 			showLoadingOverlay: this.isInlinePlaybackPending || this.isInlinePlaybackRefreshing,
 			showDraftTag: this.getVideoContent()?.generateVideoRequest?.generation?.draft === true,
@@ -1182,6 +1206,7 @@ export class VideoElement extends BaseElement<VideoElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
+		this.syncRenderVisibility()
 	}
 
 	private createMediaStatusTags(group: Konva.Group, width: number, height: number): void {

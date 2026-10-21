@@ -46,6 +46,7 @@ import {
 import type { ResourceLoadFailureReason } from "../../resources/media-common/resourceLoadFailure"
 import { TransformBehavior } from "../../interaction/transform/TransformManager"
 import type { Canvas } from "../../core/Canvas"
+import type { CanvasConsumerVisibility } from "../../resources/visibility/CanvasVisibilityManager"
 import type {
 	GenerationAttemptTarget,
 	GenerationOperation,
@@ -150,6 +151,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	// 重渲染只停定时器、保留锚点，避免兼容路径的进度回退。
 	private generationProgressAnchor?: { contentId: string; startedAtMs: number }
 	private generationProgressTimer?: ReturnType<typeof setInterval>
+	private consumerVisibility: CanvasConsumerVisibility = "visible"
+	private consumerVisibilityUnsubscribe?: () => void
 
 	// 缓存已加载的图片对象（ImageBitmap | HTMLImageElement，由 ImageResourceManager 统一管理）
 	private loadedImage?: ImageSource
@@ -520,6 +523,8 @@ export class ImageElement extends BaseElement<ImageElementData> {
 	override destroy(): void {
 		this.renderToken += 1
 		this.canvas.visibilityManager.unregisterImageElement(this.data.id)
+		this.consumerVisibilityUnsubscribe?.()
+		this.consumerVisibilityUnsubscribe = undefined
 		this.removeResourceLoadedListener()
 		this.contentPreviewUnsubscribe?.()
 		this.contentPreviewUnsubscribe = undefined
@@ -554,6 +559,45 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.loadedImageVariant = undefined
 		this.loadedImageSourceWidth = undefined
 		this.loadedImageSourceHeight = undefined
+	}
+
+	private ensureConsumerVisibilitySubscription(): void {
+		if (
+			this.consumerVisibilityUnsubscribe ||
+			!this.canvas.visibilityManager?.registerConsumerVisibility ||
+			this.getDisplayState().surface === "image"
+		) {
+			return
+		}
+
+		this.consumerVisibilityUnsubscribe =
+			this.canvas.visibilityManager.registerConsumerVisibility(this.data.id, (state) => {
+				this.consumerVisibility = state
+				this.syncRenderVisibility()
+			})
+	}
+
+	private syncRenderVisibility(): void {
+		const enabled = this.consumerVisibility !== "far"
+		this.borderDecorator?.setRenderVisibility(enabled)
+		if (!enabled) {
+			this.stopGenerationProgress()
+			return
+		}
+
+		const displayState = this.getDisplayState()
+		if (
+			displayState.status === "generating" &&
+			this.node instanceof Konva.Group &&
+			this.contentGroup
+		) {
+			this.attachGenerationProgress(
+				this.node,
+				this.contentGroup,
+				this.getGeneratingPlaceholderText(displayState),
+				this.renderToken,
+			)
+		}
 	}
 
 	/**
@@ -734,6 +778,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	override onMounted(): void {
 		super.onMounted()
+		this.ensureConsumerVisibilitySubscription()
 		this.mainVersionTagDecorator?.refreshLayout()
 		const src = this.getActiveContentData().src
 		if (src) {
@@ -2380,6 +2425,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		}
 
 		if (needsRerender) {
+			this.ensureConsumerVisibilitySubscription()
 			return true
 		}
 
@@ -2555,6 +2601,10 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		const contentId = this.getActiveContentData().contentId
 		const textNode = contentGroup.findOne<Konva.Text>(".placeholder-text")
 		if (!contentId || !textNode) {
+			return
+		}
+		if (this.consumerVisibility === "far") {
+			this.stopGenerationProgress()
 			return
 		}
 
@@ -2900,6 +2950,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			canvas: this.canvas,
 		})
 		this.borderDecorator.create(backgroundNode)
+		this.syncRenderVisibility()
 	}
 
 	private createCornerActions(

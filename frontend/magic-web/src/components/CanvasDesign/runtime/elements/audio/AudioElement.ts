@@ -10,6 +10,7 @@ import {
 	getContentById,
 } from "../../document/elementContent"
 import type { Canvas } from "../../core/Canvas"
+import type { CanvasConsumerVisibility } from "../../resources/visibility/CanvasVisibilityManager"
 import {
 	BaseElement,
 	type ElementTransformConstraints,
@@ -227,6 +228,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	private renderedState?: AudioRenderState
 	private retryingPreparation = false
 	private statusSpinnerAnimation?: Konva.Animation
+	private consumerVisibility: CanvasConsumerVisibility = "visible"
+	private consumerVisibilityUnsubscribe?: () => void
 
 	constructor(data: AudioElementData, canvas: Canvas) {
 		const normalizedData = normalizeAudioDimensionsOnLoad(data)
@@ -579,11 +582,29 @@ export class AudioElement extends BaseElement<AudioElementData> {
 			this.syncRenderLayout(this.node.width(), this.node.height())
 			this.syncInteractionHitTargets()
 		}
-		this.startStatusSpinnerAnimation()
+		const hasStatusSpinner =
+			this.node instanceof Konva.Group && !!this.node.findOne(`.${NODE_NAMES.statusSpinner}`)
+		if (hasStatusSpinner && !this.consumerVisibilityUnsubscribe) {
+			if (this.canvas.visibilityManager?.registerConsumerVisibility) {
+				this.consumerVisibilityUnsubscribe =
+					this.canvas.visibilityManager.registerConsumerVisibility(
+						this.data.id,
+						(state) => {
+							this.consumerVisibility = state
+							if (state === "far") {
+								this.stopStatusSpinnerAnimation()
+							} else {
+								this.startStatusSpinnerAnimation()
+							}
+						},
+					)
+			}
+		}
 		const src = this.getAudioSrc()
 		if (src) {
 			this.canvas.visibilityManager.registerAudioElement(this.data.id, src)
 		}
+		this.startStatusSpinnerAnimation()
 	}
 
 	public update(newData: AudioElementData): boolean {
@@ -702,6 +723,8 @@ export class AudioElement extends BaseElement<AudioElementData> {
 	public override destroy(): void {
 		this.finishScrub()
 		this.canvas.visibilityManager.unregisterAudioElement(this.data.id)
+		this.consumerVisibilityUnsubscribe?.()
+		this.consumerVisibilityUnsubscribe = undefined
 		this.playbackUnsubscribe()
 		this.waveformUnsubscribe()
 		this.resourceFailureUnsubscribe()
@@ -733,6 +756,7 @@ export class AudioElement extends BaseElement<AudioElementData> {
 
 	private startStatusSpinnerAnimation(): void {
 		this.stopStatusSpinnerAnimation()
+		if (this.consumerVisibility === "far") return
 		if (!(this.node instanceof Konva.Group)) return
 		const spinner = this.node.findOne(`.${NODE_NAMES.statusSpinner}`) as Konva.Shape | undefined
 		const layer = spinner?.getLayer()
