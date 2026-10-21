@@ -87,6 +87,8 @@ export function ModelInfoHoverProvider({
 		activeId: null as string | null,
 		pendingId: null as string | null,
 		effortMenuOpen: false,
+		// 鼠标是否在卡片上：强度菜单收起时据此决定卡片是留下还是随之收起。
+		pointerInCard: false,
 		scrolling: false,
 		openTimer: undefined as ReturnType<typeof setTimeout> | undefined,
 		closeTimer: undefined as ReturnType<typeof setTimeout> | undefined,
@@ -117,6 +119,7 @@ export function ModelInfoHoverProvider({
 			state.open = false
 			state.activeId = null
 			state.effortMenuOpen = false
+			state.pointerInCard = false
 			setCloseInstantly(instant)
 			setOpen(false)
 		}
@@ -164,15 +167,24 @@ export function ModelInfoHoverProvider({
 			hide,
 			scheduleClose,
 			enterCard() {
+				state.pointerInCard = true
 				cancelOpen()
 				cancelClose()
+			},
+			leaveCard() {
+				state.pointerInCard = false
+				scheduleClose()
 			},
 			setEffortMenuOpen(menuOpen: boolean) {
 				state.effortMenuOpen = menuOpen
 				// 打开菜单前可能已有排队的关闭（例如行失焦），菜单打开即以菜单为准，撤销它。
-				if (menuOpen) cancelClose()
-				// 菜单收起（选完或点到外面）后，鼠标多半已不在卡片上，直接收起卡片。
-				if (!menuOpen) hide(false)
+				if (menuOpen) {
+					cancelClose()
+					return
+				}
+				// 菜单收起时只收菜单：点在卡片空白处时鼠标仍在卡片上，卡片保留；
+				// 在菜单里选完或点到卡片外时鼠标已离开卡片，按正常的离开延迟收起。
+				if (!state.pointerInCard) scheduleClose()
 			},
 			onScroll() {
 				state.scrolling = true
@@ -229,8 +241,11 @@ export function ModelInfoHoverProvider({
 						onCloseAutoFocus={(event) => event.preventDefault()}
 						// 焦点在行之间移动由行的 focus/blur 处理；交给 Popover 关闭会把下一行刚排上的打开一并取消。
 						onFocusOutside={(event) => event.preventDefault()}
+						// Radix 给内容加了 tabindex=-1，点卡片空白处会让卡片抢到焦点并闪出焦点框；
+						// 卡片本身不需要接收焦点（里面的按钮各自可聚焦），去掉它。
+						tabIndex={undefined}
 						onPointerEnter={actions.enterCard}
-						onPointerLeave={actions.scheduleClose}
+						onPointerLeave={actions.leaveCard}
 						// 层级不低于 DropdownMenu 本身，碰撞翻转到面板上方时不会被面板挡住。
 						className={cn(
 							"z-dropdown w-60 max-w-[calc(100vw-24px)] rounded-xl border-border/80 bg-card p-0 shadow-[0_12px_32px_rgba(15,23,42,0.14)] duration-100",

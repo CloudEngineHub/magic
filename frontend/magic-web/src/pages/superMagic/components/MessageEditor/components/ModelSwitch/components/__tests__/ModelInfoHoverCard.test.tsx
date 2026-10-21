@@ -291,4 +291,24 @@ describe("ModelInfoHoverCard", () => {
 		expect(screen.getByTestId("model-info-hover-card")).toBeTruthy()
 		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
 	})
+
+	it("closes only the reasoning menu when clicking a blank area of the card", () => {
+		renderCard(createModel({ reasoning_effort_levels: ["low", "high"] }), vi.fn())
+		hoverRow()
+		const card = screen.getByTestId("model-info-hover-card")
+		fireEvent.pointerLeave(screen.getByTestId("model-switch-item"), { pointerType: "mouse" })
+		fireEvent.pointerEnter(card, { pointerType: "mouse" })
+
+		fireEvent.click(screen.getByTestId("model-switch-reasoning-trigger"))
+		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
+		// Radix 在下一个计时周期才开始监听外部点击。
+		advance(0)
+
+		// 点在卡片的描述区域：菜单收起，卡片保留。
+		fireEvent.pointerDown(card.firstElementChild ?? card)
+		advance(1000)
+
+		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
+		expect(screen.getByTestId("model-info-hover-card")).toBeTruthy()
+	})
 })

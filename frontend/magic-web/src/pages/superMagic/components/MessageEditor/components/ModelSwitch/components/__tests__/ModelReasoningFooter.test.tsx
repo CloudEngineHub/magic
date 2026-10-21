@@ -162,4 +162,29 @@ describe("ModelReasoningFooter (panel)", () => {
 		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
 		expect(onReasoningEffortChange).not.toHaveBeenCalled()
 	})
+
+	describe("focus handling", () => {
+		it("moves focus to the current level when the menu is opened from the keyboard", () => {
+			renderFooter()
+			const trigger = screen.getByTestId("model-switch-reasoning-trigger")
+			fireEvent.keyDown(trigger, { key: "Enter" })
+			fireEvent.click(trigger)
+
+			// 缓存里的档位是 high，键盘打开后焦点落在它上面。
+			expect(document.activeElement).toBe(
+				screen.getByTestId("model-switch-reasoning-option-high"),
+			)
+		})
+
+		it("leaves focus alone when the menu is opened with the mouse", () => {
+			renderFooter()
+			const trigger = screen.getByTestId("model-switch-reasoning-trigger")
+			trigger.focus()
+			fireEvent.pointerDown(trigger, { pointerType: "mouse" })
+			fireEvent.click(trigger)
+
+			expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
+			expect(document.activeElement).toBe(trigger)
+		})
+	})
 })

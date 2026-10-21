@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Check, ChevronDown } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
@@ -35,6 +35,12 @@ export function ReasoningEffortSelect({
 	className,
 }: ReasoningEffortSelectProps) {
 	const [open, setOpen] = useState(false)
+	/**
+	 * 最近一次开合是否由鼠标或触摸引起。鼠标操作时不用脚本转移焦点：
+	 * 程序化的焦点移动会让浏览器（或系统的焦点高亮）在菜单、按钮上闪出焦点框。
+	 * 键盘操作仍按无障碍要求把焦点移进菜单、关闭后还给按钮。
+	 */
+	const pointerInteractionRef = useRef(false)
 	const { labels, defaultLabel, title } = useReasoningEffortLabels()
 	const levels = getSelectableReasoningLevels(model)
 	const canSelect = levels.length > 0
@@ -65,6 +71,12 @@ export function ReasoningEffortSelect({
 				className,
 			)}
 			aria-expanded={canSelect ? open : undefined}
+			onPointerDown={() => {
+				pointerInteractionRef.current = true
+			}}
+			onKeyDown={() => {
+				pointerInteractionRef.current = false
+			}}
 			data-testid={
 				canSelect ? "model-switch-reasoning-trigger" : "model-switch-reasoning-locked"
 			}
@@ -100,6 +112,26 @@ export function ReasoningEffortSelect({
 				collisionPadding={12}
 				// 层级不低于模型面板本身，向上弹出盖在列表上时不会被面板挡住。
 				className="z-dropdown w-36 rounded-lg p-0 duration-100"
+				onOpenAutoFocus={(event) => {
+					// 默认会聚焦滚动区域本身；键盘打开时改为聚焦当前档位，鼠标打开时焦点留在按钮上。
+					event.preventDefault()
+					if (pointerInteractionRef.current) return
+					const content = event.currentTarget
+					if (!(content instanceof HTMLElement)) return
+					content.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus()
+				}}
+				onCloseAutoFocus={(event) => {
+					if (pointerInteractionRef.current) event.preventDefault()
+				}}
+				onPointerDownOutside={() => {
+					pointerInteractionRef.current = true
+				}}
+				onKeyDown={(event) => {
+					// 键盘关闭（Esc）或键盘选中时，关闭后把焦点还给按钮。
+					if (event.key === "Escape" || event.key === "Enter" || event.key === " ") {
+						pointerInteractionRef.current = false
+					}
+				}}
 			>
 				<ScrollArea viewportClassName="max-h-64">
 					<div className="flex flex-col p-1" role="group" aria-label={title}>
@@ -112,6 +144,9 @@ export function ReasoningEffortSelect({
 									type="button"
 									variant="ghost"
 									className="h-8 w-full justify-between px-2 text-xs font-normal"
+									onPointerDown={() => {
+										pointerInteractionRef.current = true
+									}}
 									onClick={() => selectEffort(level)}
 									aria-pressed={selected === level}
 									data-testid={`model-switch-reasoning-option-${level ?? "default"}`}
