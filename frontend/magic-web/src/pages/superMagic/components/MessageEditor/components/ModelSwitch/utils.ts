@@ -70,14 +70,6 @@ export function getModelDisplayedReasoningEffort(
 	return getModelReasoningEffort(model) ?? getModelDefaultReasoningEffort(model)
 }
 
-/** 再次点击已选档位清除覆盖，恢复后台设置；只返回用户覆盖，不冻结继承值。 */
-export function getNextModelReasoningEffort(
-	model: ModelItem,
-	level: ReasoningEffort,
-): ReasoningEffort | undefined {
-	return getModelDisplayedReasoningEffort(model) === level ? undefined : level
-}
-
 /**
  * Check if a model has a specific tag
  * @param model - The model to check

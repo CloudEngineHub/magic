@@ -1,4 +1,3 @@
-import { ModelReasoningDetails } from "./ModelReasoningDetails"
 import { Check } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -9,6 +8,7 @@ import type { ModelItem, ModelListGroup, MessageEditorSize } from "../types"
 import { isModelDisabled } from "../utils"
 import { CollapsibleDescription } from "./CollapsibleDescription"
 import ModelIcon from "./ModelIcon"
+import { ModelInfoHoverCard } from "./ModelInfoHoverCard"
 import ModelName from "./ModelName"
 import ModelTags from "./ModelTags"
 import ProviderName from "./ProviderName"
@@ -24,12 +24,11 @@ interface ModelGroupSectionProps {
 	selectedModel: ModelItem | null
 	size: MessageEditorSize
 	onModelClick: (model: ModelItem) => void
-	onReasoningEffortChange?: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	isLanguageModel?: boolean
-	/** 移动端弹层没有悬停详情，思考强度只从底部点按条修改。 */
-	showReasoningDetails?: boolean
+	/** 桌面语言模型行悬停显示只读信息卡；移动端弹层没有悬停，传 false。 */
+	showModelInfo?: boolean
 }
 
 export function ModelGroupSection({
@@ -37,11 +36,10 @@ export function ModelGroupSection({
 	selectedModel,
 	size,
 	onModelClick,
-	onReasoningEffortChange,
 	selectedItemRef,
 	getModelDescription,
 	isLanguageModel = true,
-	showReasoningDetails = true,
+	showModelInfo = true,
 }: ModelGroupSectionProps) {
 	const { t } = useTranslation("super")
 	const isMobile = size === "mobile"
@@ -57,7 +55,7 @@ export function ModelGroupSection({
 	}
 
 	return (
-		<FlexBox gap={3} vertical className="last:border-b-0 last:pb-0">
+		<FlexBox gap={2} vertical className="last:border-b-0 last:pb-0">
 			<ProviderName item={item.group} />
 			<div className="flex flex-col gap-0.5">
 				{item.displayModels.map((model) => {
@@ -81,98 +79,105 @@ export function ModelGroupSection({
 						? `${model.model_name || model.model_id}，${description}`
 						: model.model_name || model.model_id
 
-					const row = !isMobile ? (
-						<div
-							key={model.model_id}
-							ref={isSelected ? selectedItemRef : null}
-							className={cn(
-								"relative flex min-h-11 items-center gap-3 rounded-xl border border-transparent px-3 py-2",
-								"cursor-pointer transition-colors duration-100",
-								"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/70",
-								isSelected && "bg-muted/80",
-								isDisabled && "cursor-not-allowed opacity-50",
-							)}
-							onClick={() => onModelClick(model)}
-							role="button"
-							tabIndex={isDisabled ? -1 : 0}
-							onKeyDown={(event) => {
-								if (isDisabled) return
-								if (event.key !== "Enter" && event.key !== " ") return
-								event.preventDefault()
-								onModelClick(model)
-							}}
-							aria-label={ariaLabel}
-							aria-pressed={isSelected}
-							data-testid="model-switch-item"
-							data-model-id={model.model_id}
-							data-model-name={model.model_name}
-							data-selected={isSelected}
-						>
-							{/* 固定图标列宽，完整展示模型原图，名称和倍率不会随图标比例错位。 */}
-							<span
-								className="flex size-4 shrink-0 items-center justify-center text-muted-foreground"
-								aria-hidden="true"
-							>
-								<ModelIcon
-									model={model}
-									size={16}
-									className="size-4 object-contain"
-									defaultColor="currentColor"
-								/>
-							</span>
-							<FlexBox vertical gap={1} flex={1} className="min-w-0">
-								<FlexBox gap={2} align="center" className="min-w-0">
-									<ModelName
-										model={model}
-										isSelected={false}
-										className={cn(
-											"w-fit max-w-full !text-sm !font-medium",
-											isLanguageModel && "min-w-0 flex-1",
-											isDisabled && "opacity-50",
-										)}
-									/>
-									<ModelTags model={model} />
-								</FlexBox>
-								{!isLanguageModel && (
-									<CollapsibleDescription
-										description={description}
-										isDisabled={isDisabled}
-										isExpanded={!!expandedDescriptions[model.model_id]}
-										expandLabel={t(
-											"messageEditor.modelSwitch.expandDescription",
-										)}
-										collapseLabel={t(
-											"messageEditor.modelSwitch.collapseDescription",
-										)}
-										onToggle={(event) =>
-											toggleDescription(model.model_id, event)
-										}
-									/>
+					if (!isMobile) {
+						// 桌面紧凑行：分组标题已经带供应商图标，行内不再重复；
+						// 选中态只靠勾号和名称加重表达，浅灰底留给悬停，两种状态不会混淆。
+						const row = (
+							<div
+								key={model.model_id}
+								ref={isSelected ? selectedItemRef : null}
+								className={cn(
+									"flex min-h-9 items-center gap-3 rounded-lg px-3 py-1.5",
+									"cursor-pointer transition-colors duration-100",
+									"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/60",
+									"outline-none focus-visible:ring-2 focus-visible:ring-ring",
+									isDisabled && "cursor-not-allowed opacity-50",
 								)}
-							</FlexBox>
-							{isLanguageModel && (
-								<div className="flex min-w-[4.5rem] shrink-0 justify-end">
-									<ModelBillingMultiplier
-										value={model.billing_multiplier}
-										className="text-sm"
-									/>
-								</div>
-							)}
-							{/* 保留固定勾选列，让倍率在每一行保持同一条垂直基线。 */}
-							<span
-								className="flex size-5 shrink-0 items-center justify-center"
-								aria-hidden="true"
+								onClick={() => onModelClick(model)}
+								role="button"
+								tabIndex={isDisabled ? -1 : 0}
+								onKeyDown={(event) => {
+									if (isDisabled) return
+									if (event.key !== "Enter" && event.key !== " ") return
+									event.preventDefault()
+									onModelClick(model)
+								}}
+								aria-label={ariaLabel}
+								aria-pressed={isSelected}
+								data-testid="model-switch-item"
+								data-model-id={model.model_id}
+								data-model-name={model.model_name}
+								data-selected={isSelected}
 							>
-								{isSelected ? (
-									<Check
-										className="size-4 text-foreground"
-										strokeWidth={1.75}
-										data-testid="model-switch-item-selected-icon"
-									/>
-								) : null}
-							</span>
-						</div>
-					) : (
+								<FlexBox vertical gap={1} flex={1} className="min-w-0">
+									<FlexBox gap={2} align="center" className="min-w-0">
+										<ModelName
+											model={model}
+											isSelected={false}
+											className={cn(
+												"w-fit max-w-full !text-sm !font-medium",
+												isLanguageModel && "min-w-0 flex-1",
+												isSelected
+													? "!text-foreground"
+													: "text-foreground/80",
+												isDisabled && "opacity-50",
+											)}
+										/>
+										<ModelTags model={model} />
+									</FlexBox>
+									{!isLanguageModel && (
+										<CollapsibleDescription
+											description={description}
+											isDisabled={isDisabled}
+											isExpanded={!!expandedDescriptions[model.model_id]}
+											expandLabel={t(
+												"messageEditor.modelSwitch.expandDescription",
+											)}
+											collapseLabel={t(
+												"messageEditor.modelSwitch.collapseDescription",
+											)}
+											onToggle={(event) =>
+												toggleDescription(model.model_id, event)
+											}
+										/>
+									)}
+								</FlexBox>
+								{isLanguageModel && (
+									<div className="flex min-w-[4.5rem] shrink-0 justify-end">
+										<ModelBillingMultiplier
+											value={model.billing_multiplier}
+											className="text-sm"
+										/>
+									</div>
+								)}
+								{/* 固定勾选列，倍率在每一行保持同一条垂直基线。 */}
+								<span
+									className="flex size-5 shrink-0 items-center justify-center"
+									aria-hidden="true"
+								>
+									{isSelected ? (
+										<Check
+											className="size-4 text-foreground"
+											strokeWidth={2}
+											data-testid="model-switch-item-selected-icon"
+										/>
+									) : null}
+								</span>
+							</div>
+						)
+						if (!isLanguageModel || !showModelInfo) return row
+						return (
+							<ModelInfoHoverCard
+								key={model.model_id}
+								model={model}
+								description={description}
+							>
+								{row}
+							</ModelInfoHoverCard>
+						)
+					}
+
+					return (
 						<div
 							key={model.model_id}
 							ref={isSelected ? selectedItemRef : null}
@@ -230,19 +235,6 @@ export function ModelGroupSection({
 								/>
 							) : null}
 						</div>
-					)
-					if (!isLanguageModel || !showReasoningDetails) return row
-					return (
-						<ModelReasoningDetails
-							key={model.model_id}
-							model={model}
-							description={description}
-							mobile={isMobile}
-							disabled={isDisabled}
-							onReasoningEffortChange={onReasoningEffortChange ?? onModelClick}
-						>
-							{row}
-						</ModelReasoningDetails>
 					)
 				})}
 			</div>

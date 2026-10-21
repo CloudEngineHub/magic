@@ -1,21 +1,11 @@
-import { useEffect, useRef, useState } from "react"
-import { Check, ChevronDown, ChevronRight, ChevronUp } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Check, ChevronDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	Popover,
-	PopoverAnchor,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/shadcn-ui/popover"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/shadcn-ui/popover"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { cn } from "@/utils/cn"
-import {
-	MODEL_DETAILS_HOVER_CLOSE_DELAY_MS,
-	MODEL_REASONING_FOOTER_SIDE_OFFSET,
-	useModelDetailsHover,
-} from "../hooks/useModelDetailsHover"
 import {
 	reasoningEffortLevels,
 	type ModelItem,
@@ -45,33 +35,26 @@ export function resolveReasoningFooterModel({
 	return current
 }
 
-/** 与底部遮罩同高，列表滚到底时最后一行可以停在遮罩上方。 */
-export const MODEL_REASONING_FOOTER_HEIGHT_CLASS = "h-14"
-
 interface ModelReasoningFooterProps {
 	model: ModelItem
 	onReasoningEffortChange: (model: ModelItem) => void
-	/** 桌面悬停打开。移动端外面的档位直接铺开，不走这个菜单。 */
-	openOn?: "hover" | "tap"
-	/** 桌面盖住模型列表底部；移动端排在外面的语言模型行下面。 */
-	layout?: "overlay" | "inline"
+	/** panel：桌面面板底部一行，点击弹出档位菜单；inline：移动端模式选择页，档位直接铺开。 */
+	layout?: "panel" | "inline"
 }
 
-/** 桌面盖住列表底部并悬停展开。移动端在外面把档位铺开，模型列表里不选。 */
+/**
+ * 当前选中语言模型的思考强度入口。这是面板里唯一能改强度的地方：
+ * 模型行上的信息卡只读，避免在未选中的模型上改强度时顺带切换模型。
+ */
 export function ModelReasoningFooter({
 	model,
 	onReasoningEffortChange,
-	openOn = "hover",
-	layout = "overlay",
+	layout = "panel",
 }: ModelReasoningFooterProps) {
 	const { t } = useTranslation("super")
-	const modelDetailsHover = useModelDetailsHover()
 	const [open, setOpen] = useState(false)
+	// 本地记住刚选的档位，父组件回传新的 selectedModel 之前文字也立即更新。
 	const [override, setOverride] = useState<ReasoningEffort | null | undefined>(undefined)
-	const hoverOpened = useRef(false)
-	const closeTimer = useRef<ReturnType<typeof setTimeout>>()
-	const footerRef = useRef<HTMLDivElement>(null)
-	const menuRef = useRef<HTMLDivElement>(null)
 	const labels: Record<ReasoningEffort, string> = {
 		none: t("messageEditor.modelSwitch.reasoning.none"),
 		minimal: t("messageEditor.modelSwitch.reasoning.minimal"),
@@ -81,6 +64,7 @@ export function ModelReasoningFooter({
 		xhigh: t("messageEditor.modelSwitch.reasoning.xhigh"),
 		max: t("messageEditor.modelSwitch.reasoning.max"),
 	}
+	const defaultLabel = t("messageEditor.modelSwitch.reasoning.default")
 	const levels = reasoningEffortLevels.filter((level) =>
 		model.reasoning_effort_levels?.includes(level),
 	)
@@ -91,69 +75,25 @@ export function ModelReasoningFooter({
 				? getModelDisplayedReasoningEffort(model)
 				: undefined
 			: (override ?? undefined)
-	const selectedLabel =
-		canSelect && selected ? labels[selected] : t("messageEditor.modelSwitch.reasoning.default")
+	const selectedLabel = canSelect && selected ? labels[selected] : defaultLabel
+	// 首项是显式「默认」，再次点击已选档位不会清除覆盖；桌面与移动端语义一致。
+	const options: Array<ReasoningEffort | undefined> = [undefined, ...levels]
 
 	useEffect(() => {
 		setOverride(undefined)
 		setOpen(false)
 	}, [model.model_id, model.reasoning_effort])
-	useEffect(() => () => clearTimeout(closeTimer.current), [])
-	useEffect(() => {
-		if (openOn !== "tap" || !open) return
-		function handlePointerDown(event: PointerEvent) {
-			if (footerRef.current?.contains(event.target as Node)) return
-			setOpen(false)
-		}
-		document.addEventListener("pointerdown", handlePointerDown)
-		return () => document.removeEventListener("pointerdown", handlePointerDown)
-	}, [open, openOn])
-
-	function keepOpen() {
-		clearTimeout(closeTimer.current)
-	}
-
-	/** The footer is a sibling overlay, so explicitly dismiss the row detail first. */
-	function closeModelDetails() {
-		if (modelDetailsHover.activeId) {
-			modelDetailsHover.requestClose(modelDetailsHover.activeId, true)
-		}
-	}
-
-	function openFromHover() {
-		closeModelDetails()
-		if (!canSelect) return
-		keepOpen()
-		hoverOpened.current = true
-		setOpen(true)
-	}
-
-	function scheduleClose(event?: { relatedTarget: EventTarget | null }) {
-		const relatedTarget = event?.relatedTarget
-		const target = relatedTarget instanceof Node ? relatedTarget : null
-		if (target && (footerRef.current?.contains(target) || menuRef.current?.contains(target))) {
-			return
-		}
-		clearTimeout(closeTimer.current)
-		closeTimer.current = setTimeout(() => {
-			hoverOpened.current = false
-			setOpen(false)
-		}, MODEL_DETAILS_HOVER_CLOSE_DELAY_MS)
-	}
 
 	function selectEffort(effort?: ReasoningEffort) {
 		modelCache.setReasoningEffort(model, effort)
 		setOverride(effort ?? null)
-		hoverOpened.current = false
 		setOpen(false)
 		onReasoningEffortChange({ ...model, reasoning_effort: effort ?? null })
 	}
 
 	if (layout === "inline") {
-		const options: Array<ReasoningEffort | undefined> = [undefined, ...levels]
 		return (
 			<div
-				ref={footerRef}
 				data-testid="model-switch-reasoning-footer"
 				className="relative w-full shrink-0 pb-1"
 			>
@@ -164,7 +104,7 @@ export function ModelReasoningFooter({
 					</span>
 					{canSelect ? null : (
 						<span className="ml-auto text-sm text-foreground" aria-disabled="true">
-							{t("messageEditor.modelSwitch.reasoning.default")}
+							{defaultLabel}
 						</span>
 					)}
 				</div>
@@ -196,9 +136,7 @@ export function ModelReasoningFooter({
 										)}
 										onClick={() => selectEffort(level)}
 									>
-										{level
-											? labels[level]
-											: t("messageEditor.modelSwitch.reasoning.default")}
+										{level ? labels[level] : defaultLabel}
 									</button>
 								)
 							})}
@@ -209,151 +147,89 @@ export function ModelReasoningFooter({
 		)
 	}
 
-	const MenuIcon = openOn === "tap" ? (open ? ChevronDown : ChevronUp) : ChevronRight
-	const shellClass = "absolute inset-x-0 bottom-0 z-10 bg-card"
-	const barClass = cn(
-		"flex items-center border-t border-border/70 px-3",
-		MODEL_REASONING_FOOTER_HEIGHT_CLASS,
-	)
-	const choices = (
-		<div
-			className="flex flex-col p-1"
-			role="group"
-			aria-label={t("messageEditor.modelSwitch.reasoning.label")}
-		>
-			{[undefined, ...levels].map((level, index) => (
-				<div
-					key={level ?? "default"}
-					className={index === 0 ? "mb-1 border-b pb-1" : undefined}
-				>
-					<Button
-						type="button"
-						variant="ghost"
-						className={cn(
-							"w-full justify-between px-2 text-sm font-normal",
-							openOn === "tap" ? "h-11" : "h-9",
-						)}
-						onClick={() => selectEffort(level)}
-						aria-pressed={selected === level}
-						data-testid={`model-switch-reasoning-option-${level ?? "default"}`}
-					>
-						{level ? labels[level] : t("messageEditor.modelSwitch.reasoning.default")}
-						{selected === level && <Check className="size-4" aria-hidden="true" />}
-					</Button>
-				</div>
-			))}
-		</div>
-	)
 	const trigger = (
 		<button
 			type="button"
 			disabled={!canSelect}
 			className={cn(
-				"flex w-full min-w-0 items-center gap-3 rounded-lg px-1 text-left text-sm",
-				"outline-none focus-visible:ring-2 focus-visible:ring-ring",
-				canSelect
-					? openOn === "tap"
-						? "h-11 active:bg-muted/70"
-						: "h-10 hover:bg-muted/70"
-					: "h-10 cursor-default disabled:opacity-100",
-				canSelect && open && "bg-muted/70",
+				"flex h-9 w-full min-w-0 items-center justify-between gap-3 rounded-lg px-2 text-left text-sm",
+				"outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+				canSelect ? "hover:bg-muted/60" : "cursor-default",
+				open && "bg-muted/60",
 			)}
 			aria-expanded={canSelect ? open : undefined}
 			data-testid="model-switch-reasoning-footer-trigger"
-			{...(openOn === "tap" && canSelect
-				? {
-						onClick: () => {
-							closeModelDetails()
-							setOpen((value) => !value)
-						},
-					}
-				: {})}
 		>
 			<span className="shrink-0 text-foreground">
 				{t("messageEditor.modelSwitch.reasoning.label")}
 			</span>
-			<span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-				{model.model_name || model.model_id}
-			</span>
-			<span className="flex shrink-0 items-center gap-1 text-foreground">
+			<span
+				className={cn(
+					"flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs",
+					canSelect ? "bg-muted text-foreground" : "text-muted-foreground",
+				)}
+			>
 				{selectedLabel}
-				{canSelect ? <MenuIcon className="size-4 text-muted-foreground" /> : null}
+				{canSelect ? (
+					<ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+				) : null}
 			</span>
 		</button>
 	)
 
-	// 没有可选档位时仍展示当前模型的思考强度，固定为默认，不打开选择菜单。
-	if (!canSelect) {
-		return (
-			<div ref={footerRef} data-testid="model-switch-reasoning-footer" className={shellClass}>
-				<div className={barClass}>{trigger}</div>
-			</div>
-		)
-	}
-
-	if (openOn === "tap") {
-		return (
-			<div ref={footerRef} data-testid="model-switch-reasoning-footer" className={shellClass}>
-				{open ? (
-					<div
-						data-testid="model-switch-reasoning-menu"
-						className="border-t border-border/70 bg-card"
-					>
-						<ScrollArea viewportClassName="max-h-64">{choices}</ScrollArea>
-					</div>
-				) : null}
-				<div className={barClass}>{trigger}</div>
-			</div>
-		)
-	}
-
 	return (
-		<Popover
-			open={open}
-			onOpenChange={(value) => {
-				if (value && hoverOpened.current) return
-				if (!value) hoverOpened.current = false
-				setOpen(value)
-			}}
+		<div
+			data-testid="model-switch-reasoning-footer"
+			className="shrink-0 border-t border-border/70 px-2 py-1.5"
 		>
-			<PopoverAnchor asChild>
-				<div
-					ref={footerRef}
-					data-testid="model-switch-reasoning-footer"
-					className={cn(shellClass, barClass)}
-					onPointerEnter={(event) => {
-						if (event.pointerType && event.pointerType !== "mouse") return
-						openFromHover()
-					}}
-					onMouseEnter={openFromHover}
-					onPointerLeave={scheduleClose}
-					onMouseLeave={scheduleClose}
-				>
+			{canSelect ? (
+				<Popover open={open} onOpenChange={setOpen}>
 					<PopoverTrigger asChild>{trigger}</PopoverTrigger>
-				</div>
-			</PopoverAnchor>
-			<PopoverContent
-				ref={menuRef}
-				data-testid="model-switch-reasoning-menu"
-				data-model-switch-details-overlay
-				side="right"
-				align="end"
-				sideOffset={MODEL_REASONING_FOOTER_SIDE_OFFSET}
-				collisionPadding={12}
-				className="w-36 p-0 duration-100"
-				onPointerEnter={keepOpen}
-				onMouseEnter={keepOpen}
-				onPointerLeave={scheduleClose}
-				onMouseLeave={scheduleClose}
-				onOpenAutoFocus={(event) => {
-					if (hoverOpened.current) event.preventDefault()
-				}}
-				onCloseAutoFocus={(event) => {
-					if (hoverOpened.current) event.preventDefault()
-				}}
-			>
-				{choices}
-			</PopoverContent>
-		</Popover>
+					<PopoverContent
+						data-testid="model-switch-reasoning-menu"
+						// 菜单挂在 Portal 里；父级 DropdownMenu 据此属性不把它当作外部点击。
+						data-model-switch-details-overlay
+						side="top"
+						align="end"
+						sideOffset={6}
+						collisionPadding={12}
+						// 菜单向上盖在面板上，层级要不低于 DropdownMenu 本身，否则会被面板挡住。
+						className="z-dropdown w-40 rounded-lg p-0 duration-100"
+					>
+						<ScrollArea viewportClassName="max-h-64">
+							<div
+								className="flex flex-col p-1"
+								role="group"
+								aria-label={t("messageEditor.modelSwitch.reasoning.label")}
+							>
+								{options.map((level, index) => (
+									<div
+										key={level ?? "default"}
+										className={index === 0 ? "mb-1 border-b pb-1" : undefined}
+									>
+										<Button
+											type="button"
+											variant="ghost"
+											className="h-9 w-full justify-between px-2 text-sm font-normal"
+											onClick={() => selectEffort(level)}
+											aria-pressed={selected === level}
+											data-testid={`model-switch-reasoning-option-${level ?? "default"}`}
+										>
+											{level ? labels[level] : defaultLabel}
+											{selected === level ? (
+												<Check className="size-4" aria-hidden="true" />
+											) : null}
+										</Button>
+									</div>
+								))}
+							</div>
+						</ScrollArea>
+					</PopoverContent>
+				</Popover>
+			) : (
+				// 没有可选档位时仍显示当前模型固定为默认，不打开菜单。
+				trigger
+			)}
+		</div>
 	)
 }

@@ -58,7 +58,7 @@ describe("移动端模型行", () => {
 		setup()
 
 		expect(screen.getByTestId("mobile-model-row")).toBeTruthy()
-		expect(screen.getByText("0.00x")).toBeTruthy()
+		expect(screen.getByText("0.00×")).toBeTruthy()
 		expect(screen.queryByText("Mock description")).toBeNull()
 		expect(screen.queryByRole("button", { name: /details/i })).toBeNull()
 		expect(screen.queryByTestId("mobile-model-details")).toBeNull()

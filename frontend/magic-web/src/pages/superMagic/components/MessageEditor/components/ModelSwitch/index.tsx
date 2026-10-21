@@ -18,7 +18,6 @@ import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constant
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
 import { ModelListContent } from "./components/ModelListContent"
 import {
-	MODEL_REASONING_FOOTER_HEIGHT_CLASS,
 	ModelReasoningFooter,
 	resolveReasoningFooterModel,
 } from "./components/ModelReasoningFooter"
@@ -29,6 +28,7 @@ import {
 	MessageSquareTextIcon,
 	ImageIcon,
 	ClapperboardIcon,
+	PlusIcon,
 	Search,
 	X,
 } from "lucide-react"
@@ -40,7 +40,6 @@ import { ModelTabSwitcher } from "./components/ModelTabSwitcher"
 import { resolveShowSelectedModelName } from "./utils"
 import { useOptionalAddModelStore } from "./components/AddModel/context"
 import { MODEL_TYPE_IMAGE, MODEL_TYPE_VIDEO } from "@/apis/modules/org-ai-model-provider"
-import { ModelDetailsHoverProvider } from "./hooks/useModelDetailsHover"
 
 export const ModelSwitch = observer(function ModelSwitch({
 	size = "default",
@@ -219,76 +218,88 @@ export const ModelSwitch = observer(function ModelSwitch({
 	// 	return null
 	// }
 
-	const addModelMenu = editable && onAddModel && canManageModels && (
-		<MagicDropdown
-			open={addMenuOpen}
-			onOpenChange={setAddMenuOpen}
-			placement="bottomRight"
-			overlayClassName={ADD_MODEL_DROPDOWN_CONTENT_CLASS}
-			popupRender={() => (
-				<div className="w-40">
-					<div className="px-2 py-1.5">
-						<span className="text-xs font-normal leading-4 text-muted-foreground">
-							{t("messageEditor.addModel.addModel")}
-						</span>
+	// header：移动端弹层标题栏右侧的主按钮；row：桌面面板底部的整行入口。
+	const renderAddModelMenu = (variant: "header" | "row") =>
+		editable &&
+		onAddModel &&
+		canManageModels && (
+			<MagicDropdown
+				open={addMenuOpen}
+				onOpenChange={setAddMenuOpen}
+				placement={variant === "row" ? "topLeft" : "bottomRight"}
+				overlayClassName={ADD_MODEL_DROPDOWN_CONTENT_CLASS}
+				popupRender={() => (
+					<div className="w-40">
+						<div className="px-2 py-1.5">
+							<span className="text-xs font-normal leading-4 text-muted-foreground">
+								{t("messageEditor.addModel.addModel")}
+							</span>
+						</div>
+						<button
+							className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
+							onClick={() => {
+								void onAddModel("text")
+								setAddMenuOpen(false)
+							}}
+							data-testid="add-model-type-text"
+						>
+							<MessageSquareTextIcon size={16} />
+							{t("messageEditor.addModel.typeText")}
+						</button>
+						<button
+							className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
+							onClick={() => {
+								void onAddModel("image")
+								setAddMenuOpen(false)
+							}}
+							data-testid="add-model-type-image"
+						>
+							<ImageIcon size={16} />
+							{t("messageEditor.addModel.typeImage")}
+						</button>
+						<button
+							className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
+							onClick={() => {
+								void onAddModel("video")
+								setAddMenuOpen(false)
+							}}
+							data-testid="add-model-type-video"
+						>
+							<ClapperboardIcon size={16} />
+							{t("messageEditor.addModel.typeVideo")}
+						</button>
 					</div>
-					<button
-						className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
-						onClick={() => {
-							void onAddModel("text")
-							setAddMenuOpen(false)
-						}}
-						data-testid="add-model-type-text"
-					>
-						<MessageSquareTextIcon size={16} />
-						{t("messageEditor.addModel.typeText")}
-					</button>
-					<button
-						className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
-						onClick={() => {
-							void onAddModel("image")
-							setAddMenuOpen(false)
-						}}
-						data-testid="add-model-type-image"
-					>
-						<ImageIcon size={16} />
-						{t("messageEditor.addModel.typeImage")}
-					</button>
-					<button
-						className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm font-normal leading-none text-foreground hover:bg-accent"
-						onClick={() => {
-							void onAddModel("video")
-							setAddMenuOpen(false)
-						}}
-						data-testid="add-model-type-video"
-					>
-						<ClapperboardIcon size={16} />
-						{t("messageEditor.addModel.typeVideo")}
-					</button>
-				</div>
-			)}
-		>
-			<span onPointerEnter={onPreloadAddModel} onFocus={onPreloadAddModel}>
-				<Button
-					size="sm"
-					className="h-8 gap-2 px-3 py-2 text-xs font-medium"
-					data-testid="model-switch-add-model-trigger"
+				)}
+			>
+				<span
+					className={variant === "row" ? "block" : undefined}
+					onPointerEnter={onPreloadAddModel}
+					onFocus={onPreloadAddModel}
 				>
-					{t("messageEditor.addModel.addModel")}
-					<ChevronDownIcon size={16} />
-				</Button>
-			</span>
-		</MagicDropdown>
-	)
-
-	const popoverHeader = (
-		<div className="flex items-center gap-2.5 px-4 pb-2.5 pt-4">
-			<p className="min-w-0 flex-1 truncate text-lg font-semibold leading-7 text-foreground">
-				{t("messageEditor.modelSwitch.headerTitle")}
-			</p>
-			{addModelMenu}
-		</div>
-	)
+					{variant === "row" ? (
+						<Button
+							variant="ghost"
+							className="h-9 w-full justify-start gap-2 px-2 text-sm font-normal text-foreground"
+							data-testid="model-switch-add-model-trigger"
+						>
+							<PlusIcon size={16} className="text-muted-foreground" />
+							{t("messageEditor.addModel.addModel")}
+						</Button>
+					) : (
+						<Button
+							size="sm"
+							className="h-8 gap-2 px-3 py-2 text-xs font-medium"
+							data-testid="model-switch-add-model-trigger"
+						>
+							{t("messageEditor.addModel.addModel")}
+							<ChevronDownIcon size={16} />
+						</Button>
+					)}
+				</span>
+			</MagicDropdown>
+		)
+	const addModelMenu = renderAddModelMenu("header")
+	const addModelRow = renderAddModelMenu("row")
 
 	const mobilePopoverHeader = (
 		<div className="relative flex h-14 w-full shrink-0 items-center justify-center px-16 py-2">
@@ -359,12 +370,11 @@ export const ModelSwitch = observer(function ModelSwitch({
 			searchKeyword={searchKeyword}
 			size={size}
 			onModelClick={baseHandleModelClick}
-			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey={currentModelKey}
 			onModelsLoaded={onBeforeOpen}
-			showReasoningDetails={!isMobile}
+			showModelInfo={!isMobile}
 		/>
 	)
 
@@ -561,35 +571,31 @@ export const ModelSwitch = observer(function ModelSwitch({
 						}}
 					>
 						<div className="flex flex-col">
-							{popoverHeader}
+							{/* 桌面头部只有 Tab 分段器；触发按钮已经写明在选模型，不再放大标题。 */}
 							{tabSwitcher}
-							{/* 思考强度固定盖住列表底部，模型行从遮罩后面滚过。 */}
-							<div className="relative min-h-0">
-								<ModelDetailsHoverProvider>
-									<div
-										ref={desktopScrollContainerRef}
-										data-model-switch-scroll-container
-										className="scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-7rem))] min-h-0 flex-col gap-2.5 overflow-y-auto px-4 pr-2"
-									>
-										{mainContent}
-										{reasoningFooterModel ? (
-											<div
-												aria-hidden
-												className={cn(
-													MODEL_REASONING_FOOTER_HEIGHT_CLASS,
-													"shrink-0",
-												)}
-											/>
-										) : null}
-									</div>
-									{reasoningFooterModel ? (
-										<ModelReasoningFooter
-											model={reasoningFooterModel}
-											onReasoningEffortChange={handleModelChange}
-										/>
-									) : null}
-								</ModelDetailsHoverProvider>
+							<div
+								ref={desktopScrollContainerRef}
+								data-model-switch-scroll-container
+								className={cn(
+									// 左右内边距对称，并为滚动条预留固定位置，选中行不会贴着滚动条。
+									"scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-9rem))] min-h-0 flex-col gap-1 overflow-y-auto px-3 pb-2 [scrollbar-gutter:stable]",
+									!tabSwitcher && "pt-2",
+								)}
+							>
+								{mainContent}
 							</div>
+							{/* 思考强度与添加模型固定在列表下方，不盖住滚动区。 */}
+							{reasoningFooterModel ? (
+								<ModelReasoningFooter
+									model={reasoningFooterModel}
+									onReasoningEffortChange={handleModelChange}
+								/>
+							) : null}
+							{addModelRow ? (
+								<div className="shrink-0 border-t border-border/70 px-2 py-1.5">
+									{addModelRow}
+								</div>
+							) : null}
 						</div>
 					</DropdownMenuContent>
 				</DropdownMenu>

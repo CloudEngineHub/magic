@@ -18,7 +18,6 @@ import { AddModelStore } from "./components/AddModel/store"
 import { AddModelDialogLazy } from "./components/AddModel/add-model-dialog-lazy"
 import { ChevronsUpDownIcon, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { ModelDetailsHoverProvider } from "./hooks/useModelDetailsHover"
 
 export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 	size = "default",
@@ -122,11 +121,10 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 			size={size}
 			canManageModels={canManageModels}
 			onModelClick={baseHandleModelClick}
-			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey="models"
-			showReasoningDetails={!isMobile}
+			showModelInfo={!isMobile}
 		/>
 	)
 
@@ -178,7 +176,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 								data-model-switch-scroll-container
 								className="scrollbar-y-thin flex max-h-[60vh] flex-col overflow-y-auto rounded-lg p-3"
 							>
-								<ModelDetailsHoverProvider>{mainContent}</ModelDetailsHoverProvider>
+								{mainContent}
 							</div>
 						</div>
 					</MagicPopup>
@@ -226,7 +224,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 								data-model-switch-scroll-container
 								className="scrollbar-y-thin flex max-h-[340px] flex-col overflow-y-auto"
 							>
-								<ModelDetailsHoverProvider>{mainContent}</ModelDetailsHoverProvider>
+								{mainContent}
 							</div>
 						</div>
 					</DropdownMenuContent>

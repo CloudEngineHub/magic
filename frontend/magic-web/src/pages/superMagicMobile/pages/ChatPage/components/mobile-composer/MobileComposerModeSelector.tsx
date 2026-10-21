@@ -507,12 +507,11 @@ function MobileComposerModeSelectorComponent({
 										searchKeyword={modelSearchKeyword}
 										size="mobile"
 										onModelClick={handleModelSelect}
-										onReasoningEffortChange={handleReasoningEffortChange}
 										selectedItemRef={selectedModelItemRef}
 										getModelDescription={getModelDescription}
 										modelKey={currentModelKey}
 										onModelsLoaded={validateSelectedModels}
-										showReasoningDetails={false}
+										showModelInfo={false}
 									/>
 								)}
 							</div>
@@ -651,7 +650,6 @@ function MobileComposerModeSelectorComponent({
 												onReasoningEffortChange={
 													handleReasoningEffortChange
 												}
-												openOn="tap"
 												layout="inline"
 											/>
 										) : (

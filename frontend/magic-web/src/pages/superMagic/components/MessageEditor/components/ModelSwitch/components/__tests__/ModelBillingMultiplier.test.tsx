@@ -12,15 +12,15 @@ it("缺失或非法倍率不显示，明确的零倍率正常显示", () => {
 		cleanup()
 	}
 	render(<ModelBillingMultiplier value={0} />)
-	expect(screen.getByText("0.00x")).toBeTruthy()
+	expect(screen.getByText("0.00×")).toBeTruthy()
 })
 
 it.each([
-	[1, "1.00x"],
-	[0.28, "0.28x"],
-	[0.001, "<0.01x"],
-	[0.01, "0.01x"],
-	[1.235, "1.24x"],
+	[1, "1.00×"],
+	[0.28, "0.28×"],
+	[0.001, "<0.01×"],
+	[0.01, "0.01×"],
+	[1.235, "1.24×"],
 ])("格式化倍率 %s", (value, expected) => {
 	render(<ModelBillingMultiplier value={Number(value)} />)
 	expect(screen.getByText(String(expected))).toBeTruthy()

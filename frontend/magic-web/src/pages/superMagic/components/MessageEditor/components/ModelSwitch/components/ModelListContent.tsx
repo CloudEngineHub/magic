@@ -7,6 +7,7 @@ import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from 
 import type React from "react"
 import { useTranslation } from "react-i18next"
 import { isModelDisabled } from "../utils"
+import { hasBillingMultiplier } from "./ModelBillingMultiplier"
 import { ModelEmptyState } from "./ModelEmptyState"
 import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSection"
 
@@ -16,13 +17,12 @@ interface ModelListContentProps {
 	searchKeyword: string
 	size: MessageEditorSize
 	onModelClick: (model: ModelItem) => void
-	onReasoningEffortChange?: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	modelKey?: ModelListKey
 	onModelsLoaded?: () => Promise<void> | void
-	/** 为 false 时模型行不再挂悬停详情，避免移动端弹出菜单。 */
-	showReasoningDetails?: boolean
+	/** 桌面语言模型行悬停显示只读信息卡并带列标题；移动端弹层传 false。 */
+	showModelInfo?: boolean
 }
 
 export const ModelListContent = observer(function ModelListContent({
@@ -31,12 +31,11 @@ export const ModelListContent = observer(function ModelListContent({
 	searchKeyword,
 	size,
 	onModelClick,
-	onReasoningEffortChange,
 	selectedItemRef,
 	getModelDescription,
 	modelKey = "models",
 	onModelsLoaded,
-	showReasoningDetails = true,
+	showModelInfo = true,
 }: ModelListContentProps) {
 	const { t } = useTranslation("super")
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
@@ -45,20 +44,33 @@ export const ModelListContent = observer(function ModelListContent({
 	const emptyStateTitle = isSearchResultEmpty
 		? t("messageEditor.modelSwitch.noModelsFound")
 		: t("messageEditor.modelSwitch.noModels")
+	// 只有列表里确实下发了倍率时才需要列标题解释右侧那列数字。
+	const showColumnHeader =
+		showModelInfo &&
+		modelKey === "models" &&
+		visibleGroups.some((group) =>
+			group.displayModels.some((model) => hasBillingMultiplier(model.billing_multiplier)),
+		)
 
 	const handleModelClick = useMemoizedFn((model: ModelItem) => {
 		if (!isModelDisabled(model)) {
 			onModelClick(model)
 		}
 	})
-	const handleReasoningEffortChange = useMemoizedFn((model: ModelItem) => {
-		if (!isModelDisabled(model)) {
-			onReasoningEffortChange?.(model)
-		}
-	})
 
 	return (
 		<>
+			{showColumnHeader ? (
+				<div
+					className="flex items-center justify-between px-3 text-[11px] leading-4 text-muted-foreground"
+					aria-hidden="true"
+					data-testid="model-list-column-header"
+				>
+					<span>{t("messageEditor.modelSwitch.columnModel")}</span>
+					{/* 右侧留出勾选列（20px）加间距（12px）的宽度，标题正好落在倍率数字上方。 */}
+					<span className="pr-8">{t("messageEditor.modelSwitch.columnMultiplier")}</span>
+				</div>
+			) : null}
 			<MyModelsList
 				modelKey={modelKey}
 				selectedModel={selectedModel}
@@ -86,13 +98,10 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedModel={selectedModel}
 					size={size}
 					onModelClick={handleModelClick}
-					onReasoningEffortChange={
-						onReasoningEffortChange ? handleReasoningEffortChange : undefined
-					}
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					isLanguageModel={modelKey === "models"}
-					showReasoningDetails={showReasoningDetails}
+					showModelInfo={showModelInfo}
 				/>
 			))}
 		</>

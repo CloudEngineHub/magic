@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ModelReasoningFooter, resolveReasoningFooterModel } from "../ModelReasoningFooter"
 import { ModelStatusEnum, type ModelItem } from "../../types"
-import { ModelDetailsHoverProvider, useModelDetailsHover } from "../../hooks/useModelDetailsHover"
 
 const { setReasoningEffort } = vi.hoisted(() => ({
 	setReasoningEffort: vi.fn(),
@@ -34,18 +33,13 @@ function createModel(levels: ModelItem["reasoning_effort_levels"] = ["none", "hi
 	}
 }
 
-function renderFooter(
-	model = createModel(),
-	openOn: "hover" | "tap" = "hover",
-	layout: "overlay" | "inline" = "overlay",
-) {
+function renderFooter(model = createModel(), layout: "panel" | "inline" = "panel") {
 	const onReasoningEffortChange = vi.fn()
 	render(
-		<div className="relative flex h-40 flex-col">
+		<div className="flex h-40 flex-col">
 			<ModelReasoningFooter
 				model={model}
 				onReasoningEffortChange={onReasoningEffortChange}
-				openOn={openOn}
 				layout={layout}
 			/>
 		</div>,
@@ -55,23 +49,12 @@ function renderFooter(
 
 function hoverFooter() {
 	const footer = screen.getByTestId("model-switch-reasoning-footer")
-	// React maps pointerover/mouseover onto the enter handlers.
 	fireEvent.pointerOver(footer, { pointerType: "mouse" })
 	fireEvent.mouseOver(footer)
 }
 
-function ActiveModelDetail() {
-	const hover = useModelDetailsHover()
-	return (
-		<>
-			<button type="button" onClick={() => hover.requestOpen("model-row", true)}>
-				open-model-detail
-			</button>
-			<span data-testid="model-detail-state">
-				{hover.activeId === "model-row" ? "open" : "closed"}
-			</span>
-		</>
-	)
+function openMenu() {
+	fireEvent.click(screen.getByTestId("model-switch-reasoning-footer-trigger"))
 }
 
 describe("resolveReasoningFooterModel", () => {
@@ -111,18 +94,22 @@ describe("resolveReasoningFooterModel", () => {
 	})
 })
 
-describe("ModelReasoningFooter", () => {
-	it("shows the current model and its saved reasoning effort", () => {
+describe("ModelReasoningFooter (panel)", () => {
+	it("sits in normal flow and shows only the saved effort, not the model name", () => {
 		renderFooter()
-		expect(screen.getByTestId("model-switch-reasoning-footer")).toHaveClass("absolute")
-		expect(screen.getByText("Qwen3.7 Max")).toBeTruthy()
+		const footer = screen.getByTestId("model-switch-reasoning-footer")
+		expect(footer.className).not.toContain("absolute")
+		expect(footer.className).toContain("shrink-0")
+		expect(screen.queryByText("Qwen3.7 Max")).toBeNull()
 		expect(screen.getByText("messageEditor.modelSwitch.reasoning.high")).toBeTruthy()
 	})
 
-	it("opens only the allowed effort choices on hover", () => {
+	it("opens the effort choices on click and ignores hover", () => {
 		renderFooter()
 		hoverFooter()
+		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
 
+		openMenu()
 		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
 		expect(screen.getByTestId("model-switch-reasoning-option-default")).toBeTruthy()
 		expect(screen.getByTestId("model-switch-reasoning-option-none")).toBeTruthy()
@@ -134,27 +121,9 @@ describe("ModelReasoningFooter", () => {
 		expect(screen.queryByText("messageEditor.modelSwitch.billingMultiplier")).toBeNull()
 	})
 
-	it("closes the model detail when entering the reasoning footer", () => {
-		const model = createModel()
-		render(
-			<ModelDetailsHoverProvider>
-				<ActiveModelDetail />
-				<ModelReasoningFooter model={model} onReasoningEffortChange={vi.fn()} />
-			</ModelDetailsHoverProvider>,
-		)
-
-		fireEvent.click(screen.getByText("open-model-detail"))
-		expect(screen.getByTestId("model-detail-state")).toHaveTextContent("open")
-
-		hoverFooter()
-
-		expect(screen.getByTestId("model-detail-state")).toHaveTextContent("closed")
-		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
-	})
-
 	it("saves the selected effort without mutating the source model", () => {
 		const { model, onReasoningEffortChange } = renderFooter()
-		hoverFooter()
+		openMenu()
 		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-none"))
 
 		expect(setReasoningEffort).toHaveBeenCalledWith(model, "none")
@@ -167,46 +136,55 @@ describe("ModelReasoningFooter", () => {
 		expect(screen.getByText("messageEditor.modelSwitch.reasoning.none")).toBeTruthy()
 	})
 
-	it("opens the effort menu on tap and ignores hover", () => {
-		renderFooter(createModel(), "tap")
-		hoverFooter()
-		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
+	it("clears the saved effort when default is selected, even if it is already selected", () => {
+		const { model, onReasoningEffortChange } = renderFooter()
+		openMenu()
+		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-default"))
 
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-footer-trigger"))
-		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
-		expect(screen.getByTestId("model-switch-reasoning-option-none")).toBeTruthy()
-		expect(screen.queryByTestId("model-switch-reasoning-option-low")).toBeNull()
-	})
-
-	it("closes the tapped menu from outside and saves the chosen effort", () => {
-		const { model, onReasoningEffortChange } = renderFooter(createModel(), "tap")
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-footer-trigger"))
-		fireEvent.pointerDown(document.body)
-		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
-
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-footer-trigger"))
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-high"))
-		expect(setReasoningEffort).toHaveBeenCalledWith(model, "high")
+		expect(setReasoningEffort).toHaveBeenCalledWith(model, undefined)
 		expect(onReasoningEffortChange).toHaveBeenCalledWith({
 			...model,
-			reasoning_effort: "high",
+			reasoning_effort: null,
 		})
-		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
+
+		// 再次选择当前已选档位不会切回其它值；语义始终是显式选择。
+		openMenu()
+		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-default"))
+		expect(setReasoningEffort).toHaveBeenLastCalledWith(model, undefined)
 	})
 
-	it("places the mobile bar in normal flow above the search field", () => {
-		renderFooter(createModel([]), "tap", "inline")
+	it("keeps the footer mounted after choosing an effort", () => {
+		const { onReasoningEffortChange } = renderFooter()
+		openMenu()
+		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-high"))
+		expect(onReasoningEffortChange).toHaveBeenCalledTimes(1)
+		expect(screen.getByTestId("model-switch-reasoning-footer-trigger")).toBeTruthy()
+	})
+
+	it("shows a locked default when the model has no effort levels", () => {
+		const { onReasoningEffortChange } = renderFooter(createModel([]))
+		expect(screen.getByText("messageEditor.modelSwitch.reasoning.default")).toBeTruthy()
+		expect(screen.getByTestId("model-switch-reasoning-footer-trigger")).toBeDisabled()
+
+		hoverFooter()
+		openMenu()
+		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
+		expect(onReasoningEffortChange).not.toHaveBeenCalled()
+	})
+})
+
+describe("ModelReasoningFooter (inline)", () => {
+	it("places the mobile bar in normal flow with a locked default", () => {
+		renderFooter(createModel([]), "inline")
 		const footer = screen.getByTestId("model-switch-reasoning-footer")
 		expect(footer.className).not.toContain("absolute")
-		expect(footer.className).toContain("shrink-0")
 		expect(screen.getByText("messageEditor.modelSwitch.reasoning.default")).toBeTruthy()
 		expect(screen.queryByText("Qwen3.7 Max")).toBeNull()
 		expect(screen.queryByTestId("model-switch-reasoning-option-default")).toBeNull()
 	})
 
 	it("lays the mobile reasoning choices out for a direct tap", () => {
-		const { model, onReasoningEffortChange } = renderFooter(createModel(), "tap", "inline")
-		expect(screen.queryByText("Qwen3.7 Max")).toBeNull()
+		const { model, onReasoningEffortChange } = renderFooter(createModel(), "inline")
 		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
 		expect(screen.queryByTestId("model-switch-reasoning-footer-trigger")).toBeNull()
 		expect(screen.getByTestId("model-switch-reasoning-option-high")).toHaveAttribute(
@@ -224,28 +202,5 @@ describe("ModelReasoningFooter", () => {
 			"aria-pressed",
 			"true",
 		)
-	})
-
-	it("shows a locked default when the model has no effort levels", () => {
-		const { onReasoningEffortChange } = renderFooter(createModel([]), "tap")
-		expect(screen.getByText("messageEditor.modelSwitch.reasoning.default")).toBeTruthy()
-		expect(screen.getByTestId("model-switch-reasoning-footer-trigger")).toBeDisabled()
-
-		hoverFooter()
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-footer-trigger"))
-		expect(screen.queryByTestId("model-switch-reasoning-menu")).toBeNull()
-		expect(onReasoningEffortChange).not.toHaveBeenCalled()
-	})
-
-	it("clears the saved effort when default is selected", () => {
-		const { model, onReasoningEffortChange } = renderFooter()
-		hoverFooter()
-		fireEvent.click(screen.getByTestId("model-switch-reasoning-option-default"))
-
-		expect(setReasoningEffort).toHaveBeenCalledWith(model, undefined)
-		expect(onReasoningEffortChange).toHaveBeenCalledWith({
-			...model,
-			reasoning_effort: null,
-		})
 	})
 })
