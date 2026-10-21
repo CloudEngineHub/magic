@@ -68,7 +68,7 @@ export function ModelTabSwitcher({
 
 	if (!isMobile) {
 		return (
-			<div className="flex flex-col gap-1.5 self-stretch px-3 pb-2 pt-3">
+			<div className="flex flex-col gap-1.5 self-stretch px-2 pb-1.5 pt-2">
 				<div className="flex items-stretch justify-stretch gap-0 rounded-lg bg-sidebar p-[3px]">
 					{tabs.map((tab) => (
 						<button

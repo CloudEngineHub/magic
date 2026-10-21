@@ -14,7 +14,7 @@ function ProviderName({ item }: ProviderNameProps) {
 	return (
 		<div
 			className={cn(
-				"flex items-center gap-2 px-3 pb-0.5 pt-2 text-muted-foreground",
+				"flex items-center gap-1.5 px-2 pb-0.5 pt-1.5 text-muted-foreground",
 				// 桌面列表滚动时分组标题吸在顶部；面板与弹层底色都是 card，吸顶时不会露出下面的行。
 				!isMobile && "sticky top-0 z-[1] bg-card",
 			)}

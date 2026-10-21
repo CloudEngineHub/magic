@@ -165,7 +165,7 @@ export function ModelReasoningFooter({
 			</span>
 			<span
 				className={cn(
-					"flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs",
+					"flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-sm",
 					canSelect ? "bg-muted text-foreground" : "text-muted-foreground",
 				)}
 			>
@@ -180,7 +180,7 @@ export function ModelReasoningFooter({
 	return (
 		<div
 			data-testid="model-switch-reasoning-footer"
-			className="shrink-0 border-t border-border/70 px-2 py-1.5"
+			className="shrink-0 border-t border-border/70 px-1.5 py-1"
 		>
 			{canSelect ? (
 				<Popover open={open} onOpenChange={setOpen}>

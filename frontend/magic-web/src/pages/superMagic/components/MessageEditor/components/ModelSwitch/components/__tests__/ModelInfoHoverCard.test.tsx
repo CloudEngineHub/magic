@@ -1,13 +1,24 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { ModelInfoHoverCard, formatContextWindow } from "../ModelInfoHoverCard"
+import {
+	MODEL_INFO_HOVER_OPEN_DELAY_MS,
+	ModelInfoHoverCard,
+	formatContextWindow,
+} from "../ModelInfoHoverCard"
 import { ModelStatusEnum, type ModelItem } from "../../types"
+
+const { setReasoningEffort } = vi.hoisted(() => ({
+	setReasoningEffort: vi.fn(),
+}))
 
 vi.mock("react-i18next", () => ({
 	useTranslation: () => ({
 		t: (key: string, options?: { value?: string }) =>
 			options?.value ? `${key}:${options.value}` : key,
 	}),
+}))
+vi.mock("@/services/superMagic/topicModel/SuperMagicTopicModelCacheService", () => ({
+	default: { getReasoningEffort: () => undefined, setReasoningEffort },
 }))
 
 beforeEach(() => {
@@ -17,6 +28,7 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup()
 	vi.useRealTimers()
+	setReasoningEffort.mockClear()
 })
 
 function createModel(overrides: Partial<ModelItem> = {}): ModelItem {
@@ -36,10 +48,10 @@ function createModel(overrides: Partial<ModelItem> = {}): ModelItem {
 	}
 }
 
-function renderCard(model = createModel()) {
+function renderCard(model = createModel(), onReasoningEffortChange?: (model: ModelItem) => void) {
 	const onSelect = vi.fn()
 	render(
-		<ModelInfoHoverCard model={model}>
+		<ModelInfoHoverCard model={model} onReasoningEffortChange={onReasoningEffortChange}>
 			<div data-testid="model-switch-item" onClick={() => onSelect(model)}>
 				{model.model_name}
 			</div>
@@ -51,9 +63,8 @@ function renderCard(model = createModel()) {
 function hoverRow() {
 	const row = screen.getByTestId("model-switch-item")
 	fireEvent.pointerEnter(row, { pointerType: "mouse" })
-	// HoverCard 使用默认 700ms 打开延迟，与项目 Tooltip 规范一致。
 	act(() => {
-		vi.advanceTimersByTime(700)
+		vi.advanceTimersByTime(MODEL_INFO_HOVER_OPEN_DELAY_MS)
 	})
 }
 
@@ -69,7 +80,7 @@ describe("formatContextWindow", () => {
 })
 
 describe("ModelInfoHoverCard", () => {
-	it("opens a read-only card after the hover delay", () => {
+	it("opens quickly with the model facts and no reasoning controls for models without levels", () => {
 		renderCard()
 		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
 
@@ -83,8 +94,7 @@ describe("ModelInfoHoverCard", () => {
 		expect(card).toHaveTextContent("messageEditor.modelSwitch.billingMultiplier")
 		expect(card).toHaveTextContent("0.42")
 		expect(card).toHaveTextContent("messageEditor.modelSwitch.billingMultiplierHint")
-		// 卡片只读：没有任何按钮或可聚焦元素。
-		expect(card.querySelectorAll("button, [tabindex]")).toHaveLength(0)
+		expect(card.querySelectorAll("button")).toHaveLength(0)
 		expect(card).not.toHaveTextContent("messageEditor.modelSwitch.reasoning.label")
 	})
 
@@ -93,6 +103,50 @@ describe("ModelInfoHoverCard", () => {
 		fireEvent.click(screen.getByTestId("model-switch-item"))
 		expect(onSelect).toHaveBeenCalledWith(model)
 		expect(screen.queryByTestId("model-info-hover-card")).toBeNull()
+	})
+
+	it("lets the user pick a reasoning effort for the hovered model in one click", () => {
+		const onReasoningEffortChange = vi.fn()
+		const { model } = renderCard(
+			createModel({
+				reasoning_effort_levels: ["low", "high"],
+				reasoning_effort_default: "low",
+			}),
+			onReasoningEffortChange,
+		)
+		hoverRow()
+
+		const card = screen.getByTestId("model-info-hover-card")
+		expect(card).toHaveTextContent("messageEditor.modelSwitch.reasoning.label")
+		expect(screen.getByTestId("model-info-reasoning-option-default")).toBeTruthy()
+		expect(screen.queryByTestId("model-info-reasoning-option-medium")).toBeNull()
+		// 后台默认是 low，没有用户覆盖时它显示为已选。
+		expect(screen.getByTestId("model-info-reasoning-option-low")).toHaveAttribute(
+			"aria-pressed",
+			"true",
+		)
+
+		fireEvent.click(screen.getByTestId("model-info-reasoning-option-high"))
+		expect(setReasoningEffort).toHaveBeenCalledWith(model, "high")
+		expect(onReasoningEffortChange).toHaveBeenCalledWith({
+			...model,
+			reasoning_effort: "high",
+		})
+
+		fireEvent.click(screen.getByTestId("model-info-reasoning-option-default"))
+		expect(setReasoningEffort).toHaveBeenLastCalledWith(model, undefined)
+		expect(onReasoningEffortChange).toHaveBeenLastCalledWith({
+			...model,
+			reasoning_effort: null,
+		})
+	})
+
+	it("hides the reasoning section when the card is read-only, even if the model has levels", () => {
+		renderCard(createModel({ reasoning_effort_levels: ["low", "high"] }))
+		hoverRow()
+		expect(screen.getByTestId("model-info-hover-card")).not.toHaveTextContent(
+			"messageEditor.modelSwitch.reasoning.label",
+		)
 	})
 
 	it("hides the sections that have no data and skips the card entirely when nothing is left", () => {

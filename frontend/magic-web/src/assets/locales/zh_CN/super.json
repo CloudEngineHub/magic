@@ -3573,8 +3573,6 @@
 			"billingMultiplierValue": "消耗倍率 {{value}} 倍",
 			"collapseDescription": "收起模型描述",
 			"collapseDescriptionShort": "收起",
-			"columnModel": "模型",
-			"columnMultiplier": "倍率",
 			"contextWindow": "上下文窗口",
 			"expandDescription": "展开模型描述",
 			"expandDescriptionShort": "展开",

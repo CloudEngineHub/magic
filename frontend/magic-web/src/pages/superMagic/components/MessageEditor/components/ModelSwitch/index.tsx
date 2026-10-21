@@ -370,6 +370,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 			searchKeyword={searchKeyword}
 			size={size}
 			onModelClick={baseHandleModelClick}
+			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey={currentModelKey}
@@ -541,7 +542,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 					<DropdownMenuContent
 						side={getSide()}
 						align="start"
-						className="z-dropdown max-h-[min(90dvh,var(--radix-dropdown-menu-content-available-height))] w-[380px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border-border/80 bg-card p-0 shadow-lg"
+						className="z-dropdown max-h-[min(90dvh,var(--radix-dropdown-menu-content-available-height))] w-80 max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border-border/80 bg-card p-0 shadow-lg"
 						sideOffset={4}
 						collisionPadding={12}
 						onFocusOutside={(event) => {
@@ -578,8 +579,8 @@ export const ModelSwitch = observer(function ModelSwitch({
 								data-model-switch-scroll-container
 								className={cn(
 									// 左右内边距对称，并为滚动条预留固定位置，选中行不会贴着滚动条。
-									"scrollbar-y-thin flex max-h-[min(420px,calc(var(--radix-dropdown-menu-content-available-height)-9rem))] min-h-0 flex-col gap-1 overflow-y-auto px-3 pb-2 [scrollbar-gutter:stable]",
-									!tabSwitcher && "pt-2",
+									"scrollbar-y-thin flex max-h-[min(360px,calc(var(--radix-dropdown-menu-content-available-height)-9rem))] min-h-0 flex-col gap-0.5 overflow-y-auto px-2 pb-1.5 [scrollbar-gutter:stable]",
+									!tabSwitcher && "pt-1.5",
 								)}
 							>
 								{mainContent}
@@ -592,7 +593,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 								/>
 							) : null}
 							{addModelRow ? (
-								<div className="shrink-0 border-t border-border/70 px-2 py-1.5">
+								<div className="shrink-0 border-t border-border/70 px-1.5 py-1">
 									{addModelRow}
 								</div>
 							) : null}

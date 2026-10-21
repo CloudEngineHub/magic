@@ -3573,8 +3573,6 @@
 			"billingMultiplierValue": "Usage multiplier: {{value}}x",
 			"collapseDescription": "Collapse model description",
 			"collapseDescriptionShort": "Collapse",
-			"columnModel": "Model",
-			"columnMultiplier": "Rate",
 			"contextWindow": "Context window",
 			"expandDescription": "Expand model description",
 			"expandDescriptionShort": "Expand",

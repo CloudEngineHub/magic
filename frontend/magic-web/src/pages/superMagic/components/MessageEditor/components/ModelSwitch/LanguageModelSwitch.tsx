@@ -121,6 +121,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 			size={size}
 			canManageModels={canManageModels}
 			onModelClick={baseHandleModelClick}
+			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey="models"

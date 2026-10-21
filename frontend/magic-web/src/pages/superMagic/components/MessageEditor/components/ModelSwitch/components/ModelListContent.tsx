@@ -7,7 +7,6 @@ import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from 
 import type React from "react"
 import { useTranslation } from "react-i18next"
 import { isModelDisabled } from "../utils"
-import { hasBillingMultiplier } from "./ModelBillingMultiplier"
 import { ModelEmptyState } from "./ModelEmptyState"
 import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSection"
 
@@ -17,6 +16,8 @@ interface ModelListContentProps {
 	searchKeyword: string
 	size: MessageEditorSize
 	onModelClick: (model: ModelItem) => void
+	/** 桌面信息卡里选档位时回调；调用方把它当作选中该模型。 */
+	onReasoningEffortChange?: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
 	modelKey?: ModelListKey
@@ -31,6 +32,7 @@ export const ModelListContent = observer(function ModelListContent({
 	searchKeyword,
 	size,
 	onModelClick,
+	onReasoningEffortChange,
 	selectedItemRef,
 	getModelDescription,
 	modelKey = "models",
@@ -44,33 +46,19 @@ export const ModelListContent = observer(function ModelListContent({
 	const emptyStateTitle = isSearchResultEmpty
 		? t("messageEditor.modelSwitch.noModelsFound")
 		: t("messageEditor.modelSwitch.noModels")
-	// 只有列表里确实下发了倍率时才需要列标题解释右侧那列数字。
-	const showColumnHeader =
-		showModelInfo &&
-		modelKey === "models" &&
-		visibleGroups.some((group) =>
-			group.displayModels.some((model) => hasBillingMultiplier(model.billing_multiplier)),
-		)
-
 	const handleModelClick = useMemoizedFn((model: ModelItem) => {
 		if (!isModelDisabled(model)) {
 			onModelClick(model)
 		}
 	})
+	const handleReasoningEffortChange = useMemoizedFn((model: ModelItem) => {
+		if (!isModelDisabled(model)) {
+			onReasoningEffortChange?.(model)
+		}
+	})
 
 	return (
 		<>
-			{showColumnHeader ? (
-				<div
-					className="flex items-center justify-between px-3 text-[11px] leading-4 text-muted-foreground"
-					aria-hidden="true"
-					data-testid="model-list-column-header"
-				>
-					<span>{t("messageEditor.modelSwitch.columnModel")}</span>
-					{/* 右侧留出勾选列（20px）加间距（12px）的宽度，标题正好落在倍率数字上方。 */}
-					<span className="pr-8">{t("messageEditor.modelSwitch.columnMultiplier")}</span>
-				</div>
-			) : null}
 			<MyModelsList
 				modelKey={modelKey}
 				selectedModel={selectedModel}
@@ -98,6 +86,9 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedModel={selectedModel}
 					size={size}
 					onModelClick={handleModelClick}
+					onReasoningEffortChange={
+						onReasoningEffortChange ? handleReasoningEffortChange : undefined
+					}
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					isLanguageModel={modelKey === "models"}
