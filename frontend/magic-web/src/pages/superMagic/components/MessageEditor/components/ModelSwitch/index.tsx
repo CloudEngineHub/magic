@@ -40,7 +40,6 @@ import { ModelSwitchTriggerContent } from "./components/ModelSwitchTriggerConten
 import { ModelTabSwitcher } from "./components/ModelTabSwitcher"
 import { resolveShowSelectedModelName } from "./utils"
 import { useOptionalAddModelStore } from "./components/AddModel/context"
-import { MODEL_TYPE_IMAGE, MODEL_TYPE_VIDEO } from "@/apis/modules/org-ai-model-provider"
 
 export const ModelSwitch = observer(function ModelSwitch({
 	size = "default",
@@ -134,9 +133,10 @@ export const ModelSwitch = observer(function ModelSwitch({
 		videoModelList.length > 0 &&
 		videoModelList.some((item) => (item.video_models ?? []).length > 0)
 	const hasCustomImageModels =
-		addModelStore?.myModels.some((model) => model.model_type === MODEL_TYPE_IMAGE) ?? false
+		// 与 MyModelsList 一致按 category 判断：vlm=生图、vgm=视频。
+		addModelStore?.myModels.some((model) => model.category === "vlm") ?? false
 	const hasCustomVideoModels =
-		addModelStore?.myModels.some((model) => model.model_type === MODEL_TYPE_VIDEO) ?? false
+		addModelStore?.myModels.some((model) => model.category === "vgm") ?? false
 	const isLoadingCustomModels =
 		(addModelStore?.isLoadingMyModels ?? false) ||
 		(isOpen && addModelStore != null && !addModelStore.hasLoadedMyModels)

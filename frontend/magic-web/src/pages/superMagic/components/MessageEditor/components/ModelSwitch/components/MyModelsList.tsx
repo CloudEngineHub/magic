@@ -12,11 +12,9 @@ import {
 	AlertDialogHeader,
 	AlertDialogTitle,
 } from "@/components/shadcn-ui/alert-dialog"
-import {
-	MODEL_TYPE_IMAGE,
-	MODEL_TYPE_LLM,
-	MODEL_TYPE_VIDEO,
-	type ServiceProviderModel,
+import type {
+	ServiceProviderCategory,
+	ServiceProviderModel,
 } from "@/apis/modules/org-ai-model-provider"
 import { useOptionalAddModelStore } from "./AddModel/context"
 import type { ModelItem } from "../types"
@@ -28,10 +26,11 @@ import { cn } from "@/utils/cn"
 
 type MyModelsListKey = "models" | "image_models" | "video_models"
 
-const MODEL_TYPE_BY_KEY: Record<MyModelsListKey, number> = {
-	models: MODEL_TYPE_LLM,
-	image_models: MODEL_TYPE_IMAGE,
-	video_models: MODEL_TYPE_VIDEO,
+/** 分页与模型 category 的对应关系；model_type 不可靠，不用它归类。 */
+const MODEL_CATEGORY_BY_KEY: Record<MyModelsListKey, ServiceProviderCategory> = {
+	models: "llm",
+	image_models: "vlm",
+	video_models: "vgm",
 }
 
 /**
@@ -42,9 +41,9 @@ export function getVisibleMyModelGroups(
 	myModels: ServiceProviderModel[],
 	modelKey: MyModelsListKey,
 ) {
-	const targetModelType = MODEL_TYPE_BY_KEY[modelKey]
+	const targetCategory = MODEL_CATEGORY_BY_KEY[modelKey]
 	return buildMyModelGroups({
-		models: myModels.filter((model) => model.model_type === targetModelType),
+		models: myModels.filter((model) => model.category === targetCategory),
 	})
 }
 
