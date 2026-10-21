@@ -2,8 +2,9 @@ import { observer } from "mobx-react-lite"
 import { Mail } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { MagicTooltip } from "@/components/base"
-import { Button } from "@/components/shadcn-ui/button"
+import InboxUnreadBadge from "@/components/business/Inbox/InboxUnreadBadge"
 import { inboxStore, openInbox } from "@/components/business/Inbox/store"
+import { Button } from "@/components/shadcn-ui/button"
 import { useInboxBootstrap } from "@/components/business/Inbox/useInboxBootstrap"
 
 interface InboxSidebarEntryProps {
@@ -33,13 +34,11 @@ const InboxSidebarEntry = observer(function InboxSidebarEntry({
 				onClick={openInbox}
 			>
 				<Mail className="size-4" />
-				{inboxStore.unreadTotalLabel && (
-					<span
-						aria-hidden="true"
-						data-testid="inbox-sidebar-badge"
-						className="absolute right-1 top-1 size-2 rounded-full border-2 border-sidebar bg-destructive"
-					/>
-				)}
+				<InboxUnreadBadge
+					label={inboxStore.unreadTotalLabel}
+					testId="inbox-sidebar-badge"
+					className="pointer-events-none absolute -right-1.5 -top-1.5 h-4 min-w-4 border-2 border-sidebar px-1 text-[10px] font-semibold"
+				/>
 			</Button>
 		</MagicTooltip>
 	)
