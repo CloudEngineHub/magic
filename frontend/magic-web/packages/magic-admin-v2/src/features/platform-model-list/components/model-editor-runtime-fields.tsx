@@ -223,6 +223,7 @@ export function ModelEditorRuntimeFields({
 								description={t("modelList.editor.fieldDesc.temperature")}
 								error={getErrorMessage(errors.temperature?.message)}
 								label={t("modelList.editor.field.temperature")}
+								required
 								name="temperature"
 								placeholder={t("modelList.editor.placeholder.temperature")}
 								step="0.1"

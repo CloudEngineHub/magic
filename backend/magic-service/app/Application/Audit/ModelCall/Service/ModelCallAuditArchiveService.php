@@ -31,7 +31,7 @@ final class ModelCallAuditArchiveService
         private readonly ModelCallAuditDomainService $modelCallAuditDomainService,
         private readonly ArchiveTaskRecordDomainService $archiveTaskRecordDomainService,
     ) {
-        $this->logger = $loggerFactory->get(static::class);
+        $this->logger = $loggerFactory->get(self::class);
     }
 
     /**

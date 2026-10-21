@@ -105,7 +105,9 @@ export function useLinkedMediaMentionSelection(
 			const replaced =
 				editorRef.current?.replaceMentionItems(
 					createCanvasMentionPathMatcher(snapshot.path, resolveResourceReference),
-					createReferenceResourcePanelItemFromPath(currentItem.path, currentFileName),
+					createReferenceResourcePanelItemFromPath(currentItem.path, currentFileName, {
+						mediaType: currentItem.kind,
+					}),
 				) ?? false
 			if (replaced) {
 				snapshots.set(connectionId, {
@@ -171,7 +173,9 @@ export function useLinkedMediaMentionSelection(
 
 			const inserted =
 				editorRef.current?.insertMentionItem(
-					createReferenceResourcePanelItemFromPath(item.path, fileName),
+					createReferenceResourcePanelItemFromPath(item.path, fileName, {
+						mediaType: item.kind,
+					}),
 					{ replaceSelection: false },
 				) ?? false
 			if (!inserted) {

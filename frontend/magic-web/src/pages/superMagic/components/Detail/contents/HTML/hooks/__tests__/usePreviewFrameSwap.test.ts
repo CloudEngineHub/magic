@@ -93,15 +93,36 @@ describe("reconcileFrameSwap", () => {
 		expect(editing.frames[0].frozenProps).toBeNull()
 	})
 
-	it("collapses to one live frame and updates in place while editing", () => {
-		const swapped = reconcileFrameSwap(readyState(), input({ content: "b" }))
+	it("keeps the document untouched when the editor is entered with unchanged content", () => {
+		const state = readyState()
+		expect(
+			reconcileFrameSwap(state, input({ isEditing: true, contentIsEditVariant: true })),
+		).toBe(state)
+	})
+
+	it("updates a live frame that has not rendered yet in place while editing", () => {
+		const state = createFrameSwapState<Props>("file:0", "a")
 		const editing = reconcileFrameSwap(
-			swapped,
+			state,
 			input({ content: "c", isEditing: true, contentIsEditVariant: true }),
 		)
 		expect(editing.frames).toHaveLength(1)
 		expect(editing.frames[0].content).toBe("c")
 		expect(editing.liveId).toBe(editing.frames[0].id)
+	})
+
+	it("swaps to a fresh frame instead of rewriting a rendered document while editing", () => {
+		const editing = reconcileFrameSwap(
+			readyState(),
+			input({ content: "saved", isEditing: true, contentIsEditVariant: true }),
+		)
+		expect(editing.frames.map((frame) => frame.content)).toEqual(["a", "saved"])
+		expect(editing.frames[0].frozenProps).toBe(PROPS)
+		expect(editing.liveId).toBe(1)
+		expect(editing.readyId).toBeNull()
+
+		const done = markFrameReady(editing, 1)
+		expect(done.frames.map((frame) => frame.id)).toEqual([1])
 	})
 
 	it("starts over when the token changes", () => {

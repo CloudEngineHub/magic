@@ -1,18 +1,17 @@
 import type { ColumnDef } from "@tanstack/react-table"
-import { CheckCircle2, Eye, Filter, ServerCog, Trash2, X } from "lucide-react"
-import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react"
+import { CheckCircle2, Eye, ServerCog, Trash2, X } from "lucide-react"
+import { useMemo, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { DataTable } from "@magic-admin-v2/components/data-table"
 import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
+import { DataTable } from "@magic-admin-v2/components/data-table"
 import { DeleteConfirmDialog } from "@magic-admin-v2/components/delete-confirm-dialog"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
-import {
-	FieldSearchControl,
-	type FieldSearchOption,
-} from "@magic-admin-v2/components/field-search-control"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
 import { FilterSearchInput } from "@magic-admin-v2/components/filter-search-input"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import {
+	ListFilterPanel,
+	type ListFilterPanelFieldsProps,
+} from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { EntityAvatarRender } from "@magic-admin-v2/components/entity-avatar-render"
 import { Button } from "@magic-admin-v2/components/ui/button"
@@ -37,8 +36,8 @@ import {
 	type ProviderType,
 } from "@magic-admin-v2/features/platform-provider-list/types"
 import {
+	createDefaultProviderFilterDraft,
 	type ProviderFilterDraft,
-	type ProviderSearchField,
 } from "@magic-admin-v2/features/platform-provider-list/utils/provider-list"
 import {
 	defaultProviderIcon,
@@ -53,12 +52,14 @@ type ProviderStatusStats = {
 
 export function ProviderListContent({
 	categoryAccess,
+	mobileFilterOpen,
 	filter,
 	items,
 	deleting,
 	loading,
 	onDelete,
 	onFilterChange,
+	onMobileFilterOpenChange,
 	onOpenDetail,
 	onPageChange,
 	onPageSizeChange,
@@ -73,9 +74,11 @@ export function ProviderListContent({
 	deleting: boolean
 	filter: ProviderFilterDraft
 	items: ProviderListItem[]
+	mobileFilterOpen?: boolean
 	loading: boolean
 	onDelete: (provider: ProviderListItem) => Promise<void>
 	onFilterChange: (filter: ProviderFilterDraft) => void
+	onMobileFilterOpenChange?: (open: boolean) => void
 	onOpenDetail: (provider: ProviderListItem) => void
 	onPageChange: (page: number) => void
 	onPageSizeChange: (pageSize: number) => void
@@ -88,16 +91,6 @@ export function ProviderListContent({
 }) {
 	const { t } = useTranslation()
 	const [deleteTarget, setDeleteTarget] = useState<ProviderListItem | null>(null)
-	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
-	const [mobileFilterDraft, setMobileFilterDraft] = useState<ProviderFilterDraft>(filter)
-	const searchOptions = useMemo<Array<FieldSearchOption<ProviderSearchField>>>(
-		() => [
-			{ value: "name", label: t("providerList.filter.name") },
-			{ value: "alias", label: t("providerList.filter.alias") },
-			{ value: "provider_id", label: t("providerList.filter.providerId") },
-		],
-		[t],
-	)
 	const columns = useMemo<Array<ColumnDef<ProviderListItem>>>(
 		() => [
 			{
@@ -105,6 +98,12 @@ export function ProviderListContent({
 				size: 320,
 				header: t("providerList.column.name"),
 				cell: ({ row }) => <ProviderNameCell provider={row.original} />,
+			},
+			{
+				id: "id",
+				size: 200,
+				header: t("providerList.column.id"),
+				cell: ({ row }) => <ProviderIdCell value={row.original.id} />,
 			},
 			{
 				id: "status",
@@ -126,7 +125,7 @@ export function ProviderListContent({
 			},
 			{
 				id: "sort",
-				size: 120,
+				size: 140,
 				header: t("providerList.column.sort"),
 				cell: ({ row }) => <span className="text-sm">{row.original.sort ?? 0}</span>,
 			},
@@ -197,32 +196,9 @@ export function ProviderListContent({
 		}
 	}
 
-	function handleMobileFilterOpenChange(open: boolean) {
-		if (open) {
-			setMobileFilterDraft(filter)
-		}
-		setMobileFilterOpen(open)
-	}
-
-	function resetMobileFilters() {
-		setMobileFilterDraft({
-			alias: "",
-			name: "",
-			provider_id: "",
-			provider_type: providerSelectAllValue,
-			search_field: "name",
-			status: providerSelectAllValue,
-		})
-	}
-
-	function applyMobileFilters() {
-		onFilterChange(mobileFilterDraft)
-		setMobileFilterOpen(false)
-	}
-
 	return (
-		<div className="space-y-4">
-			<div className="grid gap-3 sm:grid-cols-3">
+		<>
+			<div className="mt-5 grid gap-3 sm:grid-cols-3">
 				<ProviderStatCard
 					icon={<ServerCog className="size-4" aria-hidden="true" />}
 					label={t("providerList.stat.total")}
@@ -240,146 +216,31 @@ export function ProviderListContent({
 				/>
 			</div>
 
-			<div
-				className="sticky top-0 z-40 -mx-4 flex min-w-0 items-end gap-2 bg-background px-4 py-2 md:hidden lg:-mx-6 lg:px-6"
-				data-testid="provider-mobile-filters"
-			>
-				<FilterControlField
-					className="min-w-0 flex-1"
-					label={t("providerList.filter.search")}
-				>
-					<FieldSearchControl
-						selectTriggerTestId="provider-search-field-trigger"
-						contentTestId="provider-search-field-content"
-						optionTestId="provider-search-field-option"
-						ariaLabel={t("providerList.filter.search")}
-						clearLabel={t("providerList.action.clearSearch")}
-						clearButtonTestId="provider-search-clear-button"
-						inputValue={filter[filter.search_field]}
-						inputTestId="provider-search-input"
-						onInputChange={(search_value) =>
-							onFilterChange({ ...filter, [filter.search_field]: search_value })
-						}
-						onValueChange={(search_field) =>
-							onFilterChange({ ...filter, search_field })
-						}
-						options={searchOptions}
-						placeholder={t("providerList.placeholder.search")}
-						testId="provider-search-control"
-						value={filter.search_field}
-					/>
-				</FilterControlField>
-				<Button
-					aria-label={t("providerList.filter.title")}
-					data-testid="provider-advanced-trigger"
-					onClick={() => handleMobileFilterOpenChange(true)}
-					size="icon"
-					variant="outline"
-				>
-					<Filter className="size-4" aria-hidden="true" />
-				</Button>
-			</div>
-
-			<div
-				className="sticky top-0 z-40 -mx-4 hidden flex-wrap items-end gap-2 bg-background px-4 py-2 md:flex lg:-mx-6 lg:px-6"
-				data-testid="provider-desktop-filters"
-			>
-				<FilterControlField
-					className="w-full min-w-0 md:w-[340px] xl:w-[420px]"
-					label={t("providerList.filter.search")}
-				>
-					<FieldSearchControl
-						selectTriggerTestId="provider-advanced-search-field-trigger"
-
-						contentTestId="provider-advanced-search-field-content"
-						optionTestId="provider-advanced-search-field-option"
-						ariaLabel={t("providerList.filter.search")}
-						clearLabel={t("providerList.action.clearSearch")}
-						clearButtonTestId="provider-search-clear-button"
-						inputValue={filter[filter.search_field]}
-						inputTestId="provider-search-input"
-						onInputChange={(search_value) =>
-							onFilterChange({ ...filter, [filter.search_field]: search_value })
-						}
-						onValueChange={(search_field) =>
-							onFilterChange({ ...filter, search_field })
-						}
-						options={searchOptions}
-						placeholder={t("providerList.placeholder.search")}
-
-						testId="provider-search-control"
-						value={filter.search_field}
-					/>
-				</FilterControlField>
-				<FilterControlField className="w-fit" label={t("providerList.filter.status")}>
-					<ProviderStatusSelect
-						className="w-fit max-w-full"
-						testId="provider-status-trigger"
-						value={filter.status}
-						onChange={(status) => onFilterChange({ ...filter, status })}
-					/>
-				</FilterControlField>
-
-				<FilterControlField className="w-fit" label={t("providerList.filter.providerType")}>
-					<ProviderTypeSelect
-						className="w-fit max-w-full"
-						testId="provider-type-trigger"
-						value={filter.provider_type}
-						onChange={(provider_type) => onFilterChange({ ...filter, provider_type })}
-					/>
-				</FilterControlField>
-			</div>
-
-			<FilterSheet
-				closeButtonTestId="provider-advanced-close-button"
+			<ListFilterPanel
 				applyLabel={t("providerList.action.applyFilters")}
-				applyButtonTestId="provider-advanced-apply-button"
-				bodyTestId="provider-advanced-body"
-				description={t("providerList.filter.description")}
-				contentTestId="provider-advanced-content"
-				onApply={applyMobileFilters}
-				onOpenChange={handleMobileFilterOpenChange}
-				onReset={resetMobileFilters}
-				open={mobileFilterOpen}
-				presentation="mobile-only"
-				resetButtonTestId="provider-advanced-reset-button"
+				mobileOpen={mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
+				showMobileTrigger={false}
+				className="mt-5"
+				desktopResetTestId="provider-list-reset-button"
+				desktopTestId="provider-desktop-filters"
+				mobileApplyTestId="provider-advanced-apply-button"
+				mobileBodyTestId="provider-advanced-body"
+				mobileCloseButtonTestId="provider-advanced-close-button"
+				mobileContentTestId="provider-advanced-content"
+				mobileResetTestId="provider-advanced-reset-button"
+				createDefaultValue={createDefaultProviderFilterDraft}
+				onChange={(patch) => onFilterChange({ ...filter, ...patch })}
+				onReset={() => onFilterChange(createDefaultProviderFilterDraft())}
+				renderFields={(props) => <ProviderFilterFields {...props} />}
 				resetLabel={t("providerList.action.reset")}
 				title={t("providerList.filter.title")}
-			>
-				<ProviderAdvancedSearchFields
-					filter={mobileFilterDraft}
-					setFilter={setMobileFilterDraft}
-				/>
-				<FilterControlField className="w-full" label={t("providerList.filter.status")}>
-					<ProviderStatusSelect
-						className="w-full"
-						testId="provider-advanced-status-trigger"
-						value={mobileFilterDraft.status}
-						onChange={(status) =>
-							setMobileFilterDraft((previous) => ({ ...previous, status }))
-						}
-					/>
-				</FilterControlField>
-				<FilterControlField
-					className="w-full"
-					label={t("providerList.filter.providerType")}
-				>
-					<ProviderTypeSelect
-						className="w-full"
-						testId="provider-advanced-type-trigger"
-						value={mobileFilterDraft.provider_type}
-						onChange={(provider_type) =>
-							setMobileFilterDraft((previous) => ({
-								...previous,
-								provider_type,
-							}))
-						}
-					/>
-				</FilterControlField>
-			</FilterSheet>
+				value={filter}
+			/>
 
 			<DataTable
 				columns={columns}
+				containerClassName="mt-5"
 				containerTestId="provider-list-table"
 				data={items}
 				emptyState={
@@ -399,17 +260,17 @@ export function ProviderListContent({
 			/>
 
 			<ListPagination
-				pageSizeOptionTestId="provider-list-page-size-option"
 				showQuickJumper
-				className="px-1"
+				className="mt-4 px-1"
 				jumpInputTestId="provider-list-jump-input"
+				nextButtonTestId="provider-list-next-button"
 				onPageChange={onPageChange}
 				onPageSizeChange={onPageSizeChange}
-				pageSizeTriggerTestId="provider-list-page-size-trigger"
 				page={page}
 				pageSize={pageSize}
+				pageSizeOptionTestId="provider-list-page-size-option"
+				pageSizeTriggerTestId="provider-list-page-size-trigger"
 				previousButtonTestId="provider-list-previous-button"
-				nextButtonTestId="provider-list-next-button"
 				testId="provider-list-pagination"
 				total={total}
 			/>
@@ -425,51 +286,75 @@ export function ProviderListContent({
 				open={deleteTarget !== null}
 				title={t("providerList.delete.title")}
 			/>
-		</div>
+		</>
 	)
 }
 
-function ProviderAdvancedSearchFields({
-	filter,
-	setFilter,
-}: {
-	filter: ProviderFilterDraft
-	setFilter: Dispatch<SetStateAction<ProviderFilterDraft>>
-}) {
+function ProviderFilterFields({
+	layout,
+	onChange,
+	value,
+}: ListFilterPanelFieldsProps<ProviderFilterDraft>) {
 	const { t } = useTranslation()
+	const isSheet = layout === "sheet"
 
 	return (
 		<>
-			<FilterControlField className="w-full" label={t("providerList.filter.name")}>
+			<FilterControlField label={t("providerList.filter.name")}>
 				<FilterSearchInput
-					clearLabel={t("providerList.action.clearSearch")}
-					clearButtonTestId="provider-name-clear-button"
-					inputTestId="provider-name-input"
-					onValueChange={(name) => setFilter((previous) => ({ ...previous, name }))}
-					placeholder={t("providerList.filter.name")}
-					value={filter.name}
-				/>
-			</FilterControlField>
-			<FilterControlField className="w-full" label={t("providerList.filter.alias")}>
-				<FilterSearchInput
-					clearLabel={t("providerList.action.clearSearch")}
-					clearButtonTestId="provider-alias-clear-button"
-					inputTestId="provider-alias-input"
-					onValueChange={(alias) => setFilter((previous) => ({ ...previous, alias }))}
-					placeholder={t("providerList.filter.alias")}
-					value={filter.alias}
-				/>
-			</FilterControlField>
-			<FilterControlField className="w-full" label={t("providerList.filter.providerId")}>
-				<FilterSearchInput
-					clearLabel={t("providerList.action.clearSearch")}
-					clearButtonTestId="provider-id-clear-button"
-					inputTestId="provider-id-input"
-					onValueChange={(provider_id) =>
-						setFilter((previous) => ({ ...previous, provider_id }))
+					aria-label={t("providerList.filter.name")}
+					clearButtonTestId={
+						isSheet ? "provider-name-clear-button" : "provider-list-name-clear-button"
 					}
-					placeholder={t("providerList.filter.providerId")}
-					value={filter.provider_id}
+					clearLabel={t("providerList.action.clearSearch")}
+					inputTestId={isSheet ? "provider-name-input" : "provider-list-name-input"}
+					onValueChange={(name) => onChange({ name })}
+					placeholder={t("providerList.placeholder.searchName")}
+					value={value.name}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("providerList.filter.alias")}>
+				<FilterSearchInput
+					aria-label={t("providerList.filter.alias")}
+					clearButtonTestId={
+						isSheet ? "provider-alias-clear-button" : "provider-list-alias-clear-button"
+					}
+					clearLabel={t("providerList.action.clearSearch")}
+					inputTestId={isSheet ? "provider-alias-input" : "provider-list-alias-input"}
+					onValueChange={(alias) => onChange({ alias })}
+					placeholder={t("providerList.placeholder.searchAlias")}
+					value={value.alias}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("providerList.filter.providerId")}>
+				<FilterSearchInput
+					aria-label={t("providerList.filter.providerId")}
+					clearButtonTestId={
+						isSheet ? "provider-id-clear-button" : "provider-list-id-clear-button"
+					}
+					clearLabel={t("providerList.action.clearSearch")}
+					inputTestId={isSheet ? "provider-id-input" : "provider-list-id-input"}
+					onValueChange={(id) => onChange({ id })}
+					placeholder={t("providerList.placeholder.searchProviderId")}
+					value={value.id}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("providerList.filter.status")}>
+				<ProviderStatusSelect
+					className="w-full"
+					onChange={(status) => onChange({ status })}
+					testId={
+						isSheet ? "provider-advanced-status-trigger" : "provider-status-trigger"
+					}
+					value={value.status}
+				/>
+			</FilterControlField>
+			<FilterControlField label={t("providerList.filter.providerType")}>
+				<ProviderTypeSelect
+					className="w-full"
+					onChange={(provider_type) => onChange({ provider_type })}
+					testId={isSheet ? "provider-advanced-type-trigger" : "provider-type-trigger"}
+					value={value.provider_type}
 				/>
 			</FilterControlField>
 		</>
@@ -499,7 +384,6 @@ function ProviderStatCard({
 }
 
 function ProviderNameCell({ provider }: { provider: ProviderListItem }) {
-	const { t } = useTranslation()
 	const alias = provider.alias?.trim()
 	const primaryName = alias || provider.name
 
@@ -513,16 +397,6 @@ function ProviderNameCell({ provider }: { provider: ProviderListItem }) {
 				<span className="mt-1 block truncate text-xs text-muted-foreground">
 					{provider.name}
 				</span>
-				<CopyableValue
-					className="max-w-full"
-					label={t("providerList.column.serviceProviderId")}
-					value={provider.service_provider_id}
-				/>
-				<CopyableValue
-					className="max-w-full"
-					label={t("providerList.column.serviceProviderConfigId")}
-					value={provider.id}
-				/>
 			</div>
 		</div>
 	)
@@ -566,6 +440,18 @@ function ProviderDateCell({ value }: { value?: string }) {
 	)
 }
 
+function ProviderIdCell({ value }: { value: string }) {
+	const { t } = useTranslation()
+
+	return (
+		<CopyableValue
+			className="text-left hover:text-muted-foreground"
+			copyLabel={t("providerList.action.copyId")}
+			value={value}
+		/>
+	)
+}
+
 function ProviderStatusSelect({
 	className,
 	onChange,
@@ -586,20 +472,20 @@ function ProviderStatusSelect({
 			</SelectTrigger>
 			<SelectContent data-testid="platform-provider-list-filter-content">
 				<SelectItem
-					value={providerSelectAllValue}
 					data-testid="platform-provider-list-option"
+					value={providerSelectAllValue}
 				>
 					{t("common.all")}
 				</SelectItem>
 				<SelectItem
-					value={String(providerStatus.enabled)}
 					data-testid="platform-provider-list-option"
+					value={String(providerStatus.enabled)}
 				>
 					{t("providerList.status.enabled")}
 				</SelectItem>
 				<SelectItem
-					value={String(providerStatus.disabled)}
 					data-testid="platform-provider-list-option"
+					value={String(providerStatus.disabled)}
 				>
 					{t("providerList.status.disabled")}
 				</SelectItem>
@@ -628,26 +514,26 @@ function ProviderTypeSelect({
 			</SelectTrigger>
 			<SelectContent data-testid="platform-provider-list-platform-provider-list-content">
 				<SelectItem
-					value={providerSelectAllValue}
 					data-testid="platform-provider-list-option"
+					value={providerSelectAllValue}
 				>
 					{t("common.all")}
 				</SelectItem>
 				<SelectItem
-					value={String(providerType.official)}
 					data-testid="platform-provider-list-option"
+					value={String(providerType.official)}
 				>
 					{getProviderTypeLabel(providerType.official, t)}
 				</SelectItem>
 				<SelectItem
-					value={String(providerType.nonOfficial)}
 					data-testid="platform-provider-list-option"
+					value={String(providerType.nonOfficial)}
 				>
 					{getProviderTypeLabel(providerType.nonOfficial, t)}
 				</SelectItem>
 				<SelectItem
-					value={String(providerType.custom)}
 					data-testid="platform-provider-list-option"
+					value={String(providerType.custom)}
 				>
 					{getProviderTypeLabel(providerType.custom, t)}
 				</SelectItem>

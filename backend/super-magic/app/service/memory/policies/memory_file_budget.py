@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 @dataclass(frozen=True, slots=True)
 class MemoryMdBudget:
     """
-    每份全局／项目主文件单独使用预算；target 是整理目标，max 才决定是否超限。
+    每份全局／项目／Claw 主文件单独使用预算；target 是整理目标，max 才决定是否超限。
     MOCK DEMO：target=10,000、max=16,000；15,000 只做相关增量，16,000 仍未超限，
     16,001 才请求语义整理。不是把文件切到指定长度，也不能把两份文件的 Token 相加判断。
     """

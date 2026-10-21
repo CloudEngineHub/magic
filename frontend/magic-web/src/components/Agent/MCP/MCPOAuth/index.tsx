@@ -1,9 +1,9 @@
-import { useStyles } from "./styles"
-import { Flex, Button as AntButton, Form, Input } from "antd"
+import { Button as AntButton, Form, Input } from "antd"
 import { IconX } from "@tabler/icons-react"
 import { Link, X } from "lucide-react"
 import { IconMCP } from "@/enhance/tabler/icons-react"
-import MagicScrollBar from "@/components/base/MagicScrollBar"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
+import { cn } from "@/utils/cn"
 import MagicSpin from "@/components/base/MagicSpin"
 import { Button } from "@/components/shadcn-ui/button"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -30,6 +30,15 @@ interface MCPEditor extends AgentCommonModalChildrenProps {
 	initialMcpDetails?: GetAvailableMCPListResponse
 }
 
+const authSectionClassName =
+	"flex cursor-pointer items-center justify-center self-stretch rounded-[8px] bg-fill px-6 py-1.5 text-sm font-semibold not-italic leading-5 text-foreground/80 dark:bg-white/10"
+
+const connectorAuthSectionClassName =
+	"cursor-default flex-col gap-2 border border-border bg-[linear-gradient(120deg,#fdfbfb_0%,#ebedee_100%)] px-7 py-6 text-center font-normal leading-6 shadow-none transition-colors duration-200 ease-[ease] dark:bg-none"
+
+const activeAuthSectionClassName =
+	"bg-primary/[0.08] text-primary hover:bg-primary/[0.12] active:bg-primary/[0.16] dark:bg-primary/20 dark:hover:bg-primary/[0.28] dark:active:bg-primary/[0.36]"
+
 function getSafeAuthorizationUrl(value: unknown) {
 	if (typeof value !== "string" || !value.trim()) return null
 
@@ -53,14 +62,13 @@ export default function MCPOAuth(props: MCPEditor) {
 		initialUserSettings,
 		initialMcpDetails,
 	} = props
-	const { styles, cx } = useStyles()
 
 	const [form] = Form.useForm()
 	const { t } = useTranslation("agent")
 	const { t: tMarket } = useTranslation("crew/market")
 	const service = useRef<MCPOAuthService>(new MCPOAuthService(FlowApi))
 
-	/** 是否填写完表单，触发轮询 */
+	/** Authorization state reported by the OAuth status request or polling service. */
 	const [isAuth, setAuth] = useState(false)
 	const [authVisible, setAuthVisible] = useState(false)
 	const [isFinishFillForm, setFinishFillForm] = useState(false)
@@ -104,7 +112,7 @@ export default function MCPOAuth(props: MCPEditor) {
 		() => {
 			const details = mcpDetails?.list?.[0]
 			if (details && data) {
-				// 当且仅当存在表单项需要填写时才触发流程
+				// Skip field validation when no setup fields are required.
 				if (details.require_fields.length === 0) {
 					setFinishFillForm(true)
 				} else {
@@ -172,7 +180,7 @@ export default function MCPOAuth(props: MCPEditor) {
 		}
 
 		window.open(safeAuthorizationUrl, "_blank", "noopener,noreferrer")
-		// 这里需要通过新窗口打开授权页面，指定授权成功回调页面
+		// Poll the callback status after opening authorization in a separate window.
 		service.current?.restart(id, data)
 	})
 
@@ -185,9 +193,9 @@ export default function MCPOAuth(props: MCPEditor) {
 		refresh()
 	})
 
-	/** 表单填写 */
+	/** Update setup completeness as the user edits required fields. */
 	const onValuesChange = useMemoizedFn((_changedValues, values) => {
-		// 检查表单是否都填写完成
+		// Every required field must contain a non-empty string before submission.
 		if (mcpDetails?.list?.[0]?.require_fields) {
 			const result = mcpDetails?.list?.[0]?.require_fields.every((fieldItem) => {
 				const fieldValue = values?.[fieldItem?.field_name]
@@ -200,7 +208,7 @@ export default function MCPOAuth(props: MCPEditor) {
 	useThrottleEffect(
 		() => {
 			service.current?.setCallbacks({
-				// 授权成功回调
+				// Reflect successful authorization without repeating the authorization request.
 				onSuccess() {
 					setAuth(true)
 				},
@@ -277,7 +285,7 @@ export default function MCPOAuth(props: MCPEditor) {
 							key={item.field_name}
 							label={item.field_name}
 							name={item.field_name}
-							className={styles.item}
+							className="mb-2.5"
 							required
 							rules={[
 								{
@@ -294,21 +302,22 @@ export default function MCPOAuth(props: MCPEditor) {
 				</>
 			) : null}
 			{authVisible ? (
-				<Form.Item label={t("mcp.form.auth")} className={styles.item}>
+				<Form.Item label={t("mcp.form.auth")} className="mb-2.5">
 					{isAuth ? (
 						<div
 							onClick={
 								panelVariant === "connector-market" ? undefined : triggerUnbind
 							}
-							className={cx(
-								styles.section,
-								panelVariant === "connector-market" && styles.connectorAuthSection,
+							className={cn(
+								authSectionClassName,
 								panelVariant === "connector-market" &&
-									styles.connectorAuthSuccessSection,
+									connectorAuthSectionClassName,
+								panelVariant === "connector-market" &&
+									"bg-[linear-gradient(120deg,#f8fbff_0%,#eaf3ff_100%)]",
 							)}
 						>
 							{panelVariant === "connector-market" ? (
-								<div className="flex size-[38px] shrink-0 items-center justify-center rounded-lg bg-white shadow-[0_2px_8px_rgba(24,25,29,0.12)]">
+								<div className="flex size-[38px] shrink-0 items-center justify-center rounded-lg bg-white shadow-[0_2px_8px_rgba(24,25,29,0.12)] dark:text-neutral-900">
 									<Link className="size-6 shrink-0" aria-hidden />
 								</div>
 							) : null}
@@ -336,14 +345,15 @@ export default function MCPOAuth(props: MCPEditor) {
 									? undefined
 									: triggerStartPolling
 							}
-							className={cx(
-								styles.section,
-								{ [styles.active]: !isAuth },
-								panelVariant === "connector-market" && styles.connectorAuthSection,
+							className={cn(
+								authSectionClassName,
+								activeAuthSectionClassName,
+								panelVariant === "connector-market" &&
+									connectorAuthSectionClassName,
 							)}
 						>
 							{panelVariant === "connector-market" ? (
-								<div className="flex size-[38px] shrink-0 items-center justify-center rounded-lg bg-white shadow-[0_2px_8px_rgba(24,25,29,0.12)]">
+								<div className="flex size-[38px] shrink-0 items-center justify-center rounded-lg bg-white shadow-[0_2px_8px_rgba(24,25,29,0.12)] dark:text-neutral-900">
 									<Link className="size-6 shrink-0" aria-hidden />
 								</div>
 							) : null}
@@ -437,12 +447,13 @@ export default function MCPOAuth(props: MCPEditor) {
 
 						<div className="flex min-h-0 flex-1 flex-col gap-3">
 							{hasSetupFields ? (
-								<MagicScrollBar
-									className="max-h-[min(36vh,18rem)] w-full px-1"
-									autoHide={false}
+								<ScrollArea
+									type="always"
+									className="w-full"
+									viewportClassName="max-h-[min(36vh,18rem)] pl-1 pr-3 [&>div]:!block"
 								>
 									{authForm}
-								</MagicScrollBar>
+								</ScrollArea>
 							) : null}
 
 							<div className="flex items-center justify-end gap-2">
@@ -477,53 +488,70 @@ export default function MCPOAuth(props: MCPEditor) {
 	}
 
 	return (
-		<div className={styles.layout}>
-			<div className={styles.header}>
-				<Flex gap={10} align="center">
-					<div className={styles.icon}>
+		<div className="w-full overflow-hidden rounded-[12px]">
+			<div className="flex h-20 w-full items-center justify-between p-5 text-lg font-semibold not-italic leading-6 text-foreground/80">
+				<div className="flex min-w-0 items-center gap-2.5">
+					<div className="size-10 flex-none overflow-hidden rounded-[8px]">
 						<MagicImage
-							className={styles.icon}
+							className="size-10 flex-none overflow-hidden rounded-[8px]"
 							src={mcpInfo?.icon}
 							alt={mcpInfo?.name}
 							fallback={
-								<div className={styles.icon}>
+								<div className="size-10 flex-none overflow-hidden rounded-[8px]">
 									<IconMCP size="100%" />
 								</div>
 							}
 						/>
 					</div>
-					<Flex vertical>
-						<span className={styles.title}>{mcpInfo?.name}</span>
-						<span className={styles.desc}>
+					<div className="flex min-w-0 flex-col">
+						<span className="line-clamp-1 self-stretch text-sm font-semibold not-italic leading-5 text-foreground/80">
+							{mcpInfo?.name}
+						</span>
+						<span className="line-clamp-2 self-stretch text-ellipsis text-xs font-normal not-italic leading-4 text-foreground/60">
 							{renderMarkdownLinks(mcpInfo?.description || t("mcp.card.desc"), {
-								linkClassName: styles.descLink,
+								linkClassName:
+									"text-primary underline underline-offset-2 hover:opacity-90",
 								linkTestId: "agent-mcp-oauth-description-link",
 							})}
 						</span>
-					</Flex>
-				</Flex>
-				<div className={styles.close} onClick={onClose}>
+					</div>
+				</div>
+				<div
+					className="flex size-6 cursor-pointer items-center justify-center rounded-[6px] transition-all duration-100 ease-linear hover:bg-fill active:bg-fill-secondary dark:hover:bg-white/10 dark:active:bg-white/[0.15]"
+					onClick={onClose}
+				>
 					<IconX size={24} />
 				</div>
 			</div>
 			<MagicSpin spinning={getMCPUserSettingsLoading || getAvailableMCPLoading}>
-				<Flex className={styles.body} vertical gap={20}>
-					<div className={styles.loading}>
-						<MagicScrollBar className={styles.wrapper} autoHide={false}>
+				<div className="flex flex-col gap-5 pb-5">
+					<div className="min-h-20 w-full">
+						{/* Keep setup fields scrollable while the action row remains outside the viewport. */}
+						<ScrollArea
+							type="always"
+							className="w-full rounded-[6px]"
+							viewportClassName="max-h-[60vh] px-5 [&>div]:!block"
+						>
 							{authForm}
-						</MagicScrollBar>
+						</ScrollArea>
 					</div>
-					<Flex className={styles.menu} justify="flex-end" align="center" gap={10}>
-						<AntButton onClick={onClose}>{t("mcp.form.cancel")}</AntButton>
+					<div className="flex w-full items-center justify-end gap-2.5 px-5">
+						<AntButton
+							className="dark:!border-border dark:!bg-fill dark:!text-foreground/80 dark:hover:!bg-fill-secondary"
+							onClick={onClose}
+						>
+							{t("mcp.form.cancel")}
+						</AntButton>
 						<AntButton
 							type="primary"
+							className="dark:enabled:!bg-primary dark:enabled:!text-primary-foreground dark:enabled:hover:!bg-primary/90"
 							onClick={onSubmit}
 							disabled={!(isFinishFillForm && (authVisible ? isAuth : true))}
 						>
 							{t("mcp.form.confirm")}
 						</AntButton>
-					</Flex>
-				</Flex>
+					</div>
+				</div>
 			</MagicSpin>
 		</div>
 	)

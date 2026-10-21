@@ -162,6 +162,12 @@ class ProjectDomainService
         return $this->projectRepository->updateProjectByCondition($conditions, $data);
     }
 
+    /** @return ProjectEntity[] */
+    public function getProjectsForWorkspaceDeletion(int $workspaceId): array
+    {
+        return $this->projectRepository->findByWorkspaceIdForDeletion($workspaceId);
+    }
+
     /**
      * 根据工作区ID获取项目ID列表.
      *

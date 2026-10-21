@@ -1,10 +1,10 @@
 import { getActiveImageContent, isImageElementContent } from "../../document/elementContent"
-import { GenerationStatus } from "../../../public/magic-types"
 import type { Canvas } from "../../core/Canvas"
 import type { CanvasImageFileRename } from "../../../public/magic-types"
+import { getEditableElementName, normalizeElementName } from "./renameUtils"
 
 export interface ImageRenameOptions {
-	/** 显式传入选项时，标题和文件独立提交；未提供文件变化表示只改标题。 */
+	/** 文件改名必须由调用方显式提供；省略时只修改元素名称。 */
 	fileChange?: CanvasImageFileRename
 }
 
@@ -25,17 +25,11 @@ export class ElementRenameManager {
 			return false
 		}
 
-		return this.canvas.nameLabelManager.canStartRename(elementId)
+		return true
 	}
 
-	public startRename(elementId: string, fromLayers = false): boolean {
-		if (
-			fromLayers
-				? !this.canvas.permissionManager.canRename(
-						this.canvas.elementManager.getElementData(elementId),
-					)
-				: !this.canRename(elementId)
-		) {
+	public startRename(elementId: string): boolean {
+		if (!this.canRename(elementId)) {
 			return false
 		}
 
@@ -53,16 +47,43 @@ export class ElementRenameManager {
 		return true
 	}
 
+	/**
+	 * 提交图层列表等轻量入口的元素名称修改。
+	 *
+	 * 这些入口不需要打开画布右侧面板，但必须复用相同的权限校验、名称归一化和
+	 * ElementManager 提交路径，避免不同入口产生不同的历史与状态行为。
+	 */
+	public commitElementName(
+		elementId: string,
+		nextName: string,
+		options?: { historyPolicy?: "include" | "exclude" },
+	): boolean {
+		const name = normalizeElementName(nextName)
+		if (!name) return false
+
+		const element = this.canvas.elementManager.getElementData(elementId)
+		if (!this.canvas.permissionManager.canRename(element)) return false
+
+		const currentName = getEditableElementName(
+			element,
+			this.canvas.elementManager.getElementInstance(elementId),
+		)
+		if (name === currentName.trim()) return false
+
+		return this.updateElementName(elementId, name, options)
+	}
+
 	public async commitRename(nextName: string, options?: ImageRenameOptions): Promise<void> {
 		const elementId = this.renamingElementId
-		const name = nextName.trim()
+		const name = normalizeElementName(nextName)
 		if (!elementId || !name) return
 		const element = this.canvas.elementManager.getElementData(elementId)
 		if (!this.canvas.permissionManager.canRename(element)) return
-		const currentName =
-			element?.name ||
-			this.canvas.elementManager.getElementInstance(elementId)?.getRenderName()
-		if (name === currentName && !options?.fileChange) {
+		const currentName = getEditableElementName(
+			element,
+			this.canvas.elementManager.getElementInstance(elementId),
+		)
+		if (name === currentName.trim() && !options?.fileChange) {
 			this.cancelRename()
 			return
 		}
@@ -88,43 +109,13 @@ export class ElementRenameManager {
 			this.canvas.historyManager.recordHistoryImmediate()
 			await methods.renameImageFile(change)
 			affectsFile = true
-		} else if (
-			!options &&
-			element &&
-			isImageElementContent(element) &&
-			element.contents.length === 1 &&
-			methods
-		) {
-			const content = getActiveImageContent(element)
-			const processing =
-				content.status === GenerationStatus.Pending ||
-				content.status === GenerationStatus.Processing
-			const file =
-				!processing && content.src ? methods.resolveImageRenameFile(content.src) : undefined
-			if (file) {
-				const extension = file.fileName.match(/\.[^/.]+$/)?.[0] || ""
-				this.canvas.historyManager.recordHistoryImmediate()
-				await methods.renameImageFile({
-					elementId,
-					contentId: content.contentId,
-					fileId: file.fileId,
-					expectedName: file.fileName,
-					targetName: name.toLowerCase().endsWith(extension.toLowerCase())
-						? name
-						: `${name}${extension}`,
-				})
-				affectsFile = true
-			}
 		}
 		// 文件已改名时标题不能形成单独的撤销记录；普通元素命名继续沿用画布历史。
-		const current = this.canvas.elementManager.getElementData(elementId)
-		if (current && this.canvas.permissionManager.canRename(current) && current.name !== name) {
-			this.canvas.elementManager.update(
-				elementId,
-				{ name },
-				affectsFile ? { historyPolicy: "exclude" } : undefined,
-			)
-		}
+		this.updateElementName(
+			elementId,
+			name,
+			affectsFile ? { historyPolicy: "exclude" } : undefined,
+		)
 		if (affectsFile)
 			this.canvas.historyManager.applyExternalFileRename((document) => {
 				const rewrite = (items: typeof document.elements): typeof document.elements =>
@@ -137,6 +128,34 @@ export class ElementRenameManager {
 				return { ...document, elements: rewrite(document.elements) }
 			})
 		this.cancelRename()
+	}
+
+	private updateElementName(
+		elementId: string,
+		name: string,
+		options?: { historyPolicy?: "include" | "exclude" },
+	): boolean {
+		const element = this.canvas.elementManager.getElementData(elementId)
+		if (!this.canvas.permissionManager.canRename(element)) return false
+
+		const currentName = getEditableElementName(
+			element,
+			this.canvas.elementManager.getElementInstance(elementId),
+		)
+		if (currentName.trim() === name) return false
+
+		if (options?.historyPolicy) {
+			this.canvas.elementManager.update(
+				elementId,
+				{ name },
+				{
+					historyPolicy: options.historyPolicy,
+				},
+			)
+		} else {
+			this.canvas.elementManager.update(elementId, { name })
+		}
+		return true
 	}
 
 	public cancelRename(): void {

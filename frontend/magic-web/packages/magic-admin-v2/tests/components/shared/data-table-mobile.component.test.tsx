@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "../../../src/components/data-table"
 import { Checkbox } from "../../../src/components/ui/checkbox"
@@ -59,8 +59,18 @@ function mockMobileViewport(isMobile: boolean) {
 }
 
 describe("DataTable mobile presentation", () => {
+	beforeEach(() => {
+		vi.stubGlobal(
+			"ResizeObserver",
+			class {
+				observe = vi.fn()
+				disconnect = vi.fn()
+			},
+		)
+	})
 	afterEach(() => {
 		vi.restoreAllMocks()
+		vi.unstubAllGlobals()
 	})
 
 	it("renders cards and opens the complete row detail sheet on mobile", () => {
@@ -116,7 +126,7 @@ describe("DataTable mobile presentation", () => {
 		)
 
 		expect(document.querySelector('[data-slot="data-table-desktop"]')).toHaveClass(
-			"overflow-hidden",
+			"relative",
 			"rounded-lg",
 			"border",
 			"border-border/50",
@@ -142,10 +152,6 @@ describe("DataTable mobile presentation", () => {
 			"left-0",
 			"z-30",
 		)
-		expect(screen.getByText("模型 A").closest("td")).toHaveClass(
-			"sticky",
-			"left-0",
-			"z-20",
-		)
+		expect(screen.getByText("模型 A").closest("td")).toHaveClass("sticky", "left-0", "z-20")
 	})
 })

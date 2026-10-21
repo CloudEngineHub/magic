@@ -6,6 +6,10 @@ import {
 	getContents,
 	updateContent,
 } from "../../document/elementContent"
+import {
+	finalizeMediaSourceReplacement,
+	mergeMediaSourceReplacementFields,
+} from "../../document/mediaSourceReplacement"
 import type {
 	GetVideoGenerationResultParams,
 	VideoGenerationResultResponse,
@@ -264,12 +268,28 @@ export class VideoPollingManager {
 			const updateData = this.buildResultPatch(result)
 			const elementData = this.config.getElementData()
 			const { name, ...contentPatch } = updateData
-			const next = updateContent(elementData, contentId, contentPatch)
+			const currentContent = getContentById(elementData, contentId)
+			const normalizedPatch = currentContent
+				? mergeMediaSourceReplacementFields(currentContent, contentPatch)
+				: contentPatch
+			const next = updateContent(elementData, contentId, normalizedPatch)
 			this.config.canvas.elementManager.update(
 				this.config.elementId,
 				name ? { ...next, name } : next,
 				{ silent: false, historyPolicy: "exclude" },
 			)
+			if (currentContent && typeof normalizedPatch.src === "string") {
+				finalizeMediaSourceReplacement(this.config.canvas, {
+					previousSrc: currentContent.src,
+					nextSrc: normalizedPatch.src,
+					previousComplianceCheckId:
+						"complianceCheckId" in currentContent
+							? currentContent.complianceCheckId
+							: undefined,
+					previousAssetId:
+						"assetId" in currentContent ? currentContent.assetId : undefined,
+				})
+			}
 			return true
 		} catch {
 			this.handleRecoverablePollingIssue(contentId)

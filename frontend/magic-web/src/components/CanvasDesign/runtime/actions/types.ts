@@ -36,7 +36,7 @@ export interface DuplicateActionOptions {
  * 创建画框操作的选项
  */
 export interface FrameCreateActionOptions {
-	/** 显式覆盖默认的 10% 内容边距；未传入时由 Frame 创建入口自动计算 */
+	/** 显式覆盖默认的动态内容边距；未传入时由 Frame 创建入口按内容短边的 8% 计算 */
 	boundsExpansion?: number
 }
 
@@ -69,6 +69,11 @@ export interface DownloadActionOptions {
 	downloadMode?: "default" | "normal"
 }
 
+/** Automatic arrangement mode selected from the element tool menu. */
+export interface ArrangeActionOptions {
+	mode: "smart" | "layered" | "type-group" | "compact-grid" | "horizontal-row" | "vertical-column"
+}
+
 /**
  * 根据动作 ID 映射到对应的选项类型
  */
@@ -83,6 +88,7 @@ export interface UserActionOptionsMap {
 	"download.image": DownloadActionOptions
 	"download.image-no-watermark": DownloadActionOptions
 	"download.frame": DownloadActionOptions
+	"distribute.arrange": ArrangeActionOptions
 }
 
 /**

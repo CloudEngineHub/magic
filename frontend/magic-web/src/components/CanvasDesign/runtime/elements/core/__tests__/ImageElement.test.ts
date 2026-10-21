@@ -517,6 +517,32 @@ describe("ImageElement mounted image node sync", () => {
 		expect(element.getDisplayState()).toMatchObject({ status: "loading", surface: "loading" })
 	})
 
+	it("appends the compliance suffix while a media element is being checked", () => {
+		const image = Object.create(ImageElement.prototype) as ImageElement & {
+			data: { name: string }
+			canvas: { t: undefined }
+			getDisplayState: ReturnType<typeof vi.fn>
+			getActiveContentData: ReturnType<typeof vi.fn>
+		}
+		image.data = { name: "Checked image" }
+		image.canvas = { t: undefined }
+		image.getDisplayState = vi.fn(() => ({
+			status: "completed",
+			surface: "image",
+			contentId: "image-content-1",
+		}))
+		image.getActiveContentData = vi.fn(() => ({
+			contentId: "image-content-1",
+			complianceStatus: "PROCESSING",
+		}))
+
+		expect(image.getNameLabelText()).toBe("Checked image(校验中)")
+		expect(image.getNameLabelContent()).toEqual({
+			primaryText: "Checked image",
+			suffix: { text: "(校验中)" },
+		})
+	})
+
 	it("treats pasted video placeholders with existing info as uploading", () => {
 		const element = Object.create(VideoElement.prototype) as VideoElement & {
 			data: {

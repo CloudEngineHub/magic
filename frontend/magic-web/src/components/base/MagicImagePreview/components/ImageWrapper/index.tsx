@@ -19,6 +19,7 @@ import MagicButton from "@/components/base/MagicButton"
 import MagicIcon from "@/components/base/MagicIcon"
 import { safeJsonToBtoa } from "@/utils/encoding"
 import AntdSkeleton from "../../../AntdSkeleton"
+import PreviewThemeBoundary from "../../PreviewThemeBoundary"
 
 type HTMLImageElementProps = JSX.IntrinsicElements["img"]
 
@@ -290,6 +291,12 @@ const ImageWrapper = observer((props: ImageWrapperProps) => {
 	return <div className={cx(containerClassName, styles.wrapper)}>{ImageNode}</div>
 })
 
-const MemoizedImage = memo(ImageWrapper) as typeof ImageWrapper
+const ThemedImageWrapper = (props: ImageWrapperProps) => (
+	<PreviewThemeBoundary>
+		<ImageWrapper {...props} />
+	</PreviewThemeBoundary>
+)
+
+const MemoizedImage = memo(ThemedImageWrapper)
 
 export default MemoizedImage

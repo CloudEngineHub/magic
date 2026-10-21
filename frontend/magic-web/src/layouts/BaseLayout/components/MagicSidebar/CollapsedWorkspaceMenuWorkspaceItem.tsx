@@ -134,7 +134,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 	const page = projectStore.workspacePages.get(workspace.id)
 	const loading = projectStore.isLoadingWorkspace(workspace.id)
 	const isProjectLoading = loading || !!page?.loadingMore
-	// 状态行随项目滚动；项目为空时也计入视口高度，避免加载和重试入口被隐藏。
+	// Include the status row in the viewport height so loading and retry actions stay visible.
 	const showProjectListStatus = isProjectLoading || !!page?.error
 	const loadMore = useCallback(() => {
 		void projectStore.loadMoreProjectsForWorkspace(workspace.id)
@@ -384,13 +384,13 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							</Button>
 						</span>
 					</PopoverTrigger>
-					{/* 右侧居中并自动避让屏幕边缘；底部留白减少浏览器链接提示对末行的遮挡。 */}
+					{/* Center beside the trigger and reserve bottom space for browser link previews. */}
 					<PopoverContent
 						ref={projectMenuContentRef}
 						side="right"
 						align="center"
 						collisionPadding={{ top: 12, right: 12, bottom: 32, left: 12 }}
-						className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs [&>:not([data-project-scroll-container])]:shrink-0"
+						className="flex max-h-[min(70vh,640px,var(--radix-popover-content-available-height))] w-[240px] flex-col p-1 shadow-xs supports-[height:100dvh]:max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] [&>:not([data-project-scroll-container])]:shrink-0"
 						sideOffset={8}
 						data-testid={projectPopoverTestId}
 						onEscapeKeyDown={(e) => {
@@ -500,7 +500,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 								/>
 							</div>
 						)}
-						{/* 少量项目按内容收短；窗口不足时只压缩列表，保留标题及操作区高度。 */}
+						{/* Fit short lists to their content and shrink only the list when space is limited. */}
 						<div
 							ref={list.scrollRef}
 							className="min-h-0 w-full overflow-y-auto overscroll-contain"
@@ -523,8 +523,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 							</div>
 							{showProjectListStatus && (
 								<div
-									className="flex w-full items-center justify-center gap-2 py-0.5 text-xs text-muted-foreground"
-									style={{ height: PROJECT_ROW_HEIGHT }}
+									className="flex h-9 w-full items-center justify-center gap-2 py-0.5 text-xs text-muted-foreground"
 									role="status"
 								>
 									{isProjectLoading ? (
@@ -553,10 +552,7 @@ const CollapsedWorkspaceMenuWorkspaceItem = observer(function CollapsedWorkspace
 						</div>
 						{!showProjectListStatus && filteredProjects.length === 0 && (
 							<div
-								className={cn(
-									"px-2 text-sm text-muted-foreground",
-									hasProjectSearchKeyword ? "py-3" : "py-1",
-								)}
+								className="w-full px-2 py-4 text-center text-sm text-muted-foreground"
 								data-testid={
 									hasProjectSearchKeyword
 										? projectSearchEmptyTestId

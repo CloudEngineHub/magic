@@ -34,6 +34,7 @@ export interface ReferenceResourceDescriptor {
 export const REFERENCE_RESOURCE_SOURCE_TYPES = {
 	localUpload: "local-upload",
 	projectSelect: "project-select",
+	assets: "assets",
 } as const
 
 export type ReferenceResourceSourceType =

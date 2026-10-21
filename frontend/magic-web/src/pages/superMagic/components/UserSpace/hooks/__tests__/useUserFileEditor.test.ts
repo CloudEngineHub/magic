@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { FileAccessProvider } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { createSessionFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
+import { IntermediateMessageType } from "@/types/chat/intermediate_message"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useUserFileEditor } from "../useUserFileEditor"
 
 const serviceMocks = vi.hoisted(() => ({
@@ -62,5 +64,33 @@ describe("useUserFileEditor", () => {
 				access,
 			)
 		})
+	})
+
+	it("reloads an open preview when another tab saves the same user file", async () => {
+		const access = createSessionFileAccess({ projectId: "runtime-1" })
+		renderHook(() => useUserFileEditor("file-1", false, "identity-1"), {
+			wrapper: ({ children }: { children: ReactNode }) =>
+				createElement(FileAccessProvider, { value: access }, children),
+		})
+		await waitFor(() => expect(serviceMocks.readStableSnapshot).toHaveBeenCalledTimes(1))
+
+		serviceMocks.readStableSnapshot.mockResolvedValueOnce({
+			file: { id: "file-1", parent_id: "root", version: 2 },
+			content: "# updated",
+			revision: 2,
+		})
+		pubsub.publish(PubSubEvents.Super_Magic_File_Change_Intermediate, {
+			message: {
+				type: IntermediateMessageType.SuperMagicFileChange,
+				space_type: "user",
+				project_id: "",
+				workspace_id: "",
+				topic_id: "",
+				timestamp: "2026-10-13T16:37:35+08:00",
+				changes: [{ operation: "update", file_id: "file-1" }],
+			},
+		})
+
+		await waitFor(() => expect(serviceMocks.readStableSnapshot).toHaveBeenCalledTimes(2))
 	})
 })

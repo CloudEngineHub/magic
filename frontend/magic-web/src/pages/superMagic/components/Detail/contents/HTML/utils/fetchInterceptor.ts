@@ -11,6 +11,7 @@
  * - AI_OPTIMIZATION_ACTION, DashboardCardsChange
  */
 
+import { KEYBOARD_MESSAGE_TYPES } from "@dtyq/html-sandbox"
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { getTemporaryDownloadUrl } from "@/pages/superMagic/utils/api"
@@ -27,17 +28,15 @@ export const FETCH_MESSAGE_TYPES = {
 export const injectedIsRelativePathFunctionSource = `
 			function isRelativePath(url) {
 				if (!url) return false;
+				// 仅动态资源拦截脚本会定义该函数；同源沙箱页的绝对 URL 也按工作区相对路径处理
+				if (typeof isSandboxAbsoluteResourceUrl === "function" && isSandboxAbsoluteResourceUrl(url)) return true;
 				return !/^(https?:\\/\\/|\\/\\/|data:|blob:|mailto:|tel:|javascript:|about:)/i.test(url);
 			}
 `
 
-// 键盘快捷键消息类型常量，使用 MAGIC_KEYBOARD_ 前缀
-export const KEYBOARD_MESSAGE_TYPES = {
-	SAVE: "MAGIC_KEYBOARD_SAVE",
-	SAVE_AND_EXIT: "MAGIC_KEYBOARD_SAVE_AND_EXIT",
-	CANCEL: "MAGIC_KEYBOARD_CANCEL",
-	SOURCE: "magic-html-iframe",
-} as const
+// 键盘快捷键消息类型常量（MAGIC_KEYBOARD_ 前缀）。定义在 html-sandbox，iframe 运行时发送、
+// 这里的宿主处理器识别，两端共用同一份，避免字面量各写一份而漂移。
+export { KEYBOARD_MESSAGE_TYPES }
 
 export const POST_MESSAGE_TARGET_STRATEGIES = {
 	SAME_ORIGIN_ANCESTOR: "same-origin-ancestor",
@@ -837,77 +836,6 @@ export function injectFetchInterceptorScript(
 		if (htmlStartIndex !== -1) {
 			const htmlTagEndIndex = finalContent.indexOf(">", htmlStartIndex) + 1
 			const scriptTag = `<script data-injected="fetch-interceptor">${fetchInterceptorScript}</script>`
-			finalContent =
-				finalContent.slice(0, htmlTagEndIndex) +
-				scriptTag +
-				finalContent.slice(htmlTagEndIndex)
-		}
-	}
-
-	return finalContent
-}
-
-/**
- * 生成键盘快捷键拦截脚本
- * 在 iframe 内部监听键盘事件，并通过 postMessage 发送到父窗口
- */
-function generateKeyboardInterceptorScript(): string {
-	return `
-(function() {
-	const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
-	
-	document.addEventListener('keydown', function(e) {
-		const isCmdOrCtrl = isMac ? e.metaKey : e.ctrlKey;
-		
-		// Cmd/Ctrl + S (保存) 或 Shift + Cmd/Ctrl + S (保存并退出)
-		if (isCmdOrCtrl && e.key === 's') {
-			e.preventDefault();
-			e.stopPropagation();
-			
-			window.parent.postMessage({
-				type: e.shiftKey ? '${KEYBOARD_MESSAGE_TYPES.SAVE_AND_EXIT}' : '${KEYBOARD_MESSAGE_TYPES.SAVE}',
-				source: '${KEYBOARD_MESSAGE_TYPES.SOURCE}'
-			}, '*');
-		}
-		
-		// Escape (交给父窗口按当前编辑上下文处理)
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			// Keep the iframe selection active while the parent closes its local panel.
-			e.stopImmediatePropagation();
-			
-			window.parent.postMessage({
-				type: '${KEYBOARD_MESSAGE_TYPES.CANCEL}',
-				source: '${KEYBOARD_MESSAGE_TYPES.SOURCE}'
-			}, '*');
-		}
-	}, true);
-})();
-`
-}
-
-/**
- * 为HTML内容注入键盘快捷键拦截器脚本
- * @param htmlContent 原始HTML内容
- * @returns 注入脚本后的HTML内容
- */
-export function injectKeyboardInterceptorScript(htmlContent: string): string {
-	const keyboardInterceptorScript = generateKeyboardInterceptorScript()
-
-	let finalContent = htmlContent
-
-	// 在head标签中注入键盘拦截器脚本
-	const headEndIndex = finalContent.indexOf("</head>")
-	if (headEndIndex !== -1) {
-		const scriptTag = `<script data-injected="keyboard-interceptor">${keyboardInterceptorScript}</script>`
-		finalContent =
-			finalContent.slice(0, headEndIndex) + scriptTag + finalContent.slice(headEndIndex)
-	} else {
-		// 如果没有head标签，在html开始处注入
-		const htmlStartIndex = finalContent.indexOf("<html")
-		if (htmlStartIndex !== -1) {
-			const htmlTagEndIndex = finalContent.indexOf(">", htmlStartIndex) + 1
-			const scriptTag = `<script data-injected="keyboard-interceptor">${keyboardInterceptorScript}</script>`
 			finalContent =
 				finalContent.slice(0, htmlTagEndIndex) +
 				scriptTag +

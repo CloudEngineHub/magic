@@ -64,7 +64,7 @@ describe("PromptPlaceholderPreviewText", () => {
 		expect(screen.getByRole("button", { name: "@pending.png" })).toBeInTheDocument()
 	})
 
-	it("shows opaque asset paths without enabling preview", () => {
+	it("uses the placeholder media kind for asset paths", () => {
 		const onPreviewMediaResource = vi.fn()
 
 		render(
@@ -81,14 +81,15 @@ describe("PromptPlaceholderPreviewText", () => {
 			/>,
 		)
 
-		const opaqueImageMention = screen.getByText("@asset://image-id")
-		expect(opaqueImageMention).toHaveClass(styles.opaquePlaceholder)
-		expect(screen.getByText("@asset://video-id")).toBeInTheDocument()
-		expect(screen.getByText("@asset://audio-id")).toBeInTheDocument()
+		const imageMention = screen.getByRole("button", { name: "@image-id" })
+		expect(imageMention).not.toHaveClass(styles.opaquePlaceholder)
+		expect(screen.getByRole("button", { name: "@video-id" })).toBeInTheDocument()
+		expect(screen.getByRole("button", { name: "@audio-id" })).toBeInTheDocument()
 		expect(screen.getByText("[图片2]")).toBeInTheDocument()
-		expect(screen.queryByRole("button")).not.toBeInTheDocument()
 
-		fireEvent.click(opaqueImageMention)
-		expect(onPreviewMediaResource).not.toHaveBeenCalled()
+		fireEvent.click(imageMention)
+		expect(onPreviewMediaResource).toHaveBeenCalledWith(
+			expect.objectContaining({ path: "asset://image-id", kind: "image" }),
+		)
 	})
 })

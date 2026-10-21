@@ -57,9 +57,9 @@ final class MessageScheduleTopicCreationTest extends TestCase
             return 'title';
         });
         $chat = $this->createMock(ChatAppService::class);
-        $chat->expects(self::once())->method('initMagicChatConversation')->willReturnCallback(function () use (&$events): array {
+        $chat->expects(self::once())->method('createMagicChatTopicForConversationPair')->willReturnCallback(function () use (&$events): array {
             $events[] = 'conversation';
-            return ['conversation-id', 'chat-topic-id'];
+            return ['chat_conversation_id' => 'conversation-id', 'receive_conversation_id' => 'receive-id', 'chat_topic_id' => 'chat-topic-id'];
         });
         $topic = new TopicEntity(['id' => 42]);
         $topics = $this->createMock(TopicDomainService::class);
@@ -78,13 +78,13 @@ final class MessageScheduleTopicCreationTest extends TestCase
         self::assertSame(['summary', 'conversation', 'topic'], $events);
     }
 
-    public function testSummaryFailureStillInitializesImAndRethrowsTheSameException(): void
+    public function testSummaryFailureStopsBeforeImInitializationAndRethrowsTheSameException(): void
     {
         $error = new RuntimeException('summary failed');
         $chatMessages = $this->createMock(MagicChatMessageAppService::class);
         $chatMessages->expects(self::once())->method('summarizeText')->willThrowException($error);
         $chat = $this->createMock(ChatAppService::class);
-        $chat->expects(self::once())->method('initMagicChatConversation')->willReturn(['conversation-id', 'chat-topic-id']);
+        $chat->expects(self::never())->method('createMagicChatTopicForConversationPair');
         $topics = $this->createMock(TopicDomainService::class);
         $topics->expects(self::never())->method('createTopic');
         $files = $this->createMock(TaskFileDomainService::class);
@@ -102,7 +102,7 @@ final class MessageScheduleTopicCreationTest extends TestCase
         $chatMessages = $this->createMock(MagicChatMessageAppService::class);
         $chatMessages->expects(self::never())->method('summarizeText');
         $chat = $this->createMock(ChatAppService::class);
-        $chat->expects(self::never())->method('initMagicChatConversation');
+        $chat->expects(self::never())->method('createMagicChatTopicForConversationPair');
         $topics = $this->createMock(TopicDomainService::class);
         $topic = new TopicEntity(['id' => 42]);
         $topics->expects(self::once())->method('getTopicById')->with(42)->willReturn($topic);

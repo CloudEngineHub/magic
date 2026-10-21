@@ -20,7 +20,10 @@ use Throwable;
 use function Hyperf\Support\retry;
 
 /**
- * 视频生成结果文件名（不含扩展名）：优先走智能命名，失败时返回空串，由现有默认命名逻辑兜底。
+ * Output file name (without extension) for generated videos.
+ *
+ * Prefers the intelligent naming agent; returns an empty string on failure so the
+ * caller falls back to the default timestamp-based naming.
  */
 class DesignGeneratedVideoFileNameTool
 {
@@ -34,8 +37,9 @@ class DesignGeneratedVideoFileNameTool
     }
 
     /**
-     * @param string $prompt 视频生成提示词
-     * @return string 不含扩展名，失败时返回空串，交由默认 video_时间戳 命名逻辑处理
+     * @param string $prompt the video generation prompt
+     * @return string file name without extension; empty string on failure, so the caller
+     *                falls back to the default `video_<timestamp>` naming
      */
     public function resolveBaseNameWithoutExtension(
         DesignDataIsolation $dataIsolation,
@@ -52,7 +56,7 @@ class DesignGeneratedVideoFileNameTool
             if ($fileName === '') {
                 return '';
             }
-            return $fileName . '_' . date('YmdHis');
+            return $fileName . '_' . $this->uniqueSuffix($entity);
         }
 
         try {
@@ -97,7 +101,7 @@ class DesignGeneratedVideoFileNameTool
                 return '';
             }
 
-            return $fileName . '_' . date('YmdHis');
+            return $fileName . '_' . $this->uniqueSuffix($entity);
         } catch (Throwable $throwable) {
             $this->logger->warning('Failed to generate intelligent video file name, fallback to default video file name', [
                 'generation_id' => $entity->getGenerationId(),
@@ -109,7 +113,7 @@ class DesignGeneratedVideoFileNameTool
     }
 
     /**
-     * 清理文件名，移除不合法字符。
+     * Strip characters that are not allowed in a file name.
      */
     public function sanitizeFileName(string $fileName): string
     {
@@ -117,10 +121,30 @@ class DesignGeneratedVideoFileNameTool
     }
 
     /**
-     * 单独封装 DataIsolation 转换，方便单测绕开容器依赖。
+     * Wrap the DataIsolation conversion so unit tests can bypass the container.
      */
     protected function createModelGatewayDataIsolation(DesignDataIsolation $dataIsolation): ModelGatewayDataIsolation
     {
         return ModelGatewayDataIsolation::createByBaseDataIsolation($dataIsolation);
+    }
+
+    /**
+     * Unique suffix: creation date + task short ID.
+     *
+     * Keeps videos generated concurrently on the same day from colliding, and keeps
+     * retries idempotent because the suffix no longer depends on the archive time.
+     */
+    private function uniqueSuffix(DesignGenerationTaskEntity $entity): string
+    {
+        try {
+            $datePart = $entity->getCreatedAt()->format('Ymd');
+        } catch (Throwable) {
+            // createdAt is a non-nullable typed property: it is only missing on an entity
+            // that never went through creation or hydration. Fall back to the current date
+            // instead of aborting the naming flow.
+            $datePart = date('Ymd');
+        }
+
+        return $datePart . '_' . substr(hash('sha256', $entity->getGenerationId()), 0, 12);
     }
 }

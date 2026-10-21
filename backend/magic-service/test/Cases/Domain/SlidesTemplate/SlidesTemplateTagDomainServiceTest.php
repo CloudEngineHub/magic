@@ -41,11 +41,11 @@ class SlidesTemplateTagDomainServiceTest extends TestCase
         self::$hadOriginalContainer = ApplicationContext::hasContainer();
         self::$originalContainer = self::$hadOriginalContainer ? ApplicationContext::getContainer() : null;
 
-        ApplicationContext::setContainer(new class () implements ContainerInterface {
+        ApplicationContext::setContainer(new class implements ContainerInterface {
             public function get(string $id)
             {
                 return match ($id) {
-                    ConfigInterface::class => new class () implements ConfigInterface {
+                    ConfigInterface::class => new class implements ConfigInterface {
                         public function get(string $key, mixed $default = null): mixed
                         {
                             return match ($key) {
@@ -68,7 +68,7 @@ class SlidesTemplateTagDomainServiceTest extends TestCase
                         {
                         }
                     },
-                    TranslatorInterface::class => new class () implements TranslatorInterface {
+                    TranslatorInterface::class => new class implements TranslatorInterface {
                         public function trans(string $key, array $replace = [], ?string $locale = null): string
                         {
                             return $key;

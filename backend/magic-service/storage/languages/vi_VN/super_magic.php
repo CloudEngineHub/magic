@@ -85,6 +85,7 @@ return [
         'prompt_length_exceeded' => 'Văn bản nhập vào quá dài. Vui lòng tải lên dưới dạng tệp và tham chiếu trong hộp thoại.',
         'sandbox_init_failed' => 'Môi trường chạy gặp lỗi. Vui lòng thử lại sau.',
         'chat_task_start_failed' => 'Không thể bắt đầu tác vụ. Vui lòng thử lại sau.',
+        'auto_hire_agent_failed' => 'Không thể tự động thuê nhân viên. Hãy đảm bảo nhân viên đã được xuất bản và tài khoản của bạn có quyền thuê, hoặc thử lại sau.',
         'project_file_count_exceeded' => 'Không gian dự án cần được dọn dẹp trước khi tiếp tục tác vụ. Hãy xóa các tệp không còn cần thiết rồi thử lại.',
         'user_space_file_count_exceeded' => 'Không gian tệp cá nhân cần được dọn dẹp trước khi tiếp tục tác vụ. Hãy xóa các tệp không còn cần thiết rồi thử lại.',
     ],

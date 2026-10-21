@@ -4,12 +4,27 @@ import VideoSecondEdit from "../VideoSecondEdit"
 import { MediaEditRecoveryManager } from "../../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
 import type { VideoElement } from "../../../../../runtime/document/types"
 import { VideoElement as VideoElementClass } from "../../../../../runtime/elements/video/VideoElement"
+import type { MediaEditorSubmissionController } from "../../shared/useMediaEditorSubmission"
+
+const submissionController: MediaEditorSubmissionController = {
+	hidden: false,
+	busy: false,
+	activeSubmission: null,
+	begin: vi.fn(() => "submission-1"),
+	setPhase: vi.fn(),
+	finish: vi.fn(),
+	reveal: vi.fn(),
+	run: vi.fn(async ({ execute }) => execute({ submissionId: "submission-1", setPhase: vi.fn() })),
+}
 
 const mocks = vi.hoisted(() => ({
 	commands: {} as Record<string, { execute: (command?: unknown) => void; state?: unknown }>,
 	renderProps: null as null | Record<string, unknown>,
 	isReplacing: false,
-	canvas: null as null | { mediaEditRecoveryManager: MediaEditRecoveryManager },
+	canvas: null as null | {
+		mediaEditRecoveryManager: MediaEditRecoveryManager
+		isSeedanceComplianceEnabled: () => boolean
+	},
 	videoModelList: [{ model_id: "video-model" }] as Array<Record<string, unknown>>,
 	estimateVideoPoints: vi.fn(),
 	getCachedVideoPointsEstimate: vi.fn(() => ({ points: 3190 })),
@@ -110,6 +125,7 @@ describe("VideoSecondEdit session routing", () => {
 		mocks.confirmVideoGeneration.mockClear()
 		mocks.canvas = {
 			mediaEditRecoveryManager: new MediaEditRecoveryManager(),
+			isSeedanceComplianceEnabled: () => false,
 			mediaReplaceController: { isReplacing: () => mocks.isReplacing },
 			canvasFileUploadManager: { shouldDeferRemoteResourceLoad: () => false },
 			videoDraftFinalManager: {
@@ -154,7 +170,12 @@ describe("VideoSecondEdit session routing", () => {
 			reEditSnapshot,
 		)
 
-		render(<VideoSecondEdit videoElement={videoElement} />)
+		render(
+			<VideoSecondEdit
+				videoElement={videoElement}
+				submissionController={submissionController}
+			/>,
+		)
 		const quickAction = mocks.commands["generation.quick-edit"]
 		act(() => quickAction?.execute())
 		await waitFor(() => expect(mocks.renderProps?.sessionSnapshot).toEqual(quickSnapshot))
@@ -173,12 +194,22 @@ describe("VideoSecondEdit session routing", () => {
 			{ request: { model_id: "video-model", prompt: "old" }, modeDrafts: {} },
 		)
 
-		const view = render(<VideoSecondEdit videoElement={videoElement} />)
+		const view = render(
+			<VideoSecondEdit
+				videoElement={videoElement}
+				submissionController={submissionController}
+			/>,
+		)
 		const changedVideoElement = {
 			...videoElement,
 			contents: [{ ...videoElement.contents[0], src: "/videos/replaced.mp4" }],
 		} as never
-		view.rerender(<VideoSecondEdit videoElement={changedVideoElement} />)
+		view.rerender(
+			<VideoSecondEdit
+				videoElement={changedVideoElement}
+				submissionController={submissionController}
+			/>,
+		)
 
 		await waitFor(() => {
 			expect(
@@ -199,7 +230,12 @@ describe("VideoSecondEdit session routing", () => {
 			],
 		} as never
 
-		render(<VideoSecondEdit videoElement={elementWithGeneratingSibling} />)
+		render(
+			<VideoSecondEdit
+				videoElement={elementWithGeneratingSibling}
+				submissionController={submissionController}
+			/>,
+		)
 
 		const itemIds = Object.keys(mocks.commands)
 		expect(itemIds).toContain("generation.quick-edit")
@@ -218,7 +254,12 @@ describe("VideoSecondEdit session routing", () => {
 			],
 		} as never
 
-		render(<VideoSecondEdit videoElement={elementWithGeneratingActive} />)
+		render(
+			<VideoSecondEdit
+				videoElement={elementWithGeneratingActive}
+				submissionController={submissionController}
+			/>,
+		)
 
 		expect(mocks.commands["generation.quick-edit"]?.state).toMatchObject({ available: true })
 		expect(mocks.commands["generation.re-edit"]?.state).toMatchObject({ available: true })
@@ -245,7 +286,12 @@ describe("VideoSecondEdit session routing", () => {
 			],
 		} as never
 
-		render(<VideoSecondEdit videoElement={finalVideo} />)
+		render(
+			<VideoSecondEdit
+				videoElement={finalVideo}
+				submissionController={submissionController}
+			/>,
+		)
 
 		expect(mocks.commands["generation.quick-edit"]?.state).toMatchObject({ available: true })
 		expect(mocks.commands["generation.re-edit"]?.state).toMatchObject({ available: false })
@@ -283,7 +329,12 @@ describe("VideoSecondEdit session routing", () => {
 		)?.elementManager
 		elementManager?.getElementInstance.mockReturnValue(instance)
 
-		render(<VideoSecondEdit videoElement={finalVideo} />)
+		render(
+			<VideoSecondEdit
+				videoElement={finalVideo}
+				submissionController={submissionController}
+			/>,
+		)
 		await act(async () => mocks.commands["generation.generate-again"]?.execute())
 
 		await waitFor(() => expect(submitContentGeneration).toHaveBeenCalledOnce())
@@ -335,7 +386,12 @@ describe("VideoSecondEdit session routing", () => {
 			],
 		} as never
 
-		render(<VideoSecondEdit videoElement={draftVideo} />)
+		render(
+			<VideoSecondEdit
+				videoElement={draftVideo}
+				submissionController={submissionController}
+			/>,
+		)
 		await waitFor(() =>
 			expect(mocks.commands["generation.generate-final"]?.state).toMatchObject({
 				available: true,
@@ -411,7 +467,12 @@ describe("VideoSecondEdit session routing", () => {
 			],
 		} as never
 
-		render(<VideoSecondEdit videoElement={draftVideo} />)
+		render(
+			<VideoSecondEdit
+				videoElement={draftVideo}
+				submissionController={submissionController}
+			/>,
+		)
 		await waitFor(() =>
 			expect(mocks.commands["generation.generate-final"]?.state).toMatchObject({
 				available: true,

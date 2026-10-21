@@ -4,6 +4,7 @@ import type { VideoElementContent } from "../../document/types"
 export type VideoDisplayStatus =
 	| "empty"
 	| "uploading"
+	| "compliance"
 	| "generating"
 	| "composing"
 	| "loading"
@@ -25,6 +26,7 @@ export interface VideoDisplayState {
 export interface ResolveVideoDisplayStateOptions {
 	content: VideoElementContent
 	isTemporary: boolean
+	isComplianceActive: boolean
 	hasActiveGeneration: boolean
 	hasActiveGenerationTask: boolean
 	isCompositionActive: boolean
@@ -47,6 +49,7 @@ export function resolveVideoDisplayState(
 	const {
 		content,
 		isTemporary,
+		isComplianceActive,
 		hasActiveGeneration,
 		hasActiveGenerationTask,
 		isCompositionActive,
@@ -70,6 +73,10 @@ export function resolveVideoDisplayState(
 
 	if (isReplacementUploading) {
 		return { ...base, status: "uploading", surface: "placeholder" }
+	}
+
+	if (isComplianceActive) {
+		return { ...base, status: "compliance", surface: "placeholder" }
 	}
 
 	if (isCompositionActive) {

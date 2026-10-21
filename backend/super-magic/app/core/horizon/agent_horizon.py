@@ -755,6 +755,18 @@ class AgentHorizon:
         await self._ensure_loaded()
         return _abs(file_path) in self._state.file_records
 
+    async def get_current_file_version(self, file_path: str | Path) -> str | None:
+        """只查询磁盘版本，不登记阅读；小文件用 hash，大文件沿用 mtime 保护。"""
+        path = _abs(file_path)
+        try:
+            stat = await get_fresh_file_stat(path)
+            return (
+                await calculate_file_hash(path)
+                if stat.size <= HASH_DETECTION_THRESHOLD else f"__mtime__{stat.mtime}"
+            )
+        except OSError:
+            return None
+
     async def has_complete_file_read(self, file_path: Union[str, Path]) -> bool:
         """查询当前观察版本是否已完整提供；搜索快照和 AutoRead 来源不构成阅读证明。"""
         await self._ensure_loaded()
@@ -762,15 +774,7 @@ class AgentHorizon:
         if not record or not record.file_hash or record.metadata.get("complete_read_hash") != record.file_hash:
             return False
         # 整包更新被预算拒绝时仍保留旧观察版本；不能据此跳过磁盘上已变化的候选。
-        try:
-            stat = await get_fresh_file_stat(record.path)
-            current_hash = (
-                await calculate_file_hash(record.path)
-                if stat.size <= HASH_DETECTION_THRESHOLD else f"__mtime__{stat.mtime}"
-            )
-            return current_hash == record.file_hash
-        except OSError:
-            return False
+        return await self.get_current_file_version(record.path) == record.file_hash
 
     async def on_context_reset(self) -> None:
         """聊天历史压缩或 /new 后调用，重置与上下文内容相关的所有状态。

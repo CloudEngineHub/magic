@@ -100,6 +100,32 @@
         "ext-pdo_mysql": "Required to use MySQL Client."
     },
     "autoload": {
+        "classmap": [
+            "app/Infrastructure/Core/ClassMap/Hyperf/SwowServer.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/Constant.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/FdGetter.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/WritableConnection.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/EventStream.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/WebSocket.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/WebSocketResponse.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/SwowServer.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/Constant.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/WritableConnection.php",
+            "app/Infrastructure/Core/ClassMap/Hyperf/EventStream.php"
+        ],
+        "exclude-from-classmap": [
+            "/vendor/hyperf/server/src/SwowServer.php",
+            "/vendor/hyperf/engine-swow/src/Constant.php",
+            "/vendor/hyperf/engine-swow/src/Http/FdGetter.php",
+            "/vendor/hyperf/engine-swow/src/Http/WritableConnection.php",
+            "/vendor/hyperf/engine-swow/src/Http/EventStream.php",
+            "/vendor/hyperf/engine-swow/src/WebSocket/WebSocket.php",
+            "/vendor/hyperf/engine-swow/src/WebSocket/Response.php",
+            "/vendor/hyperf/server/src/SwowServer.php",
+            "/vendor/hyperf/engine-swow/src/Constant.php",
+            "/vendor/hyperf/engine-swow/src/Http/WritableConnection.php",
+            "/vendor/hyperf/engine-swow/src/Http/EventStream.php"
+        ],
         "psr-4": {
             "App\\": "app/",
             "MagicBase\\": "magicbase/"

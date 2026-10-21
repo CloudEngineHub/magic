@@ -167,7 +167,7 @@ class SuperMagicAgentEntity extends AbstractEntity
     /**
      * 部分更新请求中实际提交的字段。
      *
-     * @var array<string, bool>|null
+     * @var null|array<string, bool>
      */
     private ?array $providedFields = null;
 

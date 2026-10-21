@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table"
+import type { ReactNode } from "react"
 import { Sparkles, Tags, Upload } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -7,15 +8,15 @@ import type { ApiError } from "@magic-admin-v2/api/types"
 import { createSharedMarketColumns } from "@magic-admin-v2/features/platform-official-marketplace/components/market-columns"
 import { MarketListPanel } from "@magic-admin-v2/features/platform-official-marketplace/components/market-list-panel"
 import { MarketCategorySelectCell } from "@magic-admin-v2/features/platform-official-marketplace/components/market-category-select-cell"
+import { CopyableValue } from "@magic-admin-v2/components/copyable-value"
 import { Button } from "@magic-admin-v2/components/ui/button"
 import { SkillMarketCategoryManagerDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/skill-market-category-manager-dialog"
 import { OfficialSkillImportDialog } from "@magic-admin-v2/features/platform-official-marketplace/components/official-skill-import-dialog"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { type ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import {
 	DescriptionCell,
 	MarketNameCell,
 	OrganizationCell,
-	TableText,
 } from "@magic-admin-v2/features/platform-official-marketplace/components/market-table-cells"
 import { useMarketTableState } from "@magic-admin-v2/features/platform-official-marketplace/hooks/use-market-table-state"
 import {
@@ -26,14 +27,16 @@ import {
 	useSkillMarketCategoryListQuery,
 	useSkillMarketListQuery,
 } from "@magic-admin-v2/features/platform-official-marketplace/queries"
-import type { SkillMarketItem } from "@magic-admin-v2/features/platform-official-marketplace/types"
+import type {
+	MarketFilterDraft,
+	SkillMarketItem,
+	SkillMarketListParams,
+} from "@magic-admin-v2/features/platform-official-marketplace/types"
 import {
-	createDefaultFilterDraft,
 	areSameCategoryIds,
 	getSkillMarketCategoryIds,
 	getSkillMarketCategoryLabels,
 	getLocalizedText,
-	toSkillMarketParams,
 	normalizeCategoryIds,
 	resolveSkillMarketCategoryName,
 	skillMarketCategoryStatus,
@@ -47,6 +50,10 @@ type SkillMarketPanelProps = {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
 	onInitialLoadingChange: (isLoading: boolean) => void
+	queryState: ListQueryParamsState<MarketFilterDraft, SkillMarketListParams>
+	onMobileFilterOpenChange: (open: boolean) => void
+	mobileFilterOpen: boolean
+	onToolbarActionsChange: (actions: ReactNode) => void
 	refreshToken: number
 }
 
@@ -56,18 +63,17 @@ export function SkillMarketPanel({
 	isActive,
 	onFetchingChange,
 	onInitialLoadingChange,
+	queryState,
+	onMobileFilterOpenChange,
+	mobileFilterOpen,
+	onToolbarActionsChange,
 	refreshToken,
 }: SkillMarketPanelProps) {
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const [categoryManagerOpen, setCategoryManagerOpen] = useState(false)
 	const [importOpen, setImportOpen] = useState(false)
-	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } =
-		useListQueryParams({
-			debounceFields: ["search_value"],
-			initialDraft: createDefaultFilterDraft,
-			toParams: toSkillMarketParams,
-		})
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const query = useSkillMarketListQuery(params, isActive)
 	const categoryQuery = useSkillMarketCategoryListQuery({}, isActive)
 	const importCategoryQuery = useSkillMarketCategoryListQuery(
@@ -148,9 +154,16 @@ export function SkillMarketPanel({
 			},
 			{
 				id: "skill_code",
-				size: 180,
+				size: 280,
 				header: t("officialMarketplace.column.skillCode"),
-				cell: ({ row }) => <TableText value={row.original.skill_code} />,
+				cell: ({ row }) => (
+					<CopyableValue
+						className="h-10 min-w-0 w-full max-w-full items-center font-sans text-sm text-muted-foreground md:w-auto"
+						contentClassName="min-w-0 max-w-full"
+						copyLabel={t("officialMarketplace.action.copySkillCode")}
+						value={row.original.skill_code}
+					/>
+				),
 			},
 			{
 				id: "organization",
@@ -227,6 +240,37 @@ export function SkillMarketPanel({
 	}, [isActive, isInitialLoading, onInitialLoadingChange])
 
 	useEffect(() => {
+		if (!isActive) return
+
+		onToolbarActionsChange(
+			<div className="flex items-center gap-2">
+				<Button
+					aria-label={t("officialMarketplace.skillCategory.manageTitle")}
+					className="h-9 w-9 px-0 md:w-auto md:px-3"
+					onClick={() => setCategoryManagerOpen(true)}
+					variant="outline"
+				>
+					<Tags className="size-4" aria-hidden="true" />
+					<span className="hidden md:inline">
+						{t("officialMarketplace.skillCategory.manageButton")}
+					</span>
+				</Button>
+				{canEdit ? (
+					<Button
+						data-testid="platform-official-marketplace-edit-button"
+						onClick={() => setImportOpen(true)}
+					>
+						<Upload className="size-4" aria-hidden="true" />
+						<span className="hidden md:inline">
+							{t("officialMarketplace.skillImport.openButton")}
+						</span>
+					</Button>
+				) : null}
+			</div>,
+		)
+	}, [canEdit, isActive, onToolbarActionsChange, t])
+
+	useEffect(() => {
 		if (isActive) onFetchingChange(query.isFetching)
 	}, [isActive, onFetchingChange, query.isFetching])
 
@@ -253,33 +297,12 @@ export function SkillMarketPanel({
 				kind="skill"
 				minWidth={1920}
 				onDraftChange={setFilterDraft}
+				mobileOpen={isActive && mobileFilterOpen}
+				onMobileOpenChange={onMobileFilterOpenChange}
 				queryError={query.error as ApiError | null}
 				showPackageName
 				showCategoryFilter
 				stickyLeftColumnId="name"
-				toolbarActions={
-					<div className="flex items-center gap-2">
-						<Button
-							aria-label={t("officialMarketplace.skillCategory.manageTitle")}
-							className="h-9 w-9 px-0 md:w-auto md:px-3"
-							onClick={() => setCategoryManagerOpen(true)}
-							variant="outline"
-						 data-testid="platform-official-marketplace-edit-button">
-							<Tags className="size-4" aria-hidden="true" />
-							<span className="hidden md:inline">
-								{t("officialMarketplace.skillCategory.manageButton")}
-							</span>
-						</Button>
-						{canEdit ? (
-							<Button onClick={() => setImportOpen(true)} data-testid="platform-official-marketplace-edit-button">
-								<Upload className="size-4" aria-hidden="true" />
-								<span className="hidden md:inline">
-									{t("officialMarketplace.skillImport.openButton")}
-								</span>
-							</Button>
-						) : null}
-					</div>
-				}
 				total={query.data?.total ?? 0}
 				page={page}
 				onPageChange={setPage}

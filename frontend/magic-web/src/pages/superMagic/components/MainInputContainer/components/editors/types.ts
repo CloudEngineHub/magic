@@ -132,6 +132,10 @@ export interface SceneEditorContext {
 	editorModeSwitch?: ({ disabled }: { disabled: boolean }) => ReactNode
 	/** Controls whether recording-summary editors can enter recording mode. */
 	allowRecordingMode?: boolean
+	/** When false, the recording start button cannot choose an existing project. */
+	allowSelectRecordingProject?: boolean
+	/** Topic mode for a project created by the recording start button. */
+	recordingNewProjectTopicMode?: TopicMode
 	modelSwitch?: ReactNode
 	topicStore?: TopicStore
 	/** 挂载后自动聚焦编辑器（移动端弹窗打开时使用） */

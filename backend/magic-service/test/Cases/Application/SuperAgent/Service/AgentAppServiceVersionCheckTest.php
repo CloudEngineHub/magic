@@ -10,6 +10,7 @@ namespace HyperfTest\Cases\Application\SuperAgent\Service;
 use App\Application\SuperMagic\Task\DTO\SandboxInfoDTO;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Contact\Service\MagicUserSettingDomainService;
 use App\Domain\SuperMagic\File\Event\CheckpointRollbackFilesChangedEvent;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -153,6 +154,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );
@@ -244,6 +246,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );
@@ -305,6 +308,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );
@@ -352,6 +356,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );
@@ -395,6 +400,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );
@@ -448,6 +454,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );
@@ -512,6 +519,7 @@ class AgentAppServiceVersionCheckTest extends TestCase
             $taskDomainService,
             $sandboxVersionDomainService,
             (new ReflectionClass(MagicUserSettingDomainService::class))->newInstanceWithoutConstructor(),
+            $this->createMock(MagicUserDomainService::class),
             $eventDispatcher,
             $this->makeRollbackLock()
         );

@@ -98,14 +98,16 @@ export function reconcileFrameSwap<P>(
 	if (state.token !== token) return createFrameSwapState(token, content)
 
 	if (isEditing) {
-		let next = state.liveId === null ? reviveLastFrame(state) : state
-		if (next.frames.length > 1) {
-			const live = next.frames.find((frame) => frame.id === next.liveId)
-			if (live) next = { ...next, frames: [live] }
-		}
+		const next = state.liveId === null ? reviveLastFrame(state) : state
 		const live = next.frames.find((frame) => frame.id === next.liveId)
-		if (live && live.content !== content) next = updateLiveContent(next, content)
-		return next
+		if (!live || live.content === content) return next
+		// A rendered document must never be rewritten in place: document.open/write reuses
+		// the Window, so top-level let/const/class in page scripts throw on the second run
+		// and scroll-reveal content stays hidden. Build the new document in a fresh frame
+		// and keep the old one on screen until it has painted. Frames that have not
+		// rendered yet have no script state worth preserving and are still updated in place.
+		if (next.readyId === live.id) return appendLive(freezeLive(next, latestProps), content)
+		return updateLiveContent(next, content)
 	}
 
 	const live = state.frames.find((frame) => frame.id === state.liveId)

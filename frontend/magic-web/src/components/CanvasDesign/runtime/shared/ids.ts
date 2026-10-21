@@ -21,6 +21,7 @@ import {
 	getImageSourceDimensions,
 } from "../resources/image/imageSourceUtils"
 import { parseImageMetadataFromBlobHeader } from "../resources/image/imageHeaderDimensions"
+import { isAssetResourcePath, isAssetResourceScheme } from "./path/canvasResourcePath"
 
 function getEffectiveContentForRead(canvas: Canvas, element: LayerElement) {
 	if (typeof canvas.getEffectiveContent === "function") {
@@ -744,6 +745,11 @@ export function validateImageFilePath(filePath: string): FileValidationResult {
 export function validateCanvasFilePath(filePath: string): FileValidationResult {
 	if (!filePath) {
 		return { valid: false, reason: "文件路径为空" }
+	}
+	if (isAssetResourceScheme(filePath)) {
+		return isAssetResourcePath(filePath)
+			? { valid: true }
+			: { valid: false, reason: "无效的素材库资源路径" }
 	}
 
 	const lastDotIndex = filePath.lastIndexOf(".")

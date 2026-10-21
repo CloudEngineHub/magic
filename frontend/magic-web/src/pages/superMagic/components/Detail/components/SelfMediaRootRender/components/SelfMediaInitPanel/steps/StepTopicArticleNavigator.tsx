@@ -2,6 +2,7 @@ import { Check, ChevronLeft, ChevronRight, FileDown, Layers, Plus, Trash2, X } f
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import type { ArticleDetail } from "../types"
 import PlatformBrandIcon from "../../PlatformBrandIcon"
@@ -198,7 +199,12 @@ export default function StepTopicArticleNavigator({
 				</div>
 			</div>
 
-			<div className="max-h-[calc(100vh-250px)] flex-1 space-y-2 overflow-y-auto pr-1">
+			{/* Cap the viewport itself so the content-sized panel can shrink for short lists. */}
+			{/* A block wrapper keeps long titles from widening Radix's default table wrapper. */}
+			<ScrollArea
+				className="min-h-0 flex-1"
+				viewportClassName="h-auto max-h-[calc(100vh-250px)] pr-1 [&>div]:!block [&>div]:space-y-2"
+			>
 				{articles.map((item, idx) => {
 					const isActive = idx === activeIndex
 					const articleLabel =
@@ -372,7 +378,7 @@ export default function StepTopicArticleNavigator({
 						</div>
 					)
 				})}
-			</div>
+			</ScrollArea>
 		</aside>
 	)
 }

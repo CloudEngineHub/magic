@@ -65,6 +65,7 @@ use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiOmni1Fl
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Adapter\GeminiVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\Capability\GeminiOmniGenerationCapabilityProvider;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiTransportInterface;
+use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Gemini\GeminiVideoClient;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingOmniVideoAdapter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Adapter\KelingVideoAdapterRouter;
 use App\Infrastructure\ExternalAPI\VideoGenerateAPI\Keling\Capability\KelingOmniGenerationCapabilityProvider;
@@ -93,6 +94,7 @@ use Dtyq\CloudFile\Kernel\Struct\ChunkUploadFile;
 use Dtyq\CloudFile\Kernel\Struct\FileLink;
 use Dtyq\CloudFile\Kernel\Struct\FilePreSignedUrl;
 use Dtyq\CloudFile\Kernel\Struct\UploadFile;
+use Dtyq\CloudFile\Kernel\Utils\SafeRemoteFileDownloader;
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Response;
 use Hyperf\Amqp\Message\ProducerMessageInterface;
@@ -202,6 +204,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -856,6 +860,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $probe,
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $resolver,
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -936,6 +942,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $probe,
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             new VideoInputMediaMetadataResolver(
                 $this->createMock(TaskFileDomainService::class),
                 new FileDomainService(new InMemoryCloudFileRepository()),
@@ -1015,6 +1023,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1070,6 +1080,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1136,6 +1148,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1208,6 +1222,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1279,6 +1295,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1422,6 +1440,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1507,6 +1527,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $probe,
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1576,6 +1598,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $probe,
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1651,6 +1675,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1732,6 +1758,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1847,6 +1875,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -1929,6 +1959,8 @@ class VideoOperationAppServiceTest extends TestCase
             $fileDomainService,
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2006,6 +2038,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService($cloudFileRepository),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2065,6 +2099,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2118,6 +2154,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2175,6 +2213,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2218,6 +2258,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2263,6 +2305,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2457,6 +2501,8 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             new RecordingProducer(),
             $this->createNoopLocker(),
@@ -2531,10 +2577,21 @@ class VideoOperationAppServiceTest extends TestCase
             new FileDomainService(new InMemoryCloudFileRepository()),
             $this->createVideoBillingDetailsResolver(),
             $this->createFallbackProbe(),
+            $this->createGeminiVideoClient(),
+            $this->createMock(SafeRemoteFileDownloader::class),
             $this->createVideoInputMediaMetadataResolver(),
             $producer ?? new RecordingProducer(),
             $this->createNoopLocker(),
         );
+    }
+
+    /**
+     * 参数顺序必须和 VideoOperationAppService 的构造函数一一对应；
+     * 本用例都跑 Cloudsway 分支，Gemini 客户端不会被真正调用，给个不依赖容器的实例即可。
+     */
+    private function createGeminiVideoClient(): GeminiVideoClient
+    {
+        return new GeminiVideoClient();
     }
 
     private function createNoopLocker(): LockerInterface

@@ -23,6 +23,21 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
 
     public string $projectType = 'all';
 
+    /**
+     * Whether to show collaboration projects.
+     */
+    public int $showCollaboration = 1;
+
+    /**
+     * Whether to show hidden projects. Default 0 means hidden projects are filtered out.
+     */
+    public int $showHidden = 0;
+
+    /**
+     * Whether recent queries should include special project modes.
+     */
+    public int $includeSpecial = 0;
+
     public function setSortDirection(?string $sortDirection): void
     {
         $this->sortDirection = $sortDirection ?? 'desc';
@@ -47,21 +62,6 @@ class GetParticipatedProjectsRequestDTO extends GetProjectListRequestDTO
     {
         return $this->projectType;
     }
-
-    /**
-     * Whether to show collaboration projects.
-     */
-    public int $showCollaboration = 1;
-
-    /**
-     * Whether to show hidden projects. Default 0 means hidden projects are filtered out.
-     */
-    public int $showHidden = 0;
-
-    /**
-     * Whether recent queries should include special project modes.
-     */
-    public int $includeSpecial = 0;
 
     public function setSortMode(?string $sortMode): void
     {

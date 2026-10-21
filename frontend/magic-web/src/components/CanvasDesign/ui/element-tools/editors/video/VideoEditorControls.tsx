@@ -52,6 +52,7 @@ import {
 import { useLinkedMediaSourceListOption } from "../../../editors/connection/useLinkedMediaSourceListOption"
 import LinkedFrameMediaMenu from "./LinkedFrameMediaMenu"
 import type { LinkedFrameRole } from "./LinkedFrameMediaMenu"
+import { resolveLinkedFrameRoleForSlotIndex } from "./linkedFrameBindings"
 
 type ReferencePopoverState = {
 	slotKey: string
@@ -182,6 +183,7 @@ const VideoEditorReferenceSlotPopover = forwardRef<
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
 			onSelectSource={onSelectSource}
+			includeAssetsSource
 			maxReferenceFiles={maxReferenceFiles}
 			currentReferenceFiles={currentReferenceFiles}
 			isReferenceFileLimitReached={isReferenceFileLimitReached}
@@ -210,15 +212,6 @@ function assignForwardedRef<T>(ref: ForwardedRef<T>, value: T | null) {
 
 function getLinkedMediaFileName(item: LinkedEditorMediaItem & { path: string }): string {
 	return item.fileName || getCanvasResourceFileName(item.path) || item.path
-}
-
-function resolveFrameRoleForSlotIndex(
-	slotIndex: number,
-	supportsStartFrame: boolean,
-	supportsEndFrame: boolean,
-): LinkedFrameRole {
-	if (supportsStartFrame && slotIndex === 0) return "start"
-	return supportsEndFrame ? "end" : "start"
 }
 
 /** 视频编辑器底部工具区：模型、输入 Tab 与发送区；SourceList 可挂载到顶部。 */
@@ -527,6 +520,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
+							resourceMediaType: "image",
 							resourceStatusLabel: t("videoEditor.slotLabelFirstFrame", "首帧"),
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
@@ -560,6 +554,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				...(path
 					? {
 							resourcePath: path,
+							resourceMediaType: "image",
 							resourceStatusLabel: t("videoEditor.slotLabelLastFrame", "尾帧"),
 							resourceFileName:
 								getLinkedMediaReferenceIdentity(
@@ -707,6 +702,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 						groupId: kind,
 						resourcePath: info.path,
 						resourceFileName: info.fileName,
+						resourceMediaType: info.assetType,
 						removeResourceAriaLabel: removeSlotAriaLabel,
 						onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 					})
@@ -762,6 +758,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 					groupId: kind,
 					resourcePath: info.path,
 					resourceFileName: info.fileName,
+					resourceMediaType: info.assetType,
 					removeResourceAriaLabel: removeSlotAriaLabel,
 					onRemoveResource: () => handlers.handleReferenceImageRemove(info.path),
 				})
@@ -961,7 +958,7 @@ export default function VideoEditorControls(props: VideoEditorControlsProps) {
 				} = resolvePopoverState(option)
 				const frameRole: LinkedFrameRole | undefined =
 					inputTab === "frame"
-						? resolveFrameRoleForSlotIndex(
+						? resolveLinkedFrameRoleForSlotIndex(
 								option.slotIndex,
 								supportsStartFrame,
 								supportsEndFrame,

@@ -10,9 +10,13 @@ import {
 	validateFile,
 	generateElementId,
 	validateCanvasFilePath,
-	SUPPORTED_VIDEO_EXTENSIONS,
 } from "../../shared/ids"
-import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
+import {
+	buildAssetResourcePath,
+	getCanvasResourceFileName,
+	isAssetResourceScheme,
+	parseAssetResourcePath,
+} from "../../shared/path/canvasResourcePath"
 import type { AudioElement, ImageElement, VideoElement } from "../../document/types"
 import { ElementTypeEnum } from "../../document/types"
 import { updateContent } from "../../document/elementContent"
@@ -46,6 +50,12 @@ interface CustomDropFileInfo {
 	src: string
 	fileName: string
 	expires_at?: string
+}
+
+interface ResolvedCustomDropResource {
+	fileInfo: CustomDropFileInfo
+	mediaType: CustomDropMediaType
+	isAsset: boolean
 }
 
 /**
@@ -371,9 +381,12 @@ export class DropOverlayManager {
 			try {
 				const filePaths = await getDataTransferFileInfo(e.dataTransfer)
 				// 过滤有效的图片/视频/音频文件路径
-				const validFilePaths = filePaths.filter(
-					(filePath) => validateCanvasFilePath(filePath).valid,
-				)
+				const validFilePaths = filePaths.flatMap((filePath) => {
+					const assetId = parseAssetResourcePath(filePath)
+					if (assetId !== undefined) return [buildAssetResourcePath(assetId)]
+					if (isAssetResourceScheme(filePath)) return []
+					return validateCanvasFilePath(filePath).valid ? [filePath] : []
+				})
 				if (validFilePaths.length > 0) {
 					await this.handleCustomDragData(validFilePaths, canvasPos, loadingToastId)
 					return
@@ -881,40 +894,64 @@ export class DropOverlayManager {
 		})
 	}
 
-	private isVideoFilePath(filePath: string): boolean {
-		const lowerCasePath = filePath.toLowerCase()
-		return SUPPORTED_VIDEO_EXTENSIONS.some((ext) => lowerCasePath.endsWith(ext))
-	}
-
-	private getCustomDropMediaType(filePath: string): CustomDropMediaType {
+	private getCustomDropMediaType(filePath: string): CustomDropMediaType | null {
 		const mediaType = getMediaResourcePathKind(filePath)
 		if (mediaType === "audio" || mediaType === "video" || mediaType === "image") {
 			return mediaType
 		}
-		return this.isVideoFilePath(filePath) ? "video" : "image"
+		return null
 	}
 
-	private async getCustomDropFileInfo(filePath: string): Promise<CustomDropFileInfo> {
+	private async resolveCustomDropResource(filePath: string): Promise<ResolvedCustomDropResource> {
+		const assetId = parseAssetResourcePath(filePath)
+		if (assetId !== undefined) {
+			const asset = await this.canvas.assetResourceManager.getResource(assetId)
+			const mediaType = getMediaResourcePathKind(filePath, {
+				mediaType: asset.mediaType,
+			})
+			if (
+				!asset.fileUrl ||
+				(mediaType !== "image" && mediaType !== "video" && mediaType !== "audio")
+			) {
+				throw new Error("Asset detail does not contain a supported media resource")
+			}
+			return {
+				fileInfo: {
+					src: asset.fileUrl,
+					fileName:
+						asset.fileName || getCanvasResourceFileName(filePath) || `asset-${assetId}`,
+				},
+				mediaType,
+				isAsset: true,
+			}
+		}
+		if (isAssetResourceScheme(filePath)) {
+			throw new Error("Invalid asset resource path")
+		}
+
 		const getFileInfo = this.canvas.magicConfigManager.config?.methods?.getFileInfo
 		if (!getFileInfo) {
 			throw new Error("File info provider is unavailable")
 		}
 
 		const mediaType = this.getCustomDropMediaType(filePath)
+		if (!mediaType) {
+			throw new Error("Unsupported custom drop media path")
+		}
 		const fileInfo = await getFileInfo(filePath, {
 			useImageProcess: mediaType === "image",
 		})
 		if (!fileInfo || !fileInfo.src) {
 			throw new Error("File info does not contain a resource URL")
 		}
-		return fileInfo
+		return { fileInfo, mediaType, isAsset: false }
 	}
 
-	private getCustomDropPlaceholderDimensions(filePath: string): {
+	private getCustomDropPlaceholderDimensions(mediaType: CustomDropMediaType): {
 		width: number
 		height: number
 	} {
-		switch (this.getCustomDropMediaType(filePath)) {
+		switch (mediaType) {
 			case "audio":
 				return { ...DEFAULT_AUDIO_DROP_DIMENSIONS }
 			case "video":
@@ -937,29 +974,45 @@ export class DropOverlayManager {
 				: await this.getImageDimensionsFromUrl(filePath)
 		} catch (error) {
 			console.warn(`[DropOverlayManager] 获取媒体尺寸失败: ${filePath}`, error)
-			return this.getCustomDropPlaceholderDimensions(filePath)
+			return this.getCustomDropPlaceholderDimensions(mediaType)
 		}
 	}
 
 	private async prepareCustomDropResource(filePath: string): Promise<PreparedCustomDropResource> {
-		const mediaType = this.getCustomDropMediaType(filePath)
-		const fileInfo = await this.getCustomDropFileInfo(filePath)
+		const assetId = parseAssetResourcePath(filePath)
+		const normalizedFilePath =
+			assetId !== undefined ? buildAssetResourcePath(assetId) : filePath
+		const { mediaType, fileInfo, isAsset } =
+			await this.resolveCustomDropResource(normalizedFilePath)
 
-		switch (mediaType) {
-			case "audio":
-				this.canvas.audioResourceManager.primeCache(filePath, fileInfo)
-				break
-			case "video":
-				this.canvas.videoResourceManager.primeCache(filePath, fileInfo)
-				this.canvas.videoResourceManager.loadResource(filePath)
-				break
-			default:
-				this.canvas.imageResourceManager.primeCache(filePath, fileInfo)
-				this.canvas.imageResourceManager.loadResource(filePath)
+		if (!isAsset) {
+			switch (mediaType) {
+				case "audio":
+					this.canvas.audioResourceManager.primeCache(normalizedFilePath, {
+						...fileInfo,
+						path: normalizedFilePath,
+					})
+					break
+				case "video":
+					this.canvas.videoResourceManager.primeCache(normalizedFilePath, fileInfo)
+					this.canvas.videoResourceManager.loadResource(normalizedFilePath)
+					break
+				default:
+					this.canvas.imageResourceManager.primeCache(normalizedFilePath, fileInfo)
+					this.canvas.imageResourceManager.loadResource(normalizedFilePath)
+			}
+		} else if (mediaType === "video") {
+			// Asset file_url values are session URLs. Let the video resource lifecycle
+			// resolve the stable asset path instead of seeding that URL into its cache.
+			this.canvas.videoResourceManager.loadResource(normalizedFilePath)
 		}
 
-		const dimensions = await this.getCustomDropMediaDimensions(filePath, mediaType, fileInfo)
-		return { filePath, fileInfo, mediaType, dimensions }
+		const dimensions = await this.getCustomDropMediaDimensions(
+			normalizedFilePath,
+			mediaType,
+			fileInfo,
+		)
+		return { filePath: normalizedFilePath, fileInfo, mediaType, dimensions }
 	}
 
 	/**

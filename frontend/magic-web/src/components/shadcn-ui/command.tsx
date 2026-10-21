@@ -58,8 +58,11 @@ function CommandDialog({
 
 function CommandInput({
 	className,
+	suffix,
 	...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+	suffix?: React.ReactNode
+}) {
 	return (
 		<div
 			data-slot="command-input-wrapper"
@@ -69,11 +72,14 @@ function CommandInput({
 			<CommandPrimitive.Input
 				data-slot="command-input"
 				className={cn(
-					"flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+					"flex h-10 min-w-0 rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+					// Suffix sits in the same row. flex-1 keeps the field in the leftover space, and pr-2 keeps typed text off the label.
+					suffix ? "flex-1 pr-2" : "w-full",
 					className,
 				)}
 				{...props}
 			/>
+			{suffix ? <div className="flex shrink-0 items-center gap-2">{suffix}</div> : null}
 		</div>
 	)
 }

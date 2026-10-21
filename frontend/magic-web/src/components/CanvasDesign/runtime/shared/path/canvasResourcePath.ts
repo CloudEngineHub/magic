@@ -6,29 +6,37 @@ import type {
 } from "../../../public/resource-reference"
 import {
 	CANVAS_RESOURCE_ROOTS,
+	buildAssetResourcePath,
 	buildSharedMediaStorageScope,
 	buildVirtualResourceScope,
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
+	isAssetResourcePath,
+	isAssetResourceScheme,
 	isCanvasRelativeResourcePath as isCanvasRelativeResourcePathInternal,
 	isOpaqueAssetReference,
 	isRemoteOrSpecialPath,
 	joinUploadResultPath,
 	normalizePathSeparators,
 	normalizeUploadFileResponse as normalizeUploadFileResponseInternal,
+	parseAssetResourcePath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
 } from "./internal/pathPrimitives"
 
 export {
 	CANVAS_RESOURCE_ROOTS,
+	buildAssetResourcePath,
 	buildSharedMediaStorageScope,
 	buildVirtualResourceScope,
 	formatCanvasRelativeResourcePath,
 	hasCurrentDirectoryPrefix,
+	isAssetResourcePath,
+	isAssetResourceScheme,
 	isOpaqueAssetReference,
 	isRemoteOrSpecialPath,
 	normalizePathSeparators,
+	parseAssetResourcePath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
 }

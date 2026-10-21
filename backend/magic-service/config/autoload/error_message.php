@@ -7,6 +7,7 @@ declare(strict_types=1);
 use App\ErrorCode\AgentErrorCode;
 use App\ErrorCode\AppMenuErrorCode;
 use App\ErrorCode\AsrErrorCode;
+use App\ErrorCode\AssetErrorCode;
 use App\ErrorCode\AuthenticationErrorCode;
 use App\ErrorCode\ChatErrorCode;
 use App\ErrorCode\DesignErrorCode;
@@ -48,6 +49,7 @@ return [
         TokenErrorCode::class => [9000, 10000],
         FlowErrorCode::class => [31000, 31999],
         AgentErrorCode::class => [32000, 32999],
+        AssetErrorCode::class => [48000, 48099],
         AuthenticationErrorCode::class => [33000, 33999],
         ModeErrorCode::class => [34000, 34999],
         PermissionErrorCode::class => [42000, 42999],

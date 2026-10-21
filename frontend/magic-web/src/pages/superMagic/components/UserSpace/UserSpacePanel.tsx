@@ -14,6 +14,7 @@ import {
 } from "../ProjectSider/panelChrome"
 import UserSpaceFilesView from "./UserSpaceFilesView"
 import { useUserSpaceOverviewHelp } from "./useUserFileHelp"
+import { useUserFilesChangeRealtime } from "../../hooks/useUserFilesChangeRealtime"
 
 const UserSpaceMemoryView = lazy(() => import("./UserSpaceMemoryView"))
 const FileHelpBrowser = lazy(() => import("../TopicFilesButton/components/FileHelpBrowser"))
@@ -42,6 +43,7 @@ export default observer(function UserSpacePanel({
 	const [view, setView] = useState<UserSpaceView>("files")
 	const [memoryVisited, setMemoryVisited] = useState(false)
 	const [directoryId, setDirectoryId] = useState<string>()
+	useUserFilesChangeRealtime(Boolean(identity))
 	useEffect(() => {
 		if (previousIdentity.current === identity) return
 		previousIdentity.current = identity

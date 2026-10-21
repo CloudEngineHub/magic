@@ -33,6 +33,12 @@ import {
 } from "@/pages/superMagic/pages/AudioRecordings/utils/audio-recordings-utils"
 import { resolveDetailSummaryVisualState } from "@/pages/superMagic/pages/AudioRecordings/utils/summary-action-utils"
 import { saveMediaSpeakersAndMagicProjectJs } from "@/pages/superMagic/components/Detail/contents/HTML/media/utils"
+import {
+	MAX_PROJECT_NAME_LENGTH,
+	clampProjectName,
+	isProjectNameAtLimit,
+	isProjectNameOverLimit,
+} from "@/pages/superMagicMobile/utils/mobileProjectNameLimit"
 import type { MobileRecordingSourceTab, MobileRecordingTopTab } from "./types"
 import { useMobileRecordingAudioPlayer } from "./hooks/useMobileRecordingAudioPlayer"
 import { useRecordingColorSegments } from "@/pages/superMagic/pages/AudioRecordings/hooks/useRecordingColorSegments"
@@ -316,14 +322,14 @@ export default function MobileAudioRecordingDetailPage() {
 	/** Opens the project-detail-style rename sheet for a scoped recording topic. */
 	function handleRecordingTopicRename(topic: Topic) {
 		setTopicActionItem(topic)
-		setTopicRenameValue(topic.topic_name || "")
+		setTopicRenameValue(clampProjectName(topic.topic_name || "", MAX_PROJECT_NAME_LENGTH))
 		setTopicRenameOpen(true)
 	}
 
 	/** Persists the rename-sheet value and keeps the scoped topic list in sync. */
 	async function submitRecordingTopicRename() {
 		const topic = topicActionItem
-		const nextName = topicRenameValue.trim()
+		const nextName = clampProjectName(topicRenameValue, MAX_PROJECT_NAME_LENGTH)
 		if (!topic?.id || !nextName || nextName === topic.topic_name) {
 			setTopicRenameOpen(false)
 			return
@@ -1139,18 +1145,51 @@ export default function MobileAudioRecordingDetailPage() {
 					icon: <Check />,
 					ariaLabel: t("super:common.confirm"),
 					onClick: () => void submitRecordingTopicRename(),
-					disabled: !topicRenameValue.trim(),
+					disabled:
+						!topicRenameValue.trim() ||
+						isProjectNameOverLimit(topicRenameValue, MAX_PROJECT_NAME_LENGTH),
 					tone: "primary",
 					testId: "mobile-recording-topic-rename-confirm",
 				}}
 				bodyClassName="max-h-[80dvh] p-4"
 			>
-				<Input
-					value={topicRenameValue}
-					onChange={(event) => setTopicRenameValue(event.target.value)}
-					placeholder={t("super:hierarchicalWorkspacePopup.inputTopicName")}
-					autoFocus
-				/>
+				<div className="flex flex-col gap-2.5">
+					<Input
+						value={topicRenameValue}
+						maxLength={MAX_PROJECT_NAME_LENGTH}
+						onChange={(event) => setTopicRenameValue(event.target.value)}
+						placeholder={t("super:hierarchicalWorkspacePopup.inputTopicName")}
+						autoFocus
+					/>
+					{/* Character counter and limit reminder */}
+					<div className="flex items-center justify-between text-xs text-muted-foreground">
+						{isProjectNameOverLimit(topicRenameValue, MAX_PROJECT_NAME_LENGTH) ? (
+							<span className="text-destructive">
+								{t("super:chat.nameMaxLengthTip", {
+									maxLength: MAX_PROJECT_NAME_LENGTH,
+								})}
+							</span>
+						) : isProjectNameAtLimit(topicRenameValue, MAX_PROJECT_NAME_LENGTH) ? (
+							<span>
+								{t("super:chat.nameMaxLengthTip", {
+									maxLength: MAX_PROJECT_NAME_LENGTH,
+								})}
+							</span>
+						) : (
+							<span />
+						)}
+						<span
+							className={
+								isProjectNameOverLimit(topicRenameValue, MAX_PROJECT_NAME_LENGTH)
+									? "text-destructive"
+									: ""
+							}
+							data-testid="recording-topic-rename-char-count"
+						>
+							{topicRenameValue.length}/{MAX_PROJECT_NAME_LENGTH}
+						</span>
+					</div>
+				</div>
 			</MagicPopup>
 
 			<MagicPopup

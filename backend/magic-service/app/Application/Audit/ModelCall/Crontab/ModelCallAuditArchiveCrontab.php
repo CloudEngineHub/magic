@@ -35,7 +35,7 @@ final class ModelCallAuditArchiveCrontab
         LoggerFactory $loggerFactory,
         private readonly ModelCallAuditArchiveService $archiveService,
     ) {
-        $this->logger = $loggerFactory->get(static::class);
+        $this->logger = $loggerFactory->get(self::class);
     }
 
     public function execute(): void

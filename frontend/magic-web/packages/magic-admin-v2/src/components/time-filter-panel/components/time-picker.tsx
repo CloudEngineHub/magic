@@ -14,9 +14,9 @@ type TimePickerProps = {
 	onChange: (value: string) => void
 	/** 时间选择精度；day 由上层日期控件处理。 */
 	precision: Exclude<TimePrecision, "day">
+	testId?: string
 	/** 当前时间文本，格式必须与 precision 对应。 */
 	value: string
-	testId?: string
 }
 
 const hourOptions = createOptions(24)
@@ -59,7 +59,8 @@ export function TimePicker({
 					disabled && "cursor-not-allowed opacity-50 hover:bg-card",
 				)}
 				disabled={disabled}
-			 data-testid={testId}>
+				data-testid={testId}
+			>
 				<span className="flex min-w-0 items-center gap-2">
 					<Clock3
 						className="size-3.5 shrink-0 text-muted-foreground"
@@ -78,7 +79,8 @@ export function TimePicker({
 			<PopoverContent
 				align="start"
 				className="w-[min(18rem,calc(100vw-2rem))] overflow-hidden p-1.5"
-			 data-testid={testId ? `${testId}-content` : undefined}>
+				data-testid={testId ? `${testId}-content` : undefined}
+			>
 				<div
 					className={cn(
 						"grid items-start gap-1",
@@ -158,7 +160,8 @@ function TimeColumn({
 							onClick={() => onChange(option)}
 							role="option"
 							type="button"
-						 data-testid="time-picker-action-button">
+							data-testid="time-picker-action-button"
+						>
 							<span>{option}</span>
 							{selected ? <Check className="sr-only" aria-hidden="true" /> : null}
 						</button>

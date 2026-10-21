@@ -90,11 +90,13 @@ export default function ElementAlign() {
 	// 获取当前选中的图标
 	const SelectedIcon =
 		ALIGN_OPTIONS.find((opt) => opt.value === selectedValue)?.icon || AlignStartHorizontal
+	const alignLabel = t("elementTools.elementAlign.title", "对齐方式")
 
 	return (
 		<Select value={selectedValue} onValueChange={handleAlignChange}>
-			<SelectTrigger className={styles.selectTrigger}>
+			<SelectTrigger className={styles.selectTrigger} aria-label={alignLabel}>
 				<SelectedIcon size={16} />
+				<span className={styles.triggerLabel}>{alignLabel}</span>
 			</SelectTrigger>
 			<SelectContent style={{ width: 240 }}>
 				{ALIGN_OPTIONS.map((option) => {

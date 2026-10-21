@@ -291,6 +291,13 @@ from app.tools.remote import (
 
 # Code Mode 产品工具也需进入加密打包的显式导入链。
 from app.tools.super_magic import (
+    ListSkills,
+    GetSkill,
+    CreateSkill,
+    PrepareSkillPublish,
+    PublishSkill,
+    GetSkillPublishResult,
+
     ArchiveTopic,
     ArchiveWorkspace,
     CancelTopicTask,
@@ -320,6 +327,9 @@ from app.tools.super_magic import (
     PrepareProjectFiles,
     ReadTopicMessages,
     RenameProjectFile,
+    SearchProjectFiles,
+    SearchUsers,
+    SearchDepartments,
     SendTopicMessage,
     StartTopicTask,
     UpdateProject,
@@ -334,6 +344,13 @@ import app.tools.design.utils
 import app.tools.design
 
 __all__ = [
+    "ListSkills",
+    "GetSkill",
+    "CreateSkill",
+    "PrepareSkillPublish",
+    "PublishSkill",
+    "GetSkillPublishResult",
+
     "DummyTool",
     "AskUserTool",
     "MicroAppPlanTool",
@@ -620,6 +637,9 @@ __all__ = [
     "PrepareProjectFiles",
     "ReadTopicMessages",
     "RenameProjectFile",
+    "SearchProjectFiles",
+    "SearchUsers",
+    "SearchDepartments",
     "SendTopicMessage",
     "StartTopicTask",
     "UpdateProject",

@@ -49,6 +49,16 @@ export interface GenerationRuntimeTargetState extends GenerationAttemptTarget {
 	failurePolicy: GenerationFailurePolicy
 }
 
+export type GenerationSubmissionPhase = "preparing" | "validating" | "submitting"
+
+export interface GenerationSubmissionRuntimeState {
+	elementId: string
+	contentId?: string
+	submissionId: string
+	phase: GenerationSubmissionPhase
+	startedAt: number
+}
+
 export interface BeginGenerationAttemptOptions {
 	attemptId?: string
 	operation: GenerationOperation
@@ -61,7 +71,8 @@ export interface BeginGenerationAttemptOptions {
 /**
  * Canvas 级生成任务运行时状态。
  *
- * 这里只保存后端尚未确认的提交尝试，绝不修改 Element data，也不会进入 DSL、历史或剪贴板。
+ * 这里保存后端尚未确认的生成尝试和编辑器提交阶段，绝不修改 Element data，也不会进入
+ * DSL、历史或剪贴板。
  * 未绑定 Content 的历史/批量操作仍按元素聚合；绑定 Content 的图片、视频任务则按
  * elementId + contentId 隔离，允许同一元素的多个 Content 同时提交，并由各自的
  * contentId 防止异步结果串写。
@@ -70,6 +81,8 @@ export class GenerationRuntimeManager {
 	private attempts = new Map<string, GenerationAttempt>()
 	private targetStates = new Map<string, GenerationRuntimeTargetState>()
 	private latestTargetKeyByElementId = new Map<string, string>()
+	private submissionStates = new Map<string, GenerationSubmissionRuntimeState>()
+	private latestSubmissionKeyByElementId = new Map<string, string>()
 	private revisionsByElementId = new Map<string, number>()
 	private listeners = new Map<string, Set<() => void>>()
 	private unsubscribers: Array<() => void> = []
@@ -186,6 +199,76 @@ export class GenerationRuntimeManager {
 		)
 	}
 
+	/**
+	 * Track the UI submission lifecycle before a backend generation task takes
+	 * ownership. This state is runtime-only and never enters the Canvas DSL.
+	 */
+	public beginSubmission(options: {
+		elementId: string
+		contentId?: string
+		phase: GenerationSubmissionPhase
+		submissionId?: string
+	}): string {
+		const targetKey = this.getTargetKey(options.elementId, options.contentId)
+		const submissionId = options.submissionId ?? generateUUID()
+		// Reinsert a superseded target so element-level reads keep pointing at
+		// the newest Content submission instead of the old Map insertion order.
+		this.submissionStates.delete(targetKey)
+		const state: GenerationSubmissionRuntimeState = {
+			elementId: options.elementId,
+			...(options.contentId !== undefined ? { contentId: options.contentId } : {}),
+			submissionId,
+			phase: options.phase,
+			startedAt: Date.now(),
+		}
+		this.submissionStates.set(targetKey, state)
+		this.latestSubmissionKeyByElementId.set(options.elementId, targetKey)
+		this.notifyElement(options.elementId)
+		return submissionId
+	}
+
+	public updateSubmissionPhase(submissionId: string, phase: GenerationSubmissionPhase): boolean {
+		for (const [targetKey, state] of this.submissionStates) {
+			if (state.submissionId !== submissionId || state.phase === phase) continue
+			const next = { ...state, phase }
+			this.submissionStates.set(targetKey, next)
+			this.notifyElement(state.elementId)
+			return true
+		}
+		return false
+	}
+
+	public getSubmissionState(
+		elementId: string,
+		contentId?: string,
+	): GenerationSubmissionRuntimeState | null {
+		if (contentId !== undefined) {
+			return this.submissionStates.get(this.getTargetKey(elementId, contentId)) ?? null
+		}
+		const targetKey = this.latestSubmissionKeyByElementId.get(elementId)
+		return targetKey ? (this.submissionStates.get(targetKey) ?? null) : null
+	}
+
+	/** Clear only the submission identified by its token, preserving a newer one. */
+	public clearSubmission(submissionId: string): boolean {
+		for (const [targetKey, state] of this.submissionStates) {
+			if (state.submissionId !== submissionId) continue
+			this.submissionStates.delete(targetKey)
+			this.refreshLatestSubmissionKey(state.elementId)
+			this.notifyElement(state.elementId)
+			return true
+		}
+		return false
+	}
+
+	public getComplianceState(
+		elementId: string,
+		contentId?: string,
+	): GenerationSubmissionRuntimeState | null {
+		const state = this.getSubmissionState(elementId, contentId)
+		return state?.phase === "validating" ? state : null
+	}
+
 	public isCurrent(attemptId: string, elementId?: string, contentId?: string): boolean {
 		if (elementId) {
 			const targetKey = this.getTargetKey(elementId, contentId)
@@ -236,17 +319,22 @@ export class GenerationRuntimeManager {
 	public clearTarget(elementId: string, contentId?: string): void {
 		const targetKey = this.getTargetKey(elementId, contentId)
 		const current = this.targetStates.get(targetKey)
-		if (!current) return
+		const submissionState = this.submissionStates.get(targetKey)
+		if (!current && !submissionState) return
 
-		this.targetStates.delete(targetKey)
-		const attempt = this.attempts.get(current.attemptId)
-		if (attempt) {
-			attempt.targets = attempt.targets.filter(
-				(target) => this.getTargetKey(target.elementId, target.contentId) !== targetKey,
-			)
-			if (attempt.targets.length === 0) this.attempts.delete(current.attemptId)
+		if (current) {
+			this.targetStates.delete(targetKey)
+			const attempt = this.attempts.get(current.attemptId)
+			if (attempt) {
+				attempt.targets = attempt.targets.filter(
+					(target) => this.getTargetKey(target.elementId, target.contentId) !== targetKey,
+				)
+				if (attempt.targets.length === 0) this.attempts.delete(current.attemptId)
+			}
 		}
+		if (submissionState) this.submissionStates.delete(targetKey)
 		this.refreshLatestTargetKey(elementId)
+		this.refreshLatestSubmissionKey(elementId)
 		this.notifyElement(elementId)
 	}
 
@@ -254,7 +342,10 @@ export class GenerationRuntimeManager {
 		const targetEntries = Array.from(this.targetStates.entries()).filter(
 			([, state]) => state.elementId === elementId,
 		)
-		if (targetEntries.length === 0) return
+		const submissionEntries = Array.from(this.submissionStates.entries()).filter(
+			([, state]) => state.elementId === elementId,
+		)
+		if (targetEntries.length === 0 && submissionEntries.length === 0) return
 
 		const attemptIds = new Set(targetEntries.map(([, state]) => state.attemptId))
 		targetEntries.forEach(([targetKey]) => this.targetStates.delete(targetKey))
@@ -268,16 +359,23 @@ export class GenerationRuntimeManager {
 				this.attempts.delete(attemptId)
 			}
 		})
+		submissionEntries.forEach(([targetKey]) => this.submissionStates.delete(targetKey))
+		this.latestSubmissionKeyByElementId.delete(elementId)
 		this.notifyElement(elementId)
 	}
 
 	public clear(): void {
 		const elementIds = Array.from(
-			new Set(Array.from(this.targetStates.values()).map((state) => state.elementId)),
+			new Set([
+				...Array.from(this.targetStates.values()).map((state) => state.elementId),
+				...Array.from(this.submissionStates.values()).map((state) => state.elementId),
+			]),
 		)
 		this.attempts.clear()
 		this.targetStates.clear()
 		this.latestTargetKeyByElementId.clear()
+		this.submissionStates.clear()
+		this.latestSubmissionKeyByElementId.clear()
 		this.revisionsByElementId.clear()
 		elementIds.forEach((elementId) => this.notifyElement(elementId))
 	}
@@ -288,6 +386,8 @@ export class GenerationRuntimeManager {
 		this.attempts.clear()
 		this.targetStates.clear()
 		this.latestTargetKeyByElementId.clear()
+		this.submissionStates.clear()
+		this.latestSubmissionKeyByElementId.clear()
 		this.revisionsByElementId.clear()
 		this.listeners.clear()
 	}
@@ -362,6 +462,20 @@ export class GenerationRuntimeManager {
 			this.latestTargetKeyByElementId.set(elementId, latest[0])
 		} else {
 			this.latestTargetKeyByElementId.delete(elementId)
+		}
+	}
+
+	private refreshLatestSubmissionKey(elementId: string): void {
+		const latest = Array.from(this.submissionStates.entries()).reduce<
+			[string, GenerationSubmissionRuntimeState] | null
+		>((current, entry) => {
+			if (entry[1].elementId !== elementId) return current
+			return entry
+		}, null)
+		if (latest) {
+			this.latestSubmissionKeyByElementId.set(elementId, latest[0])
+		} else {
+			this.latestSubmissionKeyByElementId.delete(elementId)
 		}
 	}
 }

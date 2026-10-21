@@ -19,6 +19,7 @@ import type {
 	VideoGenerationResultResponse,
 } from "@/components/CanvasDesign/public/magic-types"
 import MyModelsIcon from "@/pages/superMagic/components/MessageEditor/components/ModelSwitch/assets/my-models-icon.svg"
+import { isAssetResourcePath } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
 import { normalizePath } from "../utils/utils"
 import { useTranslation } from "react-i18next"
 import {
@@ -431,7 +432,7 @@ function normalizeGenerateVideoComposition(
 			flatAttachments,
 			pathUnresolvedMessage,
 		)
-		if (!path.startsWith("/")) {
+		if (!path.startsWith("/") && !isAssetResourcePath(path)) {
 			throw new Error(pathUnresolvedMessage || "Design composition path unresolved")
 		}
 		return { ...input, path }

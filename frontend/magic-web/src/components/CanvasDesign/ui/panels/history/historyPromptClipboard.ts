@@ -38,11 +38,16 @@ function appendTextNodes(nodes: JSONContent[], text: string): void {
 	})
 }
 
-function createHistoryMentionNode(path: string, fileName: string): JSONContent {
+function createHistoryMentionNode(
+	path: string,
+	fileName: string,
+	mediaType: PromptPlaceholderTokenKind,
+): JSONContent {
 	const item = createReferenceResourcePanelItem({
 		path,
 		fileName,
 		relativeFilePath: path,
+		mediaType,
 	})
 	return {
 		type: "mention",
@@ -73,7 +78,7 @@ export function buildHistoryPromptClipboardContent(
 		const path = placeholderPaths[match.kind]?.[match.index - 1]?.trim()
 		const fileName = path ? resolveHistoryPlaceholderFileName(path) : ""
 		if (path && fileName) {
-			nodes.push(createHistoryMentionNode(path, fileName))
+			nodes.push(createHistoryMentionNode(path, fileName, match.kind))
 		} else {
 			appendTextNodes(nodes, match.rawText)
 		}

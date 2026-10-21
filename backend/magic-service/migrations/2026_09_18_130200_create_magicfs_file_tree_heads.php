@@ -4,13 +4,12 @@ declare(strict_types=1);
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
-
 use Hyperf\Database\Exception\QueryException;
 use Hyperf\Database\Migrations\Migration;
 use Hyperf\Database\Schema\Blueprint;
 use Hyperf\Database\Schema\Schema;
 
-/**
+/*
  * Create the root-file revision heads used by the durable MagicFS feed.
  * The journal schema (including root_file_id/revision) is created in the
  * preceding migration; this table is the serialization point for allocating a

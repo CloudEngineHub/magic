@@ -18,6 +18,7 @@ import MediaResourceFullscreenPreview, {
 import VideoGenerateEditorRender from "./VideoGenerateEditorRender"
 import VideoSecondEdit from "./VideoSecondEdit"
 import type { GenerationToolCommandRequest } from "../../../../runtime/element-tools"
+import { useMediaEditorSubmission } from "../shared/useMediaEditorSubmission"
 
 /**
  * 单选非临时视频元素且可编辑时挂载生成编辑器；上传中、生成中、已有成片等状态不展示
@@ -145,44 +146,38 @@ function ActiveVideoGenerateEditor({
 	isMediaResourcePreviewOpen,
 }: ActiveVideoGenerateEditorProps) {
 	const { canvas } = useCanvas()
-	const [hiddenAfterSubmit, setHiddenAfterSubmit] = useState(false)
 	const videoContent = getActiveContent(videoElement)
 	const generationRuntime = useGenerationRuntime(videoElement.id, videoContent?.contentId)
 	const { activeContentIsGenerating } = getContentGenerationState(videoElement)
 
 	const hasSrc = !!videoContent?.src
 	const isGenerating = activeContentIsGenerating || Boolean(generationRuntime)
-
-	useEffect(() => {
-		setHiddenAfterSubmit(false)
-	}, [videoContent?.contentId, videoElement.id])
-
-	useCanvasEvent(
-		"element:video:generate-submit-started",
-		({ data }) => {
-			if (data.elementId === videoElement.id) {
-				setHiddenAfterSubmit(true)
-			}
-		},
-		[videoElement.id],
-	)
+	const isError = getContentState(videoContent) === "failed"
+	const isRetryEditing = isError && retryEditingElementId === videoElement.id
+	const submission = useMediaEditorSubmission({
+		elementId: videoElement.id,
+		contentId: videoContent?.contentId,
+		isGenerating,
+		isTimedOut: false,
+		isRetryEditing,
+	})
 
 	useCanvasEvent(
 		"element:video:generate-submit-failed",
 		({ data }) => {
 			if (data.elementId === videoElement.id) {
-				setHiddenAfterSubmit(false)
+				submission.reveal()
 			}
 		},
-		[videoElement.id],
+		[videoElement.id, submission.reveal],
 	)
 
 	useCanvasEvent(
 		"element:video:retryClick",
 		({ data }) => {
-			if (data.elementId === videoElement.id) setHiddenAfterSubmit(false)
+			if (data.elementId === videoElement.id) submission.reveal()
 		},
-		[videoElement.id],
+		[videoElement.id, submission.reveal],
 	)
 
 	const handleGenerateSubmitSucceeded = useCallback(() => {
@@ -195,8 +190,6 @@ function ActiveVideoGenerateEditor({
 	const hasGenerateVideoRequest = !!(
 		generationRuntime?.generateVideoRequest || videoContent?.generateVideoRequest
 	)
-	const isError = getContentState(videoContent) === "failed"
-	const isRetryEditing = isError && retryEditingElementId === videoElement.id
 
 	const showEditor =
 		!isTemporaryElement &&
@@ -204,10 +197,9 @@ function ActiveVideoGenerateEditor({
 		!isDragging &&
 		!hasSrc &&
 		(!isError || isRetryEditing) &&
-		!hiddenAfterSubmit &&
-		!isGenerating
+		!submission.hidden
 
-	const showResultSecondEdit = hasSrc && !isDragging && !isGenerating && !isTemporaryElement
+	const showResultSecondEdit = hasSrc && !isDragging && !submission.busy && !isTemporaryElement
 
 	const resultSecondEditNode = showResultSecondEdit ? (
 		<VideoSecondEdit
@@ -217,6 +209,7 @@ function ActiveVideoGenerateEditor({
 			onPendingToolCommandHandled={onPendingToolCommandHandled}
 			onPreviewMediaResource={onPreviewMediaResource}
 			isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+			submissionController={submission}
 		/>
 	) : null
 
@@ -230,6 +223,7 @@ function ActiveVideoGenerateEditor({
 			submitTarget={isRetryEditing ? "current-content" : "current-element"}
 			onPreviewMediaResource={onPreviewMediaResource}
 			isMediaResourcePreviewOpen={isMediaResourcePreviewOpen}
+			submissionController={submission}
 		/>
 	) : null
 

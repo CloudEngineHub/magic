@@ -19,9 +19,12 @@ import {
 	validateUploadDirectoryFileId,
 } from "../utils/designAssetDirectory"
 import {
+	buildAssetResourcePath,
 	formatCanvasRelativeResourcePath,
 	getCanvasResourceFileName,
+	isAssetResourceScheme,
 	isCanvasResourceRootPath,
+	parseAssetResourcePath,
 	stripCurrentDirectoryPrefix,
 	stripPathEdgeSlashes,
 } from "@/components/CanvasDesign/runtime/shared/path/canvasResourcePath"
@@ -173,10 +176,17 @@ export function resolveDesignDropResourceEntries(
 		const seen = new Set<string>()
 
 		return entries.filter((entry) => {
-			// 文件名只用于媒体类型校验，绝不能退化为资源路径或 identity。
-			const mediaName = entry.fileName || entry.sourcePath
-			if (!mediaName || !validateCanvasFilePath(mediaName).valid) return false
-			const key = entry.fileId || entry.sourcePath
+			let assetPath: string | undefined
+			if (entry.sourcePath && isAssetResourceScheme(entry.sourcePath)) {
+				const assetId = parseAssetResourcePath(entry.sourcePath)
+				if (assetId === undefined) return false
+				assetPath = buildAssetResourcePath(assetId)
+			} else {
+				// 文件名只用于媒体类型校验，绝不能退化为资源路径或 identity。
+				const mediaName = entry.fileName || entry.sourcePath
+				if (!mediaName || !validateCanvasFilePath(mediaName).valid) return false
+			}
+			const key = assetPath || entry.fileId || entry.sourcePath
 			if (!key) return false
 			if (seen.has(key)) return false
 			seen.add(key)
@@ -200,6 +210,9 @@ export function resolveDesignDropResourcePaths(
 		new Set(
 			resolveDesignDropResourceEntries(dataTransfer).flatMap((entry) => {
 				if (!entry.sourcePath) return []
+				const assetId = parseAssetResourcePath(entry.sourcePath)
+				if (assetId !== undefined) return [buildAssetResourcePath(assetId)]
+				if (isAssetResourceScheme(entry.sourcePath)) return []
 				const storagePath = resolveDesignWorkspaceStoragePath(entry.sourcePath, {
 					designProjectBasePath,
 				})
@@ -338,6 +351,19 @@ export function useDesignFileDropPaths(
 			try {
 				for (const entry of entries) {
 					const resourceLabel = getDropResourceLabel(entry)
+					const assetId = entry.sourcePath
+						? parseAssetResourcePath(entry.sourcePath)
+						: undefined
+					if (assetId !== undefined) {
+						// Asset references are stable logical paths. They are resolved by the
+						// Canvas media lifecycle after drop and must never be copied into the
+						// current workspace asset directory.
+						preparedPaths.push(buildAssetResourcePath(assetId))
+						continue
+					}
+					if (entry.sourcePath && isAssetResourceScheme(entry.sourcePath)) {
+						throw new Error(`无效的素材库资源路径: ${resourceLabel}`)
+					}
 					const isExternalProject = Boolean(
 						entry.projectId && projectId && entry.projectId !== projectId,
 					)
@@ -486,19 +512,47 @@ export function useDesignFileDropPaths(
 		async (
 			input: Parameters<UseDesignFileDropPathsReturn["resolveCanvasClipboardReference"]>[0],
 		) => {
-			const targetProjectId = input.targetProjectId || projectId
-			const resourceIdentity =
+			const fallbackResourceIdentity =
 				input.resourceIdentity ||
 				input.sourceFileId ||
 				input.projectPath ||
 				input.sourcePath
-			if (!targetProjectId || !resourceIdentity) {
+			if (!fallbackResourceIdentity) {
 				return null
 			}
 			const fileName =
 				input.fileName ||
-				getCanvasResourceFileName(input.sourcePath || resourceIdentity) ||
+				getCanvasResourceFileName(input.sourcePath || fallbackResourceIdentity) ||
 				"canvas-clipboard-file"
+			const assetPathCandidate = [
+				input.sourcePath,
+				input.projectPath,
+				input.resourceIdentity,
+			].find((candidate) => candidate && parseAssetResourcePath(candidate) !== undefined)
+			const assetId = assetPathCandidate
+				? parseAssetResourcePath(assetPathCandidate)
+				: undefined
+			if (assetId !== undefined) {
+				if (input.target !== "canvas-editor") return null
+				const path = buildAssetResourcePath(assetId)
+				return {
+					kind: "current-canvas" as const,
+					path,
+					resourceIdentity: `opaque-asset:${path}`,
+					fileName,
+				}
+			}
+			if (
+				[input.sourcePath, input.projectPath, input.resourceIdentity].some(
+					(candidate) => candidate && isAssetResourceScheme(candidate),
+				)
+			) {
+				return null
+			}
+
+			const targetProjectId = input.targetProjectId || projectId
+			const resourceIdentity = fallbackResourceIdentity
+			if (!targetProjectId) return null
 			const sourceAttachment = input.sourceFileId
 				? attachmentIndex?.byFileId.get(input.sourceFileId) ||
 					flatAttachments?.find((item) => item.file_id === input.sourceFileId)

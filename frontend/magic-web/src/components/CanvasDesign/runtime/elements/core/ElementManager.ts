@@ -25,6 +25,7 @@ import { syncCropConfigOnResize } from "../../resources/image/imageCropUtils"
 import { normalizeFrameCreationSize, normalizeSize } from "../../shared/normalize/normalizeUtils"
 import { sanitizeCanvasDocument } from "../../document/temporaryElementUtils"
 import { CanvasDocumentIndex } from "./CanvasDocumentIndex"
+import { resumeDocumentAssetCompliancePolling } from "../../resources/asset/CanvasAssetComplianceTaskManager"
 import { resumeImageBatchPollingManagers } from "../../resources/polling/resumeImageBatchPolling"
 import {
 	getActiveImageContent,
@@ -282,6 +283,7 @@ export class ElementManager {
 			uploadFiles: File[]
 			onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 			onUploadFailed?: (elementId: string, error: Error) => void
+			onUploadSettled?: () => void
 		},
 	): string {
 		// 创建元素实例（与正式元素相同的渲染逻辑）
@@ -296,7 +298,7 @@ export class ElementManager {
 		}
 
 		// 使用全局上传管理器上传文件
-		const { uploadFiles, onUploadComplete, onUploadFailed } = uploadContext
+		const { uploadFiles, onUploadComplete, onUploadFailed, onUploadSettled } = uploadContext
 		if (uploadFiles.length > 0) {
 			this.canvas.canvasFileUploadManager.queueUpload({
 				elementId: createResult.elementId,
@@ -317,6 +319,7 @@ export class ElementManager {
 					// 触发原始回调
 					onUploadFailed?.(createResult.elementId, error)
 				},
+				onUploadSettled,
 			})
 		}
 
@@ -429,7 +432,10 @@ export class ElementManager {
 			})
 		})
 		if (convertedElementIds.length > 0) {
-			this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+			this.canvas.eventEmitter.emit({
+				type: "element:batchupdated",
+				data: { elementIds: convertedElementIds },
+			})
 		}
 	}
 
@@ -562,7 +568,10 @@ export class ElementManager {
 			this.flush()
 			if (succeeded && options?.emitBatchUpdated !== false) {
 				// 只有全部更新成功后才触发批量完成，避免失败事务污染历史快照。
-				this.canvas.eventEmitter.emit({ type: "element:batchupdated", data: undefined })
+				this.canvas.eventEmitter.emit({
+					type: "element:batchupdated",
+					data: { elementIds: [...stagedDataByElementId.keys()] },
+				})
 			}
 		}
 	}
@@ -1980,6 +1989,17 @@ export class ElementManager {
 				{ phase: "commit" },
 			)
 		}
+
+		// Reparenting updates the source/target parent instances directly, so the
+		// regular element:updated label refresh never sees the changed frame counts.
+		if (parentChangedItems.length > 0) {
+			const affectedParentIds = new Set<string>()
+			parentChangedItems.forEach((item) => {
+				if (item.sourceParentId) affectedParentIds.add(item.sourceParentId)
+			})
+			if (targetParentId) affectedParentIds.add(targetParentId)
+			this.canvas.refreshNameLabelIcons?.(Array.from(affectedParentIds))
+		}
 		return true
 	}
 
@@ -2070,6 +2090,7 @@ export class ElementManager {
 		const docCopy = sanitizeCanvasDocument(JSON.parse(JSON.stringify(doc)) as CanvasDocument)
 		this.replaceAll(docCopy.elements || [])
 		resumeImageBatchPollingManagers(this.canvas)
+		resumeDocumentAssetCompliancePolling(this.canvas)
 	}
 
 	/**
@@ -2192,6 +2213,7 @@ export class ElementManager {
 			this.batchMode = false
 			this.flush()
 			resumeImageBatchPollingManagers(this.canvas)
+			resumeDocumentAssetCompliancePolling(this.canvas)
 		}
 
 		// 由 Canvas 在元素与连接都恢复完成后统一发出 document:restored。

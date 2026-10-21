@@ -189,6 +189,7 @@ function toPanelItemFromReference(asset: CanvasClipboardAsset): ReferenceResourc
 		reference.fileName || asset.fileName,
 		{
 			fileId: reference.fileId,
+			mediaType: asset.type,
 		},
 	)
 }
@@ -259,7 +260,7 @@ export async function applyRichMessageClipboardParts(
 			const item = createReferenceResourcePanelItemFromPath(
 				asset.reference.path,
 				asset.reference.fileName || asset.fileName,
-				{ fileId: asset.reference.fileId },
+				{ fileId: asset.reference.fileId, mediaType: asset.type },
 			)
 			if (destination === "selected-slot" && replaceSelectedSlot) {
 				pushFramePlaceholder("selected-slot", assetIndex)

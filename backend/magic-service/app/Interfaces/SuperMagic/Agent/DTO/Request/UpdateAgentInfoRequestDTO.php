@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Interfaces\SuperMagic\Agent\DTO\Request;
 
 use Hyperf\HttpServer\Contract\RequestInterface;
+
 use function Hyperf\Translation\__;
 
 /**

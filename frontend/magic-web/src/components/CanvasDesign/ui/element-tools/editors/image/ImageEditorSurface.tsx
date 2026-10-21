@@ -8,16 +8,19 @@ import {
 	type CSSProperties,
 	type MutableRefObject,
 } from "react"
+import type { AssetItem } from "@/apis"
 import { ArrowUp, LoaderCircle } from "lucide-react"
+import { useLatest } from "ahooks"
 import { useCanvas } from "../../../../app/providers/CanvasProvider"
 import { useCanvasModeUI } from "../../../../app/providers/CanvasUIProvider"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
 import { useHostUiLocale } from "../../../../app/providers/HostUiLocaleProvider"
 import { useMagic } from "../../../../app/providers/MagicProvider"
 import type { ImageElement } from "../../../../runtime/document/types"
-import type {
-	ReferenceResourceFileInfo,
-	ReferenceResourceSourceType,
+import {
+	REFERENCE_RESOURCE_SOURCE_TYPES,
+	type ReferenceResourceFileInfo,
+	type ReferenceResourceSourceType,
 } from "../../../editors/message/reference-assets/reference-resource.types"
 import type {
 	ReferenceResourcePanelItem,
@@ -55,7 +58,8 @@ import { Button } from "../../../primitives/shadcn/button"
 import { FloatingSurfaceScope } from "../../../primitives/shadcn/popover"
 import { useBottomFloatingSurface } from "../../../../app/providers/BottomFloatingStackProvider"
 import ImageEditorControls from "./ImageEditorControls"
-import type { ImageEditorConfig } from "./useImageEditorConfig"
+import type { ImageEditorConfig, ImageReferenceSlotInfo } from "./useImageEditorConfig"
+import { applyImportedAssetsToImageSlots } from "./assetsSelection"
 import styles from "./index.module.css"
 import type { MediaResourceFullscreenPreviewItem } from "../../../fullscreen/media-resource/index"
 import LinkedEditorInputsBar from "../../../editors/connection/LinkedEditorInputsBar"
@@ -79,6 +83,7 @@ import type {
 } from "../../../../public/magic-types"
 import type { ResolveCanvasResourceReference } from "../../../../public/resource-reference"
 import type { Canvas } from "../../../../runtime/core/Canvas"
+import type { CanvasAssetImportResult } from "../../../../runtime/resources/asset/CanvasAssetImportManager"
 import {
 	areCanvasResourceReferencesSame,
 	getCanvasResourceAvailability,
@@ -94,6 +99,7 @@ import {
 	type CanvasClipboardAsset,
 } from "../../../../runtime/resources/clipboard/CanvasClipboardPasteController"
 import { collectImageEditorExistingClipboardResourceKeys } from "../../../../runtime/resources/clipboard/collectMediaEditorExistingClipboardResourceKeys"
+import AssetsModal from "../../../toolbar/AssetsModal"
 
 import {
 	createPromptPlaceholderTokenFactory,
@@ -120,6 +126,30 @@ interface ImageEditorSurfaceProps {
 	style?: CSSProperties
 	onPreviewMediaResource?: (resource: MediaResourceFullscreenPreviewItem) => void
 	isMediaResourcePreviewOpen?: boolean
+}
+
+interface ImageAssetSelectionSession {
+	canvas: Canvas
+	elementId: string
+	contentId: string | null
+	modelId: string
+	maxReferenceFiles: number | undefined
+	selectionPersistenceKey: string
+	referencePaths: string[]
+	slot: ImageReferenceSlotInfo
+}
+
+function areReferencePathSnapshotsEqual(
+	first: readonly string[],
+	second: readonly string[],
+	resolveResourceReference?: ResolveCanvasResourceReference,
+): boolean {
+	return (
+		first.length === second.length &&
+		first.every((path, index) =>
+			areCanvasResourceReferencesSame(path, second[index] ?? "", resolveResourceReference),
+		)
+	)
 }
 
 /** 只有权威 resolver 确认删除的引用阻塞提交；上传 pending 窗口内保持可恢复。 */
@@ -213,6 +243,11 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 	const [hasScrollbar, setHasScrollbar] = useState(false)
 	const [hoveredMentionPath, setHoveredMentionPath] = useState<string | null>(null)
 	const [sourceListContainer, setSourceListContainer] = useState<HTMLDivElement | null>(null)
+	const [assetsModalOpen, setAssetsModalOpen] = useState(false)
+	const [assetSelectionSlot, setAssetSelectionSlot] = useState<ImageReferenceSlotInfo | null>(
+		null,
+	)
+	const assetSelectionSessionRef = useRef<ImageAssetSelectionSession | null>(null)
 	const [, forceResourceStateRefresh] = useState(0)
 	const {
 		prompt,
@@ -224,6 +259,20 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 		currentReferenceFiles,
 		isReferenceFileLimitReached,
 	} = config
+	// The modal can resolve an asset after several renders. Keep the guard on a
+	// ref so that an old confirmation callback cannot validate against stale
+	// element/content/model state captured by its render closure.
+	const latestAssetSelectionStateRef = useLatest({
+		canvas,
+		elementId: imageElement.id,
+		elementType: imageElement.type,
+		contentId: imageElement.activeContentId ?? null,
+		modelId: config.selectedModelId,
+		maxReferenceFiles,
+		selectionPersistenceKey,
+		selectedReferenceSlot: config.selectedReferenceSlot,
+		isReferencePolicyReady,
+	})
 	const clipboardHandlersRef = useRef(handlers)
 	clipboardHandlersRef.current = handlers
 	const richClipboardSessionRef = useRef<RichMessageClipboardSession | null>(null)
@@ -278,6 +327,10 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 			),
 		[currentReferenceFiles, linkedActiveImagePaths, resolveResourceReference],
 	)
+	// Keep a resolver-aware snapshot separate from the modal callback closure so
+	// an upload, linked-media toggle, or external reconciliation during the
+	// confirmation cannot write into a changed reference list.
+	const latestAssetSelectionReferencePathsRef = useLatest(effectiveCurrentReferenceFiles)
 	useEffect(() => {
 		if (!canvas) return
 		return canvas.eventEmitter.on("upload:resource-pending-change", ({ data }) => {
@@ -357,21 +410,184 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 
 	const handleSelectSource = useCallback(
 		(source: ReferenceResourceSourceType) => {
-			if (source !== "local-upload") return
-			handlers.setPopoverOpen(false)
-			if (
-				!config.selectedReferenceSlot?.path &&
-				(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
-			) {
+			if (source === "local-upload") {
+				handlers.setPopoverOpen(false)
+				if (
+					!config.selectedReferenceSlot?.path &&
+					(config.isReferenceFileLimitReached || effectiveIsReferenceFileLimitReached)
+				) {
+					return
+				}
+				handlers.triggerFileSelect()
 				return
 			}
-			handlers.triggerFileSelect()
+			if (
+				source !== REFERENCE_RESOURCE_SOURCE_TYPES.assets ||
+				readOnly ||
+				!canvas ||
+				!isReferencePolicyReady
+			)
+				return
+			const selectedSlot = config.selectedReferenceSlot
+			if (!selectedSlot || maxReferenceFiles === undefined || maxReferenceFiles <= 0) return
+
+			// Capture the slot and content session before closing the popover. The
+			// library confirmation is asynchronous and must not target a new edit.
+			const capturedSlot = { ...selectedSlot }
+			setAssetSelectionSlot(capturedSlot)
+			assetSelectionSessionRef.current = {
+				canvas,
+				elementId: imageElement.id,
+				contentId: imageElement.activeContentId ?? null,
+				modelId: config.selectedModelId,
+				maxReferenceFiles,
+				selectionPersistenceKey,
+				referencePaths: [...effectiveCurrentReferenceFiles],
+				slot: capturedSlot,
+			}
+			handlers.setPopoverOpen(false)
+			setAssetsModalOpen(true)
 		},
 		[
+			canvas,
 			config.isReferenceFileLimitReached,
-			config.selectedReferenceSlot?.path,
+			config.selectedReferenceSlot,
+			config.selectedModelId,
 			effectiveIsReferenceFileLimitReached,
+			effectiveCurrentReferenceFiles,
 			handlers,
+			imageElement.activeContentId,
+			imageElement.id,
+			isReferencePolicyReady,
+			maxReferenceFiles,
+			readOnly,
+			selectionPersistenceKey,
+		],
+	)
+
+	const assetSelectionMaxCount = useMemo(() => {
+		if (!assetSelectionSlot || maxReferenceFiles === undefined) return 0
+		return Math.max(
+			0,
+			maxReferenceFiles -
+				effectiveCurrentReferenceFiles.length +
+				(assetSelectionSlot.path ? 1 : 0),
+		)
+	}, [assetSelectionSlot, effectiveCurrentReferenceFiles.length, maxReferenceFiles])
+
+	const isAssetSelectionCurrent = useCallback(() => {
+		const currentState = latestAssetSelectionStateRef.current
+		const session = assetSelectionSessionRef.current
+		if (
+			!currentState ||
+			!session ||
+			!isMountedRef.current ||
+			!currentState.canvas ||
+			currentState.canvas.isDestroyed
+		)
+			return false
+		if (session.canvas !== currentState.canvas) return false
+		if (
+			session.elementId !== currentState.elementId ||
+			session.contentId !== currentState.contentId ||
+			session.modelId !== currentState.modelId ||
+			session.maxReferenceFiles !== currentState.maxReferenceFiles ||
+			session.selectionPersistenceKey !== currentState.selectionPersistenceKey ||
+			!currentState.isReferencePolicyReady
+		)
+			return false
+		const currentReferencePaths = latestAssetSelectionReferencePathsRef.current
+		if (!currentReferencePaths) return false
+		if (
+			!areReferencePathSnapshotsEqual(
+				session.referencePaths,
+				currentReferencePaths,
+				resolveResourceReference,
+			)
+		)
+			return false
+
+		const currentElement = currentState.canvas.elementManager.getElementData(
+			currentState.elementId,
+		)
+		if (
+			currentElement?.type !== currentState.elementType ||
+			(currentElement?.activeContentId ?? null) !== currentState.contentId
+		)
+			return false
+
+		const currentSlot = currentState.selectedReferenceSlot
+		return (
+			currentSlot !== null &&
+			currentSlot.slotIndex === session.slot.slotIndex &&
+			currentSlot.slotKey === session.slot.slotKey &&
+			currentSlot.path === session.slot.path
+		)
+	}, [
+		latestAssetSelectionStateRef,
+		latestAssetSelectionReferencePathsRef,
+		resolveResourceReference,
+	])
+
+	const handleAssetsModalClose = useCallback(() => {
+		setAssetsModalOpen(false)
+		setAssetSelectionSlot(null)
+		assetSelectionSessionRef.current = null
+	}, [])
+
+	useEffect(() => {
+		if (!assetsModalOpen || assetSelectionMaxCount > 0) return
+		// A model/content change can remove the capacity captured when the dialog
+		// opened; clear the stale session instead of leaving a hidden modal armed.
+		handleAssetsModalClose()
+	}, [assetSelectionMaxCount, assetsModalOpen, handleAssetsModalClose])
+
+	const handleAssetsConfirm = useCallback(
+		async (assets: AssetItem[]) => {
+			if (!canvas || !assetSelectionSlot || assets.length === 0) {
+				throw new Error("Asset selection context is unavailable")
+			}
+			if (!isAssetSelectionCurrent()) {
+				handleAssetsModalClose()
+				throw new Error("Asset selection session is stale")
+			}
+
+			let imported: CanvasAssetImportResult[]
+			try {
+				imported = await canvas.assetImportManager.importAndConnectMany({
+					assetIds: assets.map((asset) => asset.asset_id),
+					targetElementId: imageElement.id,
+					targetKind: "image-generator",
+					slot: { kind: "reference" },
+					allowedMediaTypes: ["image"],
+					isCurrent: isAssetSelectionCurrent,
+				})
+			} catch (error) {
+				// A stale session is terminal for this picker; ordinary import errors
+				// deliberately leave it open so the user can retry the same selection.
+				if (!isAssetSelectionCurrent()) handleAssetsModalClose()
+				throw error
+			}
+			if (!isAssetSelectionCurrent()) {
+				handleAssetsModalClose()
+				throw new Error("Asset selection session is stale")
+			}
+
+			applyImportedAssetsToImageSlots({
+				slot: assetSelectionSlot,
+				imported,
+				currentReferenceFileCount: currentReferenceFiles.length,
+				handlers,
+			})
+		},
+		[
+			assetSelectionSlot,
+			canvas,
+			currentReferenceFiles.length,
+			handleAssetsModalClose,
+			handlers,
+			imageElement.id,
+			isAssetSelectionCurrent,
 		],
 	)
 
@@ -599,7 +815,7 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 							const item = createReferenceResourcePanelItemFromPath(
 								asset.reference.path,
 								asset.reference.fileName,
-								{ fileId: asset.reference.fileId },
+								{ fileId: asset.reference.fileId, mediaType: asset.type },
 							)
 							if (selectedSlotForPaste && pastedAssetIndex === 0) {
 								clipboardHandlersRef.current.replaceReferenceFileAt(
@@ -867,6 +1083,16 @@ export default function ImageEditorSurface(props: ImageEditorSurfaceProps) {
 					sourceListContainer={sourceListContainer}
 				/>
 			</ReferenceResourceDropSurface>
+			{assetSelectionSlot && assetSelectionMaxCount > 0 ? (
+				<AssetsModal
+					open={assetsModalOpen}
+					onClose={handleAssetsModalClose}
+					onConfirmMultiple={handleAssetsConfirm}
+					mediaTypes={["IMAGE"]}
+					multiple
+					maxCount={assetSelectionMaxCount}
+				/>
+			) : null}
 		</FloatingSurfaceScope>
 	)
 }

@@ -1,4 +1,4 @@
-import { unshadow } from "@/utils/shadow"
+import { isShadowed, unshadow } from "@/utils/shadow"
 import {
 	DEFAULT_FILE_SAVE_DRAFT_LIMITS,
 	estimateSaveRecordBytes,
@@ -190,7 +190,7 @@ export class FileSaveQueue {
 		if (
 			pending?.enableShadow &&
 			typeof pending.content === "string" &&
-			pending.content.startsWith("SHADOWED_")
+			isShadowed(pending.content)
 		) {
 			return unshadow(pending.content)
 		}

@@ -7,7 +7,7 @@ Use this reference as the default Canvas video path. For video tasks, read and f
 1. Understand the subject, action, scene, camera, style, duration, aspect ratio, resolution, model, and requested audio. If a reference is a provider-managed asset URI such as `asset://virtual-human-asset-id`, treat it as an opaque generation input: do not call `visual_understanding`, do not try to resolve it as a local file, and do not import it into Canvas. Only inspect a reference when it is an actual workspace media path or an accessible image URL, and skip the call when the image is already visible in your context.
 2. Present one concise generation target and complete prompt before generating. Ask only about unresolved choices that materially affect the result.
 3. Generate one video Element directly through the basic Canvas video-generation path.
-4. Use the same direct media pattern as basic image generation: the generated video is the result, and no storyboard, initialization image, first frame, `video-edit`, final composition, or professional-production Connection is created.
+4. Use the same direct media pattern as basic image generation: the generated video is the result, and no storyboard, initialization image, shot reference image, `video-edit`, final composition, or professional-production Connection is created.
 5. Use `row_incremental` layout unless the user provides exact coordinates.
 6. Keep reference paths as generation inputs only. Do not convert them into business Connections.
 7. Decide whether the completed media is needed immediately. Wait for the asynchronous generation task when the next step or the final response depends on the output; otherwise return the submitted state, preserve its exact IDs, and continue independent work without waiting.

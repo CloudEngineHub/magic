@@ -16,6 +16,10 @@ export function createDefaultAppMenuFilterDraft(name = ""): AppMenuFilterDraft {
 	return { name, status: APP_MENU_ALL_VALUE }
 }
 
+export function getAppMenuFilterActiveCount(filter: AppMenuFilterDraft) {
+	return Number(Boolean(filter.name.trim())) + Number(filter.status !== APP_MENU_ALL_VALUE)
+}
+
 export function getMenuName(item: AppMenuItem, language: string) {
 	if (language === Language.EnUS) {
 		return item.name_i18n?.en_US || item.name_i18n?.zh_CN || item.id

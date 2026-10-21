@@ -13,6 +13,33 @@ function isOptionalString(value: unknown): boolean {
 	return value === undefined || typeof value === "string"
 }
 
+const MEDIA_COMPLIANCE_STATUSES = new Set(["UNVERIFIED", "PROCESSING", "PASS", "FAILED"])
+
+function isValidMediaCompliance(content: Record<string, unknown>): boolean {
+	if (
+		content.complianceStatus !== undefined &&
+		(typeof content.complianceStatus !== "string" ||
+			!MEDIA_COMPLIANCE_STATUSES.has(content.complianceStatus))
+	) {
+		return false
+	}
+	if (
+		content.complianceFailedReason !== undefined &&
+		content.complianceFailedReason !== null &&
+		typeof content.complianceFailedReason !== "string"
+	) {
+		return false
+	}
+	if (
+		content.complianceCheckId !== undefined &&
+		(typeof content.complianceCheckId !== "string" ||
+			content.complianceCheckId.trim().length === 0)
+	) {
+		return false
+	}
+	return true
+}
+
 function isValidCropConfig(value: unknown): boolean {
 	if (!isObject(value)) return false
 	return ["width", "height", "x", "y"].every((field) => isFiniteNumber(value[field]))
@@ -146,6 +173,13 @@ function isValidElementContent(content: Record<string, unknown>, type: string): 
 	const allowedFields = new Set(["contentId", ...getElementContentFields(type)])
 	if (!hasOnlyAllowedFields(content, allowedFields)) return false
 	if (!isOptionalString(content.src)) return false
+	if (
+		content.assetId !== undefined &&
+		(typeof content.assetId !== "string" || content.assetId.trim().length === 0)
+	) {
+		return false
+	}
+	if (!isValidMediaCompliance(content)) return false
 	if (content.discarded !== undefined && typeof content.discarded !== "boolean") return false
 	if (!isOptionalString(content.status)) return false
 	if (!isOptionalString(content.errorMessage)) return false

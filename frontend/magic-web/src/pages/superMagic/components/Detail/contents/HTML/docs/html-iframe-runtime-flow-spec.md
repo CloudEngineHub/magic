@@ -46,7 +46,7 @@ flowchart TD
     E --> F
     F --> G["processHtmlContent 预处理"]
     G --> H["解析附件树并替换静态资源为临时 URL"]
-    H --> I["注入 fetch 拦截器 / 编辑态键盘脚本"]
+    H --> I["注入 fetch 拦截器（编辑态不改内容，键盘快捷键由 EditorRuntime 转发）"]
     I --> J["processedContent 写入 React state"]
     J --> K["IsolatedHTMLRenderer"]
     K --> L{"MAGIC_HTML_SANDBOX_URL 有值?"}

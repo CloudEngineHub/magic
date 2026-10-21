@@ -142,7 +142,11 @@ export function OfficialStaffFormDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-2xl" data-testid="platform-official-staff-dialog-content" closeButtonTestId="official-staff-form-dialog-close-button">
+			<DialogContent
+				className="sm:max-w-2xl"
+				closeButtonTestId="official-staff-form-dialog-close-button"
+				data-testid="platform-official-staff-dialog-content"
+			>
 				<DialogHeader>
 					<DialogTitle>
 						{isEdit
@@ -164,6 +168,7 @@ export function OfficialStaffFormDialog({
 						<div className="flex gap-2">
 							<Input
 								{...identifierField}
+								data-testid="platform-official-staff-official-staff-identifier-input"
 								disabled={staff?.is_default === 1}
 								id="official-staff-identifier"
 								onChange={(event) => {
@@ -171,13 +176,14 @@ export function OfficialStaffFormDialog({
 									scheduleAgentLookup(event.target.value)
 								}}
 								placeholder={t("officialStaff.placeholder.staffIdentifier")}
-							 data-testid="platform-official-staff-official-staff-identifier-input"/>
+							/>
 							<Button
 								disabled={!identifier.trim() || agentQuery.isFetching}
 								onClick={handleAgentLookup}
 								type="button"
+								data-testid="platform-official-staff-search-button"
 								variant="outline"
-							 data-testid="platform-official-staff-search-button">
+							>
 								{agentQuery.isFetching ? (
 									<Loader2 className="size-4 animate-spin" />
 								) : (
@@ -203,20 +209,27 @@ export function OfficialStaffFormDialog({
 								value={activeLocale}
 							>
 								<TabsList>
-									<TabsTrigger value={Language.ZhCN} data-testid="platform-official-staff-tab-trigger">
+									<TabsTrigger
+										data-testid="platform-official-staff-tab-trigger"
+										value={Language.ZhCN}
+									>
 										{t("language.zhCN")}
 									</TabsTrigger>
-									<TabsTrigger value={Language.EnUS} data-testid="platform-official-staff-tab-trigger">
+									<TabsTrigger
+										data-testid="platform-official-staff-tab-trigger"
+										value={Language.EnUS}
+									>
 										{t("language.enUS")}
 									</TabsTrigger>
 								</TabsList>
 							</Tabs>
 						</div>
 						<Input
+							data-testid="platform-official-staff-input"
 							disabled
 							value={form.watch(`name_i18n.${activeLocale}`)}
 							placeholder={t("officialStaff.placeholder.staffName")}
-						 data-testid="platform-official-staff-input"/>
+						/>
 						<FieldError
 							message={
 								form.formState.errors.name_i18n?.zh_CN?.message ||
@@ -236,6 +249,7 @@ export function OfficialStaffFormDialog({
 							name={`placeholder_i18n.${activeLocale}`}
 							render={({ field }) => (
 								<Textarea
+									data-testid="platform-official-staff-textarea-input"
 									{...field}
 									placeholder={
 										activeLocale === Language.ZhCN
@@ -244,7 +258,7 @@ export function OfficialStaffFormDialog({
 									}
 									id={`official-staff-placeholder-${activeLocale}`}
 									rows={4}
-								 data-testid="platform-official-staff-textarea-input"/>
+								/>
 							)}
 						/>
 					</DialogFormField>
@@ -261,8 +275,9 @@ export function OfficialStaffFormDialog({
 								min={0}
 								placeholder={t("officialStaff.placeholder.sort")}
 								type="number"
+								data-testid="platform-official-staff-official-staff-sort-input"
 								{...form.register("sort", { valueAsNumber: true })}
-							 data-testid="platform-official-staff-official-staff-sort-input"/>
+							/>
 							<FieldError message={form.formState.errors.sort?.message} />
 						</DialogFormField>
 						<DialogFormField
@@ -272,22 +287,29 @@ export function OfficialStaffFormDialog({
 							label={t("officialStaff.field.organizationWhitelist")}
 						>
 							<Input
+								data-testid="platform-official-staff-official-staff-organization-whitelist-input"
 								id="official-staff-organization-whitelist"
 								placeholder={t("officialStaff.placeholder.organizationWhitelist")}
 								{...form.register("organization_whitelist")}
-							 data-testid="platform-official-staff-official-staff-organization-whitelist-input"/>
+							/>
 						</DialogFormField>
 					</div>
 				</form>
 				<DialogFooter>
-					<Button onClick={() => handleOpenChange(false)} type="button" variant="outline" data-testid="platform-official-staff-cancel-button">
+					<Button
+						data-testid="platform-official-staff-cancel-button"
+						onClick={() => handleOpenChange(false)}
+						type="button"
+						variant="outline"
+					>
 						{t("common.cancel")}
 					</Button>
 					<Button
+						data-testid="platform-official-staff-save-button"
 						disabled={!canEdit || saveMutation.isPending}
 						form="official-staff-form"
 						type="submit"
-					 data-testid="platform-official-staff-save-button">
+					>
 						{saveMutation.isPending ? (
 							<Loader2 className="size-4 animate-spin" />
 						) : (

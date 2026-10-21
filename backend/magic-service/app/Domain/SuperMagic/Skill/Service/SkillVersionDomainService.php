@@ -246,8 +246,15 @@ class SkillVersionDomainService
         SkillDataIsolation $dataIsolation,
         SkillEntity $skillEntity,
         SkillVersionEntity $versionEntity,
-        bool $prepareOnly = false
+        bool $prepareOnly = false,
+        ?string $expectedLatestVersionId = null
     ): SkillVersionEntity {
+        // Serialize Web and sandbox releases on the same skill, including version checks.
+        $this->skillRepository->lockByCode($dataIsolation, $skillEntity->getCode());
+        if ($expectedLatestVersionId !== null
+            && (string) ($this->skillVersionRepository->findLatestByCode($dataIsolation, $skillEntity->getCode())?->getId() ?? '') !== $expectedLatestVersionId) {
+            ExceptionBuilder::throw(SkillErrorCode::PUBLISH_PREPARATION_STALE);
+        }
         if ($skillEntity->getSourceType()->isMarket()) {
             ExceptionBuilder::throw(SkillErrorCode::STORE_SKILL_CANNOT_PUBLISH, 'skill.store_skill_cannot_publish');
         }

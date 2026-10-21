@@ -288,12 +288,12 @@ export const SHORTCUTS: ShortcutDefinition[] = [
 	},
 	{
 		id: "distribute.auto-layout",
-		name: "自动布局",
+		name: "智能排列",
 		key: "a",
 		modifiers: ["shift"],
 		category: "selection",
 		preventDefault: true,
-		description: "自动布局元素",
+		description: "根据连线或类型智能排列元素",
 	},
 
 	// ===== 层级快捷键 =====

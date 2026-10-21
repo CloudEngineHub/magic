@@ -106,6 +106,7 @@ use App\Interfaces\SuperMagic\Project\DTO\Response\ProjectListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Request\GetSidebarTopicsRequestDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\SidebarTopicListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\TopicItemDTO;
+use Closure;
 use DirectoryIterator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Amqp\Producer;
@@ -278,8 +279,11 @@ class ProjectAppService extends AbstractAppService
         // Extract project ID from work directory (for migration scenarios)
         $projectId = $this->extractProjectIdFromWorkDir($dataIsolation, $requestDTO->getWorkDir());
 
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
             // 1. Create project entity
             $this->logger->info('创建默认项目');
             $projectEntity = $this->projectDomainService->createProject(
@@ -295,7 +299,7 @@ class ProjectAppService extends AbstractAppService
 
             // Standard initialization flow (steps 2-6 + 8)
             $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
-            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
+            ['topic' => $topicEntity, 'pending_default' => $pendingDefault] = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $conversationPair, $dynamicParams);
 
             // 7. Initialize project root directory or bind files
             if ($requestDTO->getFiles()) {
@@ -315,7 +319,9 @@ class ProjectAppService extends AbstractAppService
                 );
             }
 
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
 
             // Dispatch project created event
             $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
@@ -326,7 +332,9 @@ class ProjectAppService extends AbstractAppService
                 'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
             ];
         } catch (Throwable $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error('Create Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, 'project.create_project_failed');
         }
@@ -405,8 +413,11 @@ class ProjectAppService extends AbstractAppService
             );
 
             // 5. 创建项目
-            Db::beginTransaction();
+            $transactionOpen = false;
             try {
+                $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+                Db::beginTransaction();
+                $transactionOpen = true;
                 $projectEntity = $this->projectDomainService->createProject(
                     $workspaceEntity->getId(),
                     $requestDTO->getProjectName(),
@@ -420,7 +431,7 @@ class ProjectAppService extends AbstractAppService
 
                 // 6. 初始化项目
                 $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
-                $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams, $requestDTO->getTopicMode());
+                ['pending_default' => $pendingDefault] = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $conversationPair, $dynamicParams, $requestDTO->getTopicMode());
 
                 // 7. 创建项目根目录
                 $this->taskFileDomainService->findOrCreateProjectRootDirectory(
@@ -437,7 +448,9 @@ class ProjectAppService extends AbstractAppService
                 $settingEntity->setValue(['project_id' => $projectEntity->getId()]);
                 $this->magicUserSettingDomainService->save($dataIsolation, $settingEntity);
 
+                $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
                 Db::commit();
+                $transactionOpen = false;
 
                 // 触发项目创建事件
                 $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
@@ -449,7 +462,9 @@ class ProjectAppService extends AbstractAppService
                     'is_existing' => false,
                 ];
             } catch (Throwable $e) {
-                Db::rollBack();
+                if ($transactionOpen) {
+                    Db::rollBack();
+                }
                 $this->logger->error('Create Special Project Failed, err: ' . $e->getMessage(), ['key' => $specialKey]);
                 ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, 'project.create_project_failed');
             }
@@ -1308,8 +1323,11 @@ class ProjectAppService extends AbstractAppService
         // Validate target workspace access
         $workspaceEntity = $this->validateWorkspaceAccess($dataIsolation, $requestDTO->getTargetWorkspaceId());
 
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
             // Dispatch fork start check event
             AsyncEventUtil::dispatch(new ForkProjectStartEvent(
                 $dataIsolation->getCurrentOrganizationCode(),
@@ -1340,7 +1358,7 @@ class ProjectAppService extends AbstractAppService
             ));
 
             // Standard initialization flow (steps 2-6 + 8)
-            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $forkProjectEntity);
+            ['topic' => $topicEntity, 'pending_default' => $pendingDefault] = $this->initializeProject($dataIsolation, $workspaceEntity, $forkProjectEntity, $conversationPair);
 
             // Copy audio extension data for audio projects. The audio_file_id is
             // updated after async file migration resolves the new file ID.
@@ -1361,14 +1379,20 @@ class ProjectAppService extends AbstractAppService
                 $forkProjectRecordEntity->getId()
             );
 
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
 
             $responseData = ForkProjectResponseDTO::fromEntity($forkProjectRecordEntity)->toArray();
         } catch (EventException $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_FORK_ACCESS_DENIED, $e->getMessage());
         } catch (Throwable $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error('Fork project failed, error: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             throw $e;
         }
@@ -1968,10 +1992,16 @@ class ProjectAppService extends AbstractAppService
     // ========================================
     // Agent Project Methods
     // ========================================
+    /**
+     * Prepare conversation identities before opening the business transaction.
+     * @param null|Closure(ProjectEntity): void $beforeCommit bind the owning resource atomically with its project
+     */
     public function createAgentProject(
         RequestContext $requestContext,
         CreateAgentProjectRequestDTO $requestDTO,
-        ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT
+        ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT,
+        bool $setDefaultTopic = true,
+        ?Closure $beforeCommit = null
     ) {
         $this->logger->info('Starting agent project creation');
 
@@ -1979,8 +2009,21 @@ class ProjectAppService extends AbstractAppService
         $userAuthorization = $requestContext->getUserAuthorization();
         $dataIsolation = $this->createDataIsolation($userAuthorization);
 
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
+            $topicMode = '';
+            $agentCode = '';
+            if ($projectMode === ProjectMode::MAGICLAW) {
+                $topicMode = ProjectMode::MAGICLAW->value;
+                $agentCode = $requestDTO->getAgentCode();
+                if ($agentCode === '') {
+                    throw new InvalidArgumentException('MagicClaw agent code is required');
+                }
+            }
+
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
             // 1. Create project entity
             $this->logger->info(sprintf('Creating core project with mode=%s', $projectMode->value));
             $projectEntity = $this->projectDomainService->createProject(
@@ -1997,21 +2040,12 @@ class ProjectAppService extends AbstractAppService
             );
             $this->logger->info(sprintf('Created core project, projectId=%s', $projectEntity->getId()));
 
-            $topicMode = '';
-            $agentCode = '';
-            if ($projectMode === ProjectMode::MAGICLAW) {
-                $topicMode = ProjectMode::MAGICLAW->value;
-                $agentCode = $requestDTO->getAgentCode();
-                if ($agentCode === '') {
-                    throw new InvalidArgumentException('MagicClaw agent code is required');
-                }
-            }
-
             // Standard initialization flow (steps 2-6 + 8) - workspace can be null for audio projects
-            $topicEntity = $this->initializeProject(
+            ['topic' => $topicEntity, 'pending_default' => $pendingDefault] = $this->initializeProject(
                 dataIsolation: $dataIsolation,
                 workspaceEntity: null,
                 projectEntity: $projectEntity,
+                conversationPair: $conversationPair,
                 topicMode: $topicMode,
                 agentCode: $agentCode,
             );
@@ -2024,7 +2058,15 @@ class ProjectAppService extends AbstractAppService
                 $requestDTO->getInitTemplateFiles()
             );
 
+            // Resource creation/binding shares this transaction; no event escapes a failed binding.
+            $beforeCommit?->__invoke($projectEntity);
+
+            // A background skill draft must not redirect the conversation that requested it.
+            if ($setDefaultTopic) {
+                $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
+            }
             Db::commit();
+            $transactionOpen = false;
 
             // Dispatch project created event
             $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
@@ -2039,7 +2081,9 @@ class ProjectAppService extends AbstractAppService
                 'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
             ];
         } catch (Throwable $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error('Create Agent Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
         }
@@ -2107,8 +2151,11 @@ class ProjectAppService extends AbstractAppService
             $this->validateWorkspaceType($workspaceEntity, WorkspaceType::Audio, (int) $requestDTO->getWorkspaceId());
         }
 
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
             // 1. Create project entity (audio mode)
             $this->logger->info('Creating core project for audio');
             $projectEntity = $this->projectDomainService->createProject(
@@ -2126,7 +2173,7 @@ class ProjectAppService extends AbstractAppService
             $this->logger->info(sprintf('Created core project, projectId=%s', $projectEntity->getId()));
 
             // Standard initialization flow (steps 2-6 + 8) - workspace can be null for audio projects
-            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity);
+            ['topic' => $topicEntity, 'pending_default' => $pendingDefault] = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $conversationPair);
 
             // 7. Initialize project root directory (audio project only creates root)
             $this->taskFileDomainService->findOrCreateProjectRootDirectory(
@@ -2151,7 +2198,9 @@ class ProjectAppService extends AbstractAppService
             );
             $this->logger->info(sprintf('Created audio extension, audioProjectId=%s', $audioProjectEntity->getId()));
 
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
 
             // Dispatch project created event
             $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
@@ -2167,7 +2216,9 @@ class ProjectAppService extends AbstractAppService
                 'topic' => TopicItemDTO::fromEntity($topicEntity)->toArray(),
             ];
         } catch (Throwable $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error('Create Audio Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
         }
@@ -2733,8 +2784,11 @@ class ProjectAppService extends AbstractAppService
             );
         }
 
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
             $projectEntity = $this->projectDomainService->createProject(
                 $workspaceEntity->getId(),
                 $requestDTO->getProjectName(),
@@ -2747,7 +2801,7 @@ class ProjectAppService extends AbstractAppService
             $this->logger->info(sprintf('Created micro app project, projectId=%s', $projectEntity->getId()));
 
             $dynamicParams = ! empty($requestDTO->getDynamicParams()) ? $requestDTO->getDynamicParams() : null;
-            $topicEntity = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $dynamicParams);
+            ['topic' => $topicEntity, 'pending_default' => $pendingDefault] = $this->initializeProject($dataIsolation, $workspaceEntity, $projectEntity, $conversationPair, $dynamicParams);
 
             $this->taskFileDomainService->findOrCreateProjectRootDirectory(
                 projectId: $projectEntity->getId(),
@@ -2764,7 +2818,9 @@ class ProjectAppService extends AbstractAppService
                 $projectEntity->getCreatedUid(),
             );
 
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
 
             $projectCreatedEvent = new ProjectCreatedEvent($projectEntity, $userAuthorization);
             $this->eventDispatcher->dispatch($projectCreatedEvent);
@@ -2775,7 +2831,9 @@ class ProjectAppService extends AbstractAppService
                 'app_id' => (string) $microAppRecord->getId(),
             ];
         } catch (Throwable $e) {
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error('Create Micro App Project Failed, err: ' . $e->getMessage(), ['request' => $requestDTO->toArray()]);
             ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_PROJECT_FAILED, trans('project.create_project_failed'));
         }
@@ -3239,7 +3297,7 @@ class ProjectAppService extends AbstractAppService
      *
      * This is the core initialization logic shared by all project creation methods:
      * - Get project work directory
-     * - Initialize Magic Chat Conversation
+     * - Prepare IM topics for the committed conversation pair
      * - Create default topic
      * - Update workspace with current topic and project
      * - Update project with topic and work directory
@@ -3248,25 +3306,26 @@ class ProjectAppService extends AbstractAppService
      * @param DataIsolation $dataIsolation Data isolation context
      * @param null|WorkspaceEntity $workspaceEntity Workspace entity (nullable for audio projects)
      * @param ProjectEntity $projectEntity Project entity (already created)
-     * @return TopicEntity Created topic entity
+     * @param array{sender_conversation_id: string, receiver_conversation_id: string} $conversationPair Committed conversation identities
+     * @return array{topic: TopicEntity, pending_default: array{chat_conversation_id: string, receive_conversation_id: string, chat_topic_id: string}}
      */
     private function initializeProject(
         DataIsolation $dataIsolation,
         ?WorkspaceEntity $workspaceEntity,
         ProjectEntity $projectEntity,
+        array $conversationPair,
         ?array $dynamicParams = null,
         string $topicMode = '',
         string $agentCode = ''
-    ): TopicEntity {
+    ): array {
         // 2. Get project work directory
         $workDir = WorkDirectoryUtil::getWorkDir(
             $dataIsolation->getCurrentUserId(),
             $projectEntity->getId()
         );
 
-        // 3. Initialize Magic Chat Conversation
-        [$chatConversationId, $chatConversationTopicId] = $this->chatAppService
-            ->initMagicChatConversation($dataIsolation);
+        // 3. Prepare IM topics; the transaction owner finalizes the returned default.
+        $pendingDefault = $this->chatAppService->createMagicChatTopicForConversationPair($dataIsolation, $conversationPair);
 
         // 4. Create default topic
         $this->logger->info('开始创建默认话题');
@@ -3274,8 +3333,8 @@ class ProjectAppService extends AbstractAppService
             dataIsolation: $dataIsolation,
             workspaceId: $workspaceEntity?->getId(),
             projectId: $projectEntity->getId(),
-            chatConversationId: $chatConversationId,
-            chatTopicId: $chatConversationTopicId,
+            chatConversationId: $pendingDefault['chat_conversation_id'],
+            chatTopicId: $pendingDefault['chat_topic_id'],
             topicName: '',
             workDir: $workDir,
             topicMode: $topicMode,
@@ -3326,7 +3385,7 @@ class ProjectAppService extends AbstractAppService
             $dataIsolation->getCurrentOrganizationCode()
         );
 
-        return $topicEntity;
+        return ['topic' => $topicEntity, 'pending_default' => $pendingDefault];
     }
 
     /**

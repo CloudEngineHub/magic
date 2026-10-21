@@ -22,24 +22,24 @@ import { getI18nText } from "@magic-admin-v2/features/platform-official-staff/ut
 import { useI18n } from "@magic-admin-v2/i18n/use-i18n"
 
 export function StaffCard({
+	assignButtonTestId,
 	cardTestId,
 	canEdit,
 	item,
+	moreButtonTestId,
 	onAssign,
 	onEdit,
 	onStatusChange,
-	assignButtonTestId,
-	moreButtonTestId,
 	statusSwitchTestId,
 }: {
+	assignButtonTestId?: string
 	cardTestId?: string
 	canEdit: boolean
 	item: OfficialStaff
+	moreButtonTestId?: string
 	onAssign: (item: OfficialStaff) => void
 	onEdit: (item: OfficialStaff) => void
 	onStatusChange: (item: OfficialStaff, status: boolean) => void
-	assignButtonTestId?: string
-	moreButtonTestId?: string
 	statusSwitchTestId?: string
 }) {
 	const { t } = useTranslation()
@@ -49,8 +49,8 @@ export function StaffCard({
 	const placeholder = getI18nText(item.placeholder_i18n, language)
 
 	return (
-		<Card className="py-0" data-testid={cardTestId}>
-			<CardContent className="flex h-full flex-col gap-4 p-4">
+		<Card className="min-w-0 overflow-hidden py-0" data-testid={cardTestId}>
+			<CardContent className="flex min-w-0 h-full flex-col gap-4 p-4">
 				<div className="flex min-w-0 gap-3">
 					<StaffAvatar item={item} />
 					<div className="min-w-0 flex-1">
@@ -62,7 +62,11 @@ export function StaffCard({
 								</Badge>
 							) : null}
 						</div>
-						<CopyableValue className="max-w-full" value={item.identifier} />
+						<CopyableValue
+							className="min-w-0 w-full max-w-full"
+							displayValue={item.identifier}
+							value={item.identifier}
+						/>
 					</div>
 				</div>
 				<p className="line-clamp-2 min-h-10 text-sm text-muted-foreground">
@@ -97,12 +101,13 @@ export function StaffCard({
 						{canEdit ? (
 							<Button
 								data-testid={moreButtonTestId}
+								disabled={isDefault}
 								onClick={() => onEdit(item)}
 								size="icon-sm"
 								className="md:w-auto md:gap-1.5 md:px-2.5"
 								variant="outline"
 							>
-								<Edit3 className="size-4" />
+								<Edit3 className="size-4" aria-hidden="true" />
 								<span className="hidden md:inline">{t("common.edit")}</span>
 							</Button>
 						) : null}
@@ -121,12 +126,12 @@ export function DefaultSettingsCard({
 	defaultAgentOptions,
 	defaultAgentStaffList,
 	defaultConfigItem,
+	defaultAgentTriggerTestId,
+	defaultConfigAssignButtonTestId,
 	onAssign,
 	onDefaultAgentChange,
 	onFloatingOpenChange,
 	openFloatingId,
-	defaultAgentTriggerTestId,
-	defaultConfigAssignButtonTestId,
 }: {
 	cardTestId?: string
 	canEdit: boolean
@@ -135,12 +140,12 @@ export function DefaultSettingsCard({
 	defaultAgentOptions: DefaultAgentOption[]
 	defaultAgentStaffList: OfficialStaff[]
 	defaultConfigItem?: OfficialStaff
+	defaultAgentTriggerTestId?: string
+	defaultConfigAssignButtonTestId?: string
 	onAssign: (item: OfficialStaff) => void
 	onDefaultAgentChange: (value: string) => void
 	onFloatingOpenChange: (id: string | null) => void
 	openFloatingId: string | null
-	defaultAgentTriggerTestId?: string
-	defaultConfigAssignButtonTestId?: string
 }) {
 	const { t } = useTranslation()
 	const defaultAgentStaff = defaultAgentStaffList.find(
@@ -195,11 +200,11 @@ export function DefaultSettingsCard({
 										)
 										return (
 											<SelectItem
+												data-testid="platform-official-staff-option"
 												disabled={option.disabled}
 												key={option.value}
 												textValue={option.label}
 												value={option.value}
-												data-testid="platform-official-staff-option"
 											>
 												<div className="flex min-w-0 items-center gap-2">
 													<EntityAvatarRender

@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react"
 import { useMemoizedFn } from "ahooks"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicSelect from "@/components/base/MagicSelect"
 import magicToast from "@/components/base/MagicToaster/utils"
 import IconMessageTopic from "@/components/icons/IconMessageTopic"
@@ -243,6 +244,10 @@ function SelectItem({
 			key={selectInstanceKey}
 			value={value}
 			className="w-full"
+			// Prevent the mobile shell from scrolling when its fixed create input receives focus.
+			classNames={{
+				popup: { root: isMobile ? "supports-[overflow:clip]:overflow-clip" : undefined },
+			}}
 			placeholder={t(config.labelKey)}
 			options={options}
 			labelInValue={false}
@@ -251,7 +256,8 @@ function SelectItem({
 			onOpenChange={handleOpenChange}
 			showSearch={false}
 			popupRender={() => (
-				<div className="-m-1 flex flex-col pb-safe-bottom">
+				// Only desktop SelectContent adds an inset; mobile popups already span the screen.
+				<div className={cn("flex flex-col pb-safe-bottom", !isMobile && "-m-1")}>
 					<div className="relative">
 						<IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
 						<Input
@@ -272,7 +278,8 @@ function SelectItem({
 							</button>
 						) : null}
 					</div>
-					<div className="flex max-h-[250px] flex-col gap-1 overflow-y-auto overflow-x-hidden p-2">
+					{/* Keep search and creation controls outside the content-sized options viewport. */}
+					<ScrollArea viewportClassName="h-auto max-h-[250px] p-2 [&>div]:!flex [&>div]:flex-col [&>div]:gap-1">
 						{filteredOptions.length > 0 ? (
 							filteredOptions.map((option) => {
 								const isSelected = option.value === value
@@ -303,7 +310,7 @@ function SelectItem({
 						) : (
 							<Empty />
 						)}
-					</div>
+					</ScrollArea>
 					<div className="border-t p-2">
 						{viewMode === "create" ? (
 							<div className="flex items-center gap-1.5">

@@ -24,7 +24,9 @@ describe("convertLayerToTreeNode", () => {
 			contents: [{ contentId: "image-content-1", status: "processing" }],
 		}
 
-		expect(convertLayerToTreeNode(image, canvas).label).toBe("Pasted image(上传中)")
+		const node = convertLayerToTreeNode(image, canvas)
+		expect(node.label).toBe("Pasted image(上传中)")
+		expect(node.data?.editableName).toBe("Pasted image")
 		expect(getNameLabelText).toHaveBeenCalledTimes(1)
 	})
 
@@ -44,7 +46,9 @@ describe("convertLayerToTreeNode", () => {
 			contents: [{ contentId: "video-content-1", status: "processing" }],
 		}
 
-		expect(convertLayerToTreeNode(video, canvas).label).toBe("合并视频(合并中)")
+		const node = convertLayerToTreeNode(video, canvas)
+		expect(node.label).toBe("合并视频(合并中)")
+		expect(node.data?.editableName).toBe("合并视频")
 		expect(getNameLabelText).toHaveBeenCalledTimes(1)
 	})
 })

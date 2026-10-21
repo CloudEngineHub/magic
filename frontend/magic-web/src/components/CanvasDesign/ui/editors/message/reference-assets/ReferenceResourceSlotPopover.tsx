@@ -26,6 +26,7 @@ interface ReferenceResourceSlotPopoverProps {
 	onMouseEnter: () => void
 	onMouseLeave: () => void
 	onSelectSource: (source: ReferenceResourceSourceType) => void
+	includeAssetsSource?: boolean
 	maxReferenceFiles?: number
 	currentReferenceFiles?: string[]
 	isReferenceFileLimitReached?: boolean
@@ -61,6 +62,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 		onMouseEnter,
 		onMouseLeave,
 		onSelectSource,
+		includeAssetsSource,
 		maxReferenceFiles,
 		currentReferenceFiles,
 		isReferenceFileLimitReached,
@@ -88,6 +90,7 @@ export default function ReferenceResourceSlotPopover(props: ReferenceResourceSlo
 			onMouseEnter={onMouseEnter}
 			onMouseLeave={onMouseLeave}
 			onSelectSource={onSelectSource}
+			includeAssetsSource={includeAssetsSource}
 			maxReferenceFiles={maxReferenceFiles}
 			currentReferenceFiles={currentReferenceFiles}
 			isReferenceFileLimitReached={isReferenceFileLimitReached}

@@ -2,6 +2,18 @@ import { act, fireEvent, render, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import SecondEdit from "../SecondEdit"
 import { MediaEditRecoveryManager } from "../../../../../runtime/interaction/media-edit-recovery/MediaEditRecoveryManager"
+import type { MediaEditorSubmissionController } from "../../shared/useMediaEditorSubmission"
+
+const submissionController: MediaEditorSubmissionController = {
+	hidden: false,
+	busy: false,
+	activeSubmission: null,
+	begin: vi.fn(() => "submission-1"),
+	setPhase: vi.fn(),
+	finish: vi.fn(),
+	reveal: vi.fn(),
+	run: vi.fn(async ({ execute }) => execute({ submissionId: "submission-1", setPhase: vi.fn() })),
+}
 
 const mocks = vi.hoisted(() => ({
 	isReplacing: true,
@@ -132,6 +144,7 @@ describe("SecondEdit replacement guard", () => {
 				imageElement={imageElement}
 				onPreviewMediaResource={vi.fn()}
 				isMediaResourcePreviewOpen={false}
+				submissionController={submissionController}
 			/>,
 		)
 
@@ -158,7 +171,9 @@ describe("SecondEdit replacement guard", () => {
 			request: { model_id: "image-model", prompt: "changed prompt" },
 		}
 
-		const first = render(<SecondEdit imageElement={imageElement} />)
+		const first = render(
+			<SecondEdit imageElement={imageElement} submissionController={submissionController} />,
+		)
 		const quickEditAction = mocks.commands["generation.quick-edit"]
 		expect(quickEditAction).toBeDefined()
 		act(() => quickEditAction?.execute())
@@ -172,7 +187,9 @@ describe("SecondEdit replacement guard", () => {
 		first.unmount()
 		expect(sessionStore.get(sessionKey, sourceFingerprint)?.draft).toEqual(interruptedSnapshot)
 
-		render(<SecondEdit imageElement={imageElement} />)
+		render(
+			<SecondEdit imageElement={imageElement} submissionController={submissionController} />,
+		)
 		const resumedQuickEditAction = mocks.commands["generation.quick-edit"]
 		act(() => resumedQuickEditAction?.execute())
 		await waitFor(() => {
@@ -188,7 +205,9 @@ describe("SecondEdit replacement guard", () => {
 	it("waits for image models before consuming an edit entry", async () => {
 		mocks.isReplacing = false
 		mocks.isLoadingImageModelList = true
-		const view = render(<SecondEdit imageElement={imageElement} />)
+		const view = render(
+			<SecondEdit imageElement={imageElement} submissionController={submissionController} />,
+		)
 		const quickEditAction = mocks.commands["generation.quick-edit"]
 
 		act(() => quickEditAction?.execute())
@@ -196,7 +215,9 @@ describe("SecondEdit replacement guard", () => {
 		expect(mocks.surfaceProps).toBeNull()
 
 		mocks.isLoadingImageModelList = false
-		view.rerender(<SecondEdit imageElement={imageElement} />)
+		view.rerender(
+			<SecondEdit imageElement={imageElement} submissionController={submissionController} />,
+		)
 		await waitFor(() => expect(mocks.restoreQuickEditConfigToUi).toHaveBeenCalledOnce())
 	})
 
@@ -210,7 +231,12 @@ describe("SecondEdit replacement guard", () => {
 			],
 		} as never
 
-		render(<SecondEdit imageElement={elementWithGeneratingSibling} />)
+		render(
+			<SecondEdit
+				imageElement={elementWithGeneratingSibling}
+				submissionController={submissionController}
+			/>,
+		)
 
 		const itemIds = Object.keys(mocks.commands)
 		expect(itemIds).toContain("generation.quick-edit")
@@ -230,7 +256,12 @@ describe("SecondEdit replacement guard", () => {
 			],
 		} as never
 
-		render(<SecondEdit imageElement={elementWithGeneratingActive} />)
+		render(
+			<SecondEdit
+				imageElement={elementWithGeneratingActive}
+				submissionController={submissionController}
+			/>,
+		)
 
 		expect(mocks.commands["generation.quick-edit"]?.state).toMatchObject({ available: true })
 		expect(mocks.commands["generation.re-edit"]?.state).toMatchObject({ available: true })

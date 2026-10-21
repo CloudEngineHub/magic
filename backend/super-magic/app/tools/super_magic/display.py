@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import html
 import re
+import traceback
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any, TypeVar
 from zoneinfo import ZoneInfo
 
 from agentlang.context.tool_context import ToolContext
+from agentlang.logger import get_logger
 from agentlang.tools.tool_result import ToolResult
+
 from app.core.entity.message.server_message import DisplayType, FileContent, ToolDetail
 from app.i18n import i18n
 from app.infrastructure.sdk.base.exceptions import HttpRequestError
@@ -19,12 +22,14 @@ from app.infrastructure.sdk.magic_service.kernel.magic_service_exception import 
     MagicServiceApiError,
     MagicServiceUnauthorizedException,
 )
+from app.service.prepared_operation_confirmation import PreparedOperationError
 from app.tools.core import BaseTool, BaseToolParams
 from app.tools.utils.time_display import format_tool_time
 
 from .context import ProductConfigurationError, ProductContext, ProductContextError, current_product_context
 
 T = TypeVar("T", bound=BaseToolParams)
+logger = get_logger(__name__)
 
 
 def _label(key: str, **kwargs: object) -> str:
@@ -40,13 +45,16 @@ def _visible_text(value: object, limit: int = 2000) -> str:
 
 # 每个注册工具都声明展示对象；只读取已知业务字段，不把模型正文或 ID 当摘要。
 TOOL_SUBJECTS = {
+    **dict.fromkeys(('list_skills', 'get_skill', 'create_skill', 'prepare_skill_publish', 'publish_skill', 'get_skill_publish_result'), "skill"),
     **dict.fromkeys(("list_workspaces", "get_workspace", "create_workspace", "update_workspace", "archive_workspace", "delete_workspace"), "workspace"),
     **dict.fromkeys(("list_projects", "get_project", "create_project", "update_project", "move_project", "delete_project"), "project"),
     **dict.fromkeys(("list_topics", "get_topic", "create_topic", "update_topic", "archive_topic", "delete_topic", "read_topic_messages", "start_topic_task", "send_topic_message", "list_topic_queued_messages"), "topic"),
-    **dict.fromkeys(("list_project_files", "get_project_file", "create_project_directory", "rename_project_file", "copy_project_files", "move_project_files", "delete_project_files", "prepare_project_files"), "file"),
+    **dict.fromkeys(("list_project_files", "search_project_files", "get_project_file", "create_project_directory", "rename_project_file", "copy_project_files", "move_project_files", "delete_project_files", "prepare_project_files"), "file"),
     "get_file_batch_status": "batch",
     "get_topic_task": "task", "cancel_topic_task": "task",
     "delete_topic_queued_message": "queue",
+    "search_users": "person",
+    "search_departments": "department",
 }
 
 
@@ -81,6 +89,11 @@ def _display_data(tool_name: str, result: ToolResult, arguments: dict | None, to
     for key in ("keyword", "page", "force_interrupt", "content", "purpose", "archived"):
         if key in args:
             data.setdefault(key, args[key])
+    if tool_name == "search_project_files":
+        if isinstance(args.get("keywords"), list):
+            data.setdefault("keyword", " | ".join(str(word) for word in args["keywords"]))
+        if isinstance(args.get("projects"), list):
+            data.setdefault("search_scopes", args["projects"])
     return data
 
 
@@ -89,7 +102,8 @@ def product_remark(tool_name: str, data: dict) -> str:
     name = next((_plain(data[k]) for k in ("name", f"{subject}_name") if data.get(k)), "")
     parts = [name] if name else []
     if isinstance(data.get("items"), list):
-        parts.append(_label("summary.records", count=len(data["items"])))
+        key = "search.matches" if tool_name == "search_project_files" else "summary.records"
+        parts.append(_label(key, count=len(data["items"])))
     elif isinstance(data.get("messages"), list):
         parts.append(_label("summary.messages", count=len(data["messages"])))
     elif isinstance(data.get("files"), list) or data.get("count") is not None or data.get("selected_count") is not None:
@@ -97,6 +111,10 @@ def product_remark(tool_name: str, data: dict) -> str:
         parts.append(_label("summary.files", count=count))
     if data.get("keyword"):
         parts.append(_label("summary.keyword", keyword=_plain(data["keyword"])))
+    if tool_name == "search_project_files" and isinstance(data.get("search_scopes"), list):
+        parts.append(_label("search.scopes", count=len(data["search_scopes"])))
+        if data.get("search_complete") is False:
+            parts.append(_label("search.incomplete_short"))
     state = _state(data)
     if state:
         parts.append(state)
@@ -167,22 +185,71 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
     if state in {"accepted", "queued", "waiting", "processing", "cancel_requested", "delete_requested"}:
         lines.extend(["", _label("pending")])
 
+    if tool_name == "search_project_files":
+        scopes = data.get("search_scopes", [])
+        if scopes:
+            lines.extend(["", _label("search.scopes", count=len(scopes)), ""])
+        for index, scope in enumerate(scopes, 1):
+            name = _visible_text(scope.get("project_name") or _label("search.project", number=index), 200).replace("\n", " ")
+            status = scope.get("status", "pending")
+            status = status if status in {"pending", "complete", "failed"} else "pending"
+            line = f"- {name}: {_label(f'search.scope.{status}')}"
+            if scope.get("error_code"):
+                line += " · " + _error_label(ToolResult.error("", data={"code": scope["error_code"]}))
+            lines.append(line)
+        if data.get("search_complete") is False:
+            lines.extend(["", _label("search.incomplete")])
+        if data.get("results_truncated"):
+            lines.extend(["", _label("search.truncated")])
+        lines.extend(["", _label("search.names_only")])
+
     for collection in ("items", "files"):
         records = data.get(collection)
         if not isinstance(records, list):
             continue
-        lines.extend(["", _label("records", count=len(records)), ""])
+        key = "search.matches" if tool_name == "search_project_files" else "records"
+        lines.extend(["", _label(key, count=len(records)), ""])
         if not records:
             lines.append(_label("empty"))
+        elif tool_name in {"search_users", "search_departments"}:
+            for item in records[:20]:
+                if not isinstance(item, dict):
+                    continue
+                name = (item.get("nickname") or item.get("real_name")) if tool_name == "search_users" else item.get("name")
+                visible_name = _visible_text(name or "-", 200).replace("\n", " ")
+                details = []
+                if tool_name == "search_users":
+                    if item.get("job_title"):
+                        details.append(f"{_label('field.job_title')}: {_visible_text(item['job_title'], 120)}")
+                    departments = item.get("departments")
+                    if isinstance(departments, list):
+                        paths = []
+                        for department in departments[:3]:
+                            if isinstance(department, dict):
+                                names = department.get("path_names") or [department.get("name", "")]
+                                if isinstance(names, list):
+                                    paths.append("/".join(_visible_text(part, 120) for part in names))
+                        if paths:
+                            details.append(f"{_label('field.departments')}: {', '.join(paths)}")
+                else:
+                    names = item.get("path_names")
+                    if isinstance(names, list) and names:
+                        details.append(f"{_label('field.department_path')}: {'/'.join(_visible_text(part, 120) for part in names)}")
+                lines.append(f"- {visible_name}" + (f" · {' · '.join(details)}" if details else ""))
+            if len(records) > 20:
+                lines.extend(["", _label("truncated")])
         else:
             lines.extend([f"| {_label('field.name')} | {_label('field.status')} | {_label('field.location')} | {_label('field.updated_at')} |", "| --- | --- | --- | --- |"])
             for index, item in enumerate(records[:100], 1):
                 if not isinstance(item, dict):
                     continue
-                name = next((item[key] for key in ("name", "project_name", "topic_name", "file_name") if item.get(key)), None)
+                name_fields = ("file_name", "name") if tool_name == "search_project_files" else ("name", "project_name", "topic_name", "file_name")
+                name = next((item[key] for key in name_fields if item.get(key)), None)
                 name = _visible_text(name, 200).replace("\n", " ") if name else _label("record", number=index)
                 timestamp = item.get("updated_at", item.get("created_at"))
                 location = _visible_text(item.get("relative_file_path") or item.get("workspace_name") or "-", 300).replace("\n", " ")
+                if tool_name == "search_project_files" and item.get("project_name"):
+                    location = _visible_text(item["project_name"], 200).replace("\n", " ") + " / " + location
                 lines.append(f"| {name} | {_state(item) or '-'} | {location} | {_time(timestamp) if timestamp is not None else '-'} |")
             if len(records) > 100:
                 lines.extend(["", _label("truncated")])
@@ -218,7 +285,7 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
             lines.extend(["", _label("truncated")])
     if state in {"failed", "suspended"} and data.get("error_message"):
         lines.extend(["", _label("task_failed")])
-    if data.get("partial_success"):
+    if data.get("partial_success") and tool_name != "search_project_files":
         lines.extend(["", _label("partial_success")])
     if data.get("coverage_limit") is not None:
         lines.extend(["", _label("coverage_limit", count=data["coverage_limit"])])
@@ -228,6 +295,8 @@ def product_detail(tool_name: str, result: ToolResult) -> ToolDetail:
         lines.extend(["", _label("more")])
     elif data.get("has_more") is False:
         lines.extend(["", _label("no_more")])
+    if tool_name == "search_departments" and data.get("coverage") == "bounded":
+        lines.extend(["", _label("contact.bounded")])
     if len(lines) == 2:
         lines.append(_label(f"subject.{TOOL_SUBJECTS[tool_name]}"))
         lines.append(_label("completed"))
@@ -333,7 +402,21 @@ class ProductTool(BaseTool[T]):
             return ToolResult.error(message, use_custom_remark=True, data={"code": code})
         except ProductConfigurationError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "execution_config_unavailable"})
+        except PreparedOperationError as exc:
+            return ToolResult.error(str(exc), use_custom_remark=True, data={"code": exc.code.lower()})
         except ValueError as exc:
             return ToolResult.error(str(exc), use_custom_remark=True, data={"code": "invalid_input_or_response"})
-        except Exception:
+        except (FileNotFoundError, PermissionError):
+            return ToolResult.error(
+                "The required project files are unavailable. Check the configured project mount and access permissions before retrying.",
+                use_custom_remark=True, data={"code": "resource_files_unavailable"},
+            )
+        except Exception as exc:
+            # 保留异常类型和调用位置，避免记录可能含凭据的上游正文或函数局部变量。
+            frames = "; ".join(f"{frame.filename}:{frame.lineno} in {frame.name}" for frame in traceback.extract_tb(exc.__traceback__))
+            logger.error(
+                f"Product operation failed: tool={self.name}, action={action}, "
+                f"tool_call_id={tool_context.tool_call_id if tool_context else 'unknown'}, "
+                f"exception_type={type(exc).__name__}, stack={frames}"
+            )
             return ToolResult.error("The product operation failed unexpectedly.", use_custom_remark=True, data={"code": "unexpected_error"})

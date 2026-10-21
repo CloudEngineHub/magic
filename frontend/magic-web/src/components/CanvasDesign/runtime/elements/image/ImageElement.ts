@@ -72,6 +72,7 @@ import {
 import { MediaVersionTagDecorator } from "../decorators/MediaVersionTagDecorator"
 import { DiscardedImageDecorator } from "../decorators/DiscardedImageDecorator"
 import { ImagePollingManager } from "../../resources/polling/ImagePollingManager"
+import { resolveMediaComplianceStatus } from "../../resources/asset/assetComplianceState"
 import { DECORATOR_COLORS, DECORATOR_CONFIG } from "../decorators/DecoratorConfig"
 import type { NameLabelContent, TransformContext } from "../core/BaseElement"
 import {
@@ -2107,15 +2108,13 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		return baseName || this.getText("image.defaultName", "图片生成器")
 	}
 
-	/**
-	 * 获取名称标签文本（根据状态添加后缀）
-	 */
+	/** 标题可省略，状态独立保留；所有名称展示入口仍来自同一展示状态。 */
 	public override getNameLabelText(): string {
 		const content = this.getNameLabelContent()
-		return `${content.primaryText}${content.suffix ? `(${content.suffix.text})` : ""}`
+		const suffix = content.suffix?.text ?? ""
+		return `${content.primaryText}${suffix ? (suffix.startsWith("(") ? suffix : `(${suffix})`) : ""}`
 	}
 
-	/** 标题可省略，状态独立保留；所有名称展示入口仍来自同一展示状态。 */
 	public override getNameLabelContent(): NameLabelContent {
 		const baseName = this.data.name || this.getRenderName()
 		const displayState = this.getDisplayState()
@@ -2138,7 +2137,19 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			case "terminated":
 				return withStatus(this.getText("image.status.terminated", "已终止"))
 			default:
-				return { primaryText: baseName }
+				return this.canvas.isSeedanceComplianceEnabled() &&
+					resolveMediaComplianceStatus(this.canvas, this.getActiveContentData()) ===
+						"PROCESSING"
+					? {
+							primaryText: baseName,
+							suffix: {
+								text: this.getText(
+									"image.nameSuffix.complianceProcessing",
+									"(校验中)",
+								),
+							},
+						}
+					: { primaryText: baseName }
 		}
 	}
 
@@ -2443,7 +2454,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2515,7 +2526,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2717,7 +2728,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 			this.createBorder(group, width, height, true)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2753,7 +2764,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 		// 使用预加载好的图片对象
 		if (!this.loadedImage) {
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 			this.finalizeNode(group)
 			return group
 		}
@@ -2786,7 +2797,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 		this.createBorder(group, width, height, false)
 
 		this.createCornerActions(group, width, height, { fullscreen: true })
-		this.createMainVersionTag(group, width, height)
+		this.createMediaStatusTags(group, width, height)
 
 		this.finalizeNode(group)
 		return group
@@ -2865,7 +2876,7 @@ export class ImageElement extends BaseElement<ImageElementData> {
 			// 创建边框
 			this.createBorder(group, width, height, false, backgroundNode)
 			this.createCornerActions(group, width, height)
-			this.createMainVersionTag(group, width, height)
+			this.createMediaStatusTags(group, width, height)
 		})
 
 		this.finalizeNode(group)
@@ -2941,6 +2952,12 @@ export class ImageElement extends BaseElement<ImageElementData> {
 
 	private shouldShowInfoButton(): boolean {
 		return !!this.getActiveGenerateImageRequest() || this.isActiveGenerationPlaceholder()
+	}
+
+	private createMediaStatusTags(group: Konva.Group, width: number, height: number): void {
+		this.createMainVersionTag(group, width, height)
+		// Compliance failures are shown by the name-label shield and its tooltip;
+		// keep the media surface free of the redundant red status card.
 	}
 
 	private createMainVersionTag(group: Konva.Group, width: number, height: number): void {

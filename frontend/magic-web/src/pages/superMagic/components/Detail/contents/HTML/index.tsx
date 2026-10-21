@@ -8,7 +8,6 @@ import IsolatedHTMLRenderer, {
 import {
 	createParentMessageHandler,
 	injectFetchInterceptorScript,
-	injectKeyboardInterceptorScript,
 	createKeyboardMessageHandler,
 	POST_MESSAGE_TARGET_STRATEGIES,
 	type FileItem,
@@ -19,7 +18,7 @@ import { HTML_IFRAME_RENDER_LIFECYCLE_EVENT } from "./telemetry/iframeRenderLife
 import type { SaveResult } from "./iframe-bridge/types"
 import { useStyles } from "./styles"
 import MagicTooltip from "@/components/base/MagicTooltip"
-import { useHtmlPreviewFreshness } from "./hooks/useHtmlPreviewFreshness"
+import { useHtmlPreviewFreshness, type HtmlPreviewFailure } from "./hooks/useHtmlPreviewFreshness"
 import { HtmlPreviewFreshness } from "./components/HtmlPreviewFreshness"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
@@ -116,6 +115,7 @@ import {
 } from "./utils/edit-capability-session"
 
 const htmlRenderLogger = Logger.createLogger("HTMLContent")
+import { HTML_PERMISSION_ANCHOR_ATTRIBUTE } from "./components/PermissionManager/CodeChangeConfirmPopover"
 const HtmlPermissionManagerDialog = lazy(
 	() => import("./components/PermissionManager/HtmlPermissionManagerDialog"),
 )
@@ -333,7 +333,9 @@ export default memo(function HTML(props: HTMLProps) {
 	// 跨域 shell 渲染下，数据加载完成 ≠ iframe 内容已画出来；
 	// 用 iframe 上报的渲染就绪信号来控制预览 loading 收起时机，避免"loading 没了但页面空白"。
 	const [isPreviewRenderReady, setIsPreviewRenderReady] = useState(false)
-	const previewFreshness = useHtmlPreviewFreshness(displayData?.file_id)
+	const previewFreshness = useHtmlPreviewFreshness(displayData?.file_id, (failure) =>
+		reportPreviewFailure(failure),
+	)
 	const {
 		begin: beginPreviewUpdate,
 		ready: acknowledgePreview,
@@ -509,6 +511,8 @@ export default memo(function HTML(props: HTMLProps) {
 		revokeHtmlPermission,
 		updateHtmlPermissionTtl,
 		revokeAllHtmlPermissions,
+		acknowledgeHtmlPermissionCodeChanges,
+		htmlPermissionCodeChanged,
 		permissionRevision,
 	} = htmlPermissionController
 	const canManageHtmlPermissions = Boolean(
@@ -973,6 +977,37 @@ export default memo(function HTML(props: HTMLProps) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [attachmentList, displayData?.file_id, runtimeProjectId, fileApi, fileAccess])
 
+	// The failed notice is generic and these paths only wrote console.error, so a blank
+	// preview in production could not be traced. Report the failing stage and file context.
+	const reportPreviewFailure = useMemoizedFn((failure: HtmlPreviewFailure) => {
+		const { reason, elapsedMs, hasRendered, error } = failure
+		const httpStatus =
+			(error as { status?: number; response?: { status?: number } } | undefined)?.status ??
+			(error as { response?: { status?: number } } | undefined)?.response?.status
+		htmlRenderLogger.error({
+			eventKey: "html_preview_failed",
+			errorKind: "render",
+			error,
+			// Reason is in the message because logger de-duplication keys on error identity, not context.
+			message: `HTML 预览更新失败: ${reason}`,
+			context: {
+				reason,
+				elapsedMs,
+				// false = the user was left with a blank area rather than a stale preview.
+				hasRendered,
+				fileId: displayData?.file_id || "",
+				loadStatus,
+				httpStatus,
+				// Sizes separate "huge file" from "empty/never downloaded" without logging content.
+				downloadedLength: htmlFileData?.length ?? 0,
+				contentLength: data?.content?.length ?? 0,
+				attachmentCount: attachmentList?.length ?? 0,
+				isSharePreview: Boolean(isSharePreview),
+				renderMode: env("MAGIC_HTML_SANDBOX_URL") ? "cross-origin" : "same-origin",
+			},
+		})
+	})
+
 	const processContent = useMemoizedFn(
 		async (sourceContent = data?.content, background = false) => {
 			// Resource metadata can change before a newer file finishes downloading.
@@ -1024,12 +1059,10 @@ export default memo(function HTML(props: HTMLProps) {
 					postMessageTargetStrategy,
 				})
 
-				// dashboard 通过 postMessage 驱动编辑态，不需要额外注入键盘拦截器；
-				// 否则会导致内容指纹变化并触发 iframe 二次重写。
-				if (isEditMode && !isDataAnalysis) {
-					finalProcessedContent = injectKeyboardInterceptorScript(finalProcessedContent)
-				}
-
+				// Edit mode must not change the document: any content change is rewritten into the
+				// live iframe (document.open/write in the same Window), which flashes and breaks
+				// page scripts with top-level let/const/class. Save/Escape shortcuts are forwarded
+				// by the iframe EditorRuntime instead of an injected script.
 				const isStaleRequest = !isCurrentPreview(request)
 				if (isStaleRequest) return
 				const shouldRestart = forcePreviewRestartRef.current
@@ -1055,7 +1088,7 @@ export default memo(function HTML(props: HTMLProps) {
 			} catch (error) {
 				console.error("Error processing HTML content:", error)
 				// Keep the last working preview when resource processing fails.
-				if (!isDataAnalysis) failPreview(request)
+				if (!isDataAnalysis) failPreview(request, "process_failed", error)
 			}
 		},
 	)
@@ -1077,7 +1110,7 @@ export default memo(function HTML(props: HTMLProps) {
 		if (loadStatus === "loading") {
 			beginPreviewUpdate()
 		} else if (loadStatus === "error") {
-			failPreview(beginPreviewUpdate())
+			failPreview(beginPreviewUpdate(), "load_failed", loadError)
 		} else if (loadStatus === "ready" && htmlFileData === data?.content) {
 			void processContent()
 		}
@@ -1730,7 +1763,26 @@ export default memo(function HTML(props: HTMLProps) {
 					visible: () => canManageHtmlPermissions && !sharedHtmlPermissionController,
 					render: (context) => (
 						<ActionButton
-							icon={<ShieldCheck size={16} />}
+							icon={
+								// The anchor lets the code-change reminder point at this button; the dot flags
+								// grants whose app code changed after they were confirmed.
+								<span
+									className="relative inline-flex"
+									{...{ [HTML_PERMISSION_ANCHOR_ATTRIBUTE]: "" }}
+								>
+									<ShieldCheck size={16} />
+									{htmlPermissionCodeChanged ? (
+										<span
+											role="img"
+											aria-label={t(
+												"htmlEditor.permissionManager.codeChangedDot",
+											)}
+											className="absolute -right-1 -top-1 size-2 rounded-full bg-amber-500 ring-2 ring-background"
+											data-testid="html-permission-code-changed-dot"
+										/>
+									) : null}
+								</span>
+							}
 							onClick={() =>
 								void runGuardedAction(
 									context.beforeAction,
@@ -2116,6 +2168,7 @@ export default memo(function HTML(props: HTMLProps) {
 						onRevoke={revokeHtmlPermission}
 						onUpdateTtl={updateHtmlPermissionTtl}
 						onRevokeAll={revokeAllHtmlPermissions}
+						onAcknowledgeCodeChanges={acknowledgeHtmlPermissionCodeChanges}
 					/>
 				</Suspense>
 			) : null}

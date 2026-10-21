@@ -113,7 +113,7 @@ print(result.content)
 
 ## Confirmation and asking the user
 
-Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. The first Content of an Element, whether created with the Element or added to an otherwise empty Element, is automatically its main Content; do not ask whether to make that first Content main and do not call `select_canvas_main_content` for it. Tool success is not user approval — do not continue past an applicable gate until the user confirms or supplies a revision. In staged video work, confirm the first completed first frame before generating the remaining first frames, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
+Confirmation is a hard gate for billed generation, candidate selection, and anything that changes direction. The first Content of an Element, whether created with the Element or added to an otherwise empty Element, is automatically its main Content; do not ask whether to make that first Content main and do not call `select_canvas_main_content` for it. Tool success is not user approval — do not continue past an applicable gate until the user confirms or supplies a revision. In staged video work, confirm the first completed shot reference image before generating the remaining shot reference images, confirm the first completed trial shot video before generating the remaining shots, and confirm the final Video Edit configuration including `audioPolicy` before composing.
 
 Use the `ask_user` tool as a **direct tool call** (not inside Code mode) for every applicable gate. Prefer:
 
@@ -420,8 +420,8 @@ A Connection declares only a direct business predecessor. Reference paths are ge
 
 - Initialization image: connect from every imported or confirmed Element materially combined into the result.
 - Storyboard: connect from the confirmed initialization anchors only, not the original imported assets behind them.
-- First frame: connect from the storyboard Element.
-- Shot video: connect from exactly its corresponding first-frame Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
+- Shot reference image: connect from the storyboard Element.
+- Shot video: connect from exactly its corresponding shot reference-image Element only — never add initialization, product, scene, or storyboard Elements to a shot video's Connections.
 - Video edit: include direct incoming Connections from every `videoSequence` and `audioSequence` Element in the same `add_canvas_elements` call. Use `manage_canvas_connections` only for later standalone relationship maintenance.
 - Final video composition: pass ordered Video and Audio Element IDs in `composition.videoSequence` and `composition.audioSequence`. When a Video Edit is the direct predecessor, connect only the Video Edit to the final video; direct media Connections are used when composing without a Video Edit.
 
@@ -544,7 +544,7 @@ Use preset or numeric short-side resolutions in `output`, such as `1080p` or `76
 
 - Image design workflow: direct generation, referenced images, appended candidates, and main Content selection after confirmation only for appended candidates.
 - Ordinary video workflow: full creative target, point estimate and `ask_user` confirmation, then async generation and waiting.
-- Detailed video production workflow: Storyboard, first frames, shot videos, direct business Connections, `video-edit`, and the final MP4.
+- Detailed video production workflow: Storyboard, shot reference images, shot videos, direct business Connections, `video-edit`, and the final MP4.
 - `video-edit` Content stores an editable ordered plan via `videoSequence` and optional `audioSequence`; create matching incoming Connections in the same `add_canvas_elements` call when a reusable edit plan is needed.
 - Frame workflow: group only exact root-level writable sibling Elements; never include read-only Element types, do not re-frame existing Frames/Groups. Use `unframe_canvas_elements` to remove a Frame while retaining its children, or `delete_canvas_elements` for confirmed removal of a Frame and its descendants; follow `references/element-management.md`.
 - Layout strategies: `row_incremental`, `dependency_flow`, `explicit_position`.

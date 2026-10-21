@@ -24,8 +24,11 @@ class UserDepartment(UserContextModel):
 
 
 class UserProfile(UserContextModel):
+    """认证账户的基础资料与当前组织来源身份。"""
+
     id: str = Field(min_length=1)
     magic_id: str = Field(min_length=1)
+    third_platform_id: str = Field(default="", strict=True)
     nickname: str = ""
     real_name: str = ""
     avatar_url: str = ""
@@ -34,6 +37,12 @@ class UserProfile(UserContextModel):
     email: str = ""
     phone: str = ""
     departments: tuple[UserDepartment, ...] = ()
+
+    @field_validator("third_platform_id", mode="before")
+    @classmethod
+    def normalize_third_platform_id(cls, value: object) -> object:
+        """兼容历史空值，其他非法类型仍交由模型拒绝。"""
+        return "" if value is None else value
 
 
 class OrganizationContext(UserContextModel):

@@ -287,10 +287,13 @@ class TopicAppService extends AbstractAppService
         }
 
         // 创建新话题，使用事务确保原子性
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
-            // 1. 初始化 chat 的会话和话题
-            [$chatConversationId, $chatConversationTopicId] = $this->chatAppService->initMagicChatConversation($dataIsolation);
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
+            // Prepare IM topics; the owner finalizes the default immediately before commit.
+            $pendingDefault = $this->chatAppService->createMagicChatTopicForConversationPair($dataIsolation, $conversationPair);
 
             // 2. 创建话题
             $dynamicParams = $this->buildDynamicParams($requestDTO);
@@ -298,8 +301,8 @@ class TopicAppService extends AbstractAppService
                 $dataIsolation,
                 $projectEntity->getWorkspaceId(),
                 (int) $requestDTO->getProjectId(),
-                $chatConversationId,
-                $chatConversationTopicId, // 会话的话题ID
+                $pendingDefault['chat_conversation_id'],
+                $pendingDefault['chat_topic_id'], // 会话的话题ID
                 $requestDTO->getTopicName(),
                 $projectEntity->getWorkDir(),
                 $requestDTO->getTopicMode(),
@@ -317,7 +320,9 @@ class TopicAppService extends AbstractAppService
                 $this->projectDomainService->saveProjectEntity($projectEntity);
             }
             // 提交事务
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
             $this->initializeTopicRoot($dataIsolation, $topicEntity, $projectEntity);
 
             // 发布话题已创建事件
@@ -331,7 +336,9 @@ class TopicAppService extends AbstractAppService
             return TopicItemDTO::fromEntity($topicEntity);
         } catch (Throwable $e) {
             // 回滚事务
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error(sprintf("Error creating new topic: %s\n%s", $e->getMessage(), $e->getTraceAsString()));
             ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_TOPIC_FAILED, 'topic.create_topic_failed');
         }
@@ -348,10 +355,13 @@ class TopicAppService extends AbstractAppService
         $projectEntity = $this->projectDomainService->getProjectNotUserId((int) $requestDTO->getProjectId());
 
         // 创建新话题，使用事务确保原子性
-        Db::beginTransaction();
+        $transactionOpen = false;
         try {
-            // 1. 初始化 chat 的会话和话题
-            [$chatConversationId, $chatConversationTopicId] = $this->chatAppService->initMagicChatConversation($dataIsolation);
+            $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+            Db::beginTransaction();
+            $transactionOpen = true;
+            // Prepare IM topics; the owner finalizes the default immediately before commit.
+            $pendingDefault = $this->chatAppService->createMagicChatTopicForConversationPair($dataIsolation, $conversationPair);
 
             // 2. 创建话题
             $dynamicParams = $this->buildDynamicParams($requestDTO);
@@ -359,8 +369,8 @@ class TopicAppService extends AbstractAppService
                 $dataIsolation,
                 (int) $requestDTO->getWorkspaceId(),
                 (int) $requestDTO->getProjectId(),
-                $chatConversationId,
-                $chatConversationTopicId, // 会话的话题ID
+                $pendingDefault['chat_conversation_id'],
+                $pendingDefault['chat_topic_id'], // 会话的话题ID
                 $requestDTO->getTopicName(),
                 $projectEntity->getWorkDir(),
                 $requestDTO->getTopicMode(),
@@ -378,7 +388,9 @@ class TopicAppService extends AbstractAppService
                 $this->projectDomainService->saveProjectEntity($projectEntity);
             }
             // 提交事务
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
             Db::commit();
+            $transactionOpen = false;
             $this->initializeTopicRoot($dataIsolation, $topicEntity, $projectEntity);
             if (! empty($requestDTO->getProjectMode())) {
                 $this->eventDispatcher->dispatch(new ProjectUpdatedEvent($projectEntity, $userAuthorization));
@@ -387,7 +399,9 @@ class TopicAppService extends AbstractAppService
             return TopicItemDTO::fromEntity($topicEntity);
         } catch (Throwable $e) {
             // 回滚事务
-            Db::rollBack();
+            if ($transactionOpen) {
+                Db::rollBack();
+            }
             $this->logger->error(sprintf("Error creating new topic: %s\n%s", $e->getMessage(), $e->getTraceAsString()));
             ExceptionBuilder::throw(SuperAgentErrorCode::CREATE_TOPIC_FAILED, 'topic.create_topic_failed');
         }
@@ -1426,37 +1440,46 @@ class TopicAppService extends AbstractAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::PROJECT_NOT_FOUND, 'project.not_found');
         }
 
-        // 初始化Magic Chat会话
-        [$chatConversationId, $chatConversationTopicId] = $this->chatAppService->initMagicChatConversation($dataIsolation);
+        $conversationPair = $this->chatAppService->getOrCreateMagicChatConversationPair($dataIsolation);
+        Db::beginTransaction();
+        try {
+            $pendingDefault = $this->chatAppService->createMagicChatTopicForConversationPair($dataIsolation, $conversationPair);
 
-        // 创建隐藏话题
-        $topicEntity = $this->topicDomainService->createTopic(
-            dataIsolation: $dataIsolation,
-            workspaceId: $projectEntity->getWorkspaceId(),
-            projectId: $projectId,
-            chatConversationId: $chatConversationId,
-            chatTopicId: $chatConversationTopicId,
-            topicName: '', // 隐藏话题名称为空
-            workDir: $projectEntity->getWorkDir(),
-            topicMode: '',
-            source: CreationSource::SYSTEM_CREATED->value, // 系统创建
-            sourceId: '',
-            isHidden: true,
-            hiddenType: $hiddenType
-        );
+            // 创建隐藏话题
+            $topicEntity = $this->topicDomainService->createTopic(
+                dataIsolation: $dataIsolation,
+                workspaceId: $projectEntity->getWorkspaceId(),
+                projectId: $projectId,
+                chatConversationId: $pendingDefault['chat_conversation_id'],
+                chatTopicId: $pendingDefault['chat_topic_id'],
+                topicName: '', // 隐藏话题名称为空
+                workDir: $projectEntity->getWorkDir(),
+                topicMode: '',
+                source: CreationSource::SYSTEM_CREATED->value, // 系统创建
+                sourceId: '',
+                isHidden: true,
+                hiddenType: $hiddenType
+            );
+
+            // 预热话题创建后，立即设置 sandbox_id 为话题ID（话题ID即沙箱ID）
+            $topicId = $topicEntity->getId();
+            $this->topicDomainService->updateTopicSandboxId($dataIsolation, $topicId, (string) $topicId);
+            $topicEntity->setSandboxId((string) $topicId);
+
+            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
+            Db::commit();
+        } catch (Throwable $e) {
+            Db::rollBack();
+            throw $e;
+        }
         $this->initializeTopicRoot($dataIsolation, $topicEntity, $projectEntity);
-
-        // 预热话题创建后，立即设置 sandbox_id 为话题ID（话题ID即沙箱ID）
-        $topicId = $topicEntity->getId();
-        $this->topicDomainService->updateTopicSandboxId($dataIsolation, $topicId, (string) $topicId);
-        $topicEntity->setSandboxId((string) $topicId);
 
         $this->logger->info(sprintf(
             '隐藏话题创建成功, topicId=%d, sandboxId=%s, chatConversationId=%s, chatTopicId=%s',
             $topicId,
             $topicEntity->getSandboxId(),
-            $chatConversationId,
-            $chatConversationTopicId
+            $pendingDefault['chat_conversation_id'],
+            $pendingDefault['chat_topic_id']
         ));
 
         return $topicEntity;

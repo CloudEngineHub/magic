@@ -35,6 +35,7 @@ export interface CanvasResourceReferenceResolveOptions {
 
 export type CanvasResourceReferenceFailureReason =
 	| "empty-reference"
+	| "invalid-asset-reference"
 	| "invalid-external-url"
 	| "missing-current-canvas"
 	| "missing-workspace-path"
@@ -52,6 +53,8 @@ export interface ResolvedCanvasResourceReference {
 	workspacePath?: string
 	/** Value written to Canvas storage / magic.project.js. This is not a resource identity. */
 	storagePath: string
+	/** Asset service ID when resourceKind is opaque-asset. */
+	assetId?: string
 	/** Stable comparison and cache key. */
 	identity: string
 	/** Attachment-tree node identity when attachment evidence is available. */

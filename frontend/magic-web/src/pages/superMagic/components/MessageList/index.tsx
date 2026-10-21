@@ -73,6 +73,7 @@ import {
 	type VirtualMessageRowItem,
 } from "./virtual-message-items"
 import { VirtualMessageList } from "./components/VirtualMessageList"
+import { MessageListScrollArea } from "./components/MessageListScrollArea"
 import {
 	MessageViewStateProvider,
 	useMessageProcessViewState,
@@ -987,71 +988,37 @@ const MessageList = observer(
 								/>
 							</div>
 						)}
-						{/*
-						 * Plain scroll element instead of Radix ScrollArea: virtua compensates
-						 * measurement and prepend itself, so the list must own the only scroll
-						 * container. `overflow-anchor: none` keeps the browser's native anchoring
-						 * from fighting that compensation.
-						 */}
-						<div
-							ref={setScrollViewportRef}
-							data-message-list-viewport="true"
-							data-testid="message-list-viewport"
-							className={cn(
-								"h-full w-full overflow-y-auto overflow-x-hidden [overflow-anchor:none]",
-								// Restores the thin overlay scrollbar the Radix ScrollArea used to draw.
-								"[scrollbar-color:rgb(var(--border-rgb))_transparent] [scrollbar-width:thin]",
-								"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border",
-								"[&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5",
-							)}
+						<MessageListScrollArea
+							viewportRef={setScrollViewportRef}
+							contentClassName={classNames?.content}
 						>
-							{/*
-							 * Centered message column. The top padding used to live on the Radix
-							 * wrapper's first child; keeping it on the column means a prepended
-							 * history page cannot carry the spacing away with the old first row.
-							 */}
-							<div
-								className={cn(
-									// `min-h-full`, not `h-full`: the empty state still fills the
-									// viewport, but a growing list can push this column past it so
-									// the virtualizer canvas inside keeps its measurable height.
-									"mx-auto block min-h-full min-w-[unset] max-w-3xl pb-2",
-									classNames?.content,
-								)}
-								// The conversation itself, for the step that frames it. The anchor
-								// above is the scroll container, which is full-bleed: the guide would
-								// draw a box as wide as the panel while the messages it is talking
-								// about occupy this centred column.
-								data-guide-anchor="message-list-column"
-							>
-								{visibleData.length > 0 || !isEmptyStatus ? (
-									<VirtualMessageList
-										topicId={currentTopicKey}
-										processProjectionKey={processInteractionKey}
-										items={virtualMessageItems}
-										userIndices={userIndices}
-										getScrollElement={getScrollElement}
-										footer={messageListFooter}
-										stickyMessageClassName={stickyMessageClassName}
-										renderNode={renderVirtualMessageNode}
-										exportMode={enableExport && exportStore.exportMode}
-										selectedKeys={exportStore.selectedKeys}
-										onToggleSelect={handleToggleSelect}
-										limitReached={exportLimitReached}
-										virtualizerRef={virtualizerRef}
-										onVirtualizerChange={onVirtualizerChange}
-										allowResizeStickySync={
-											isStreamLoading ||
-											Boolean(showLoading) ||
-											currentTopicStatus === TaskStatus.RUNNING ||
-											shouldShowBottomLoading
-										}
-									/>
-								) : (
-									<Empty />
-								)}
-							</div>
-						</div>
+							{visibleData.length > 0 || !isEmptyStatus ? (
+								<VirtualMessageList
+									topicId={currentTopicKey}
+									processProjectionKey={processInteractionKey}
+									items={virtualMessageItems}
+									userIndices={userIndices}
+									getScrollElement={getScrollElement}
+									footer={messageListFooter}
+									stickyMessageClassName={stickyMessageClassName}
+									renderNode={renderVirtualMessageNode}
+									exportMode={enableExport && exportStore.exportMode}
+									selectedKeys={exportStore.selectedKeys}
+									onToggleSelect={handleToggleSelect}
+									limitReached={exportLimitReached}
+									virtualizerRef={virtualizerRef}
+									onVirtualizerChange={onVirtualizerChange}
+									allowResizeStickySync={
+										isStreamLoading ||
+										Boolean(showLoading) ||
+										currentTopicStatus === TaskStatus.RUNNING ||
+										shouldShowBottomLoading
+									}
+								/>
+							) : (
+								<Empty />
+							)}
+						</MessageListScrollArea>
 						{scrollEdgeFadeConfig ? (
 							<ScrollEdgeFadeOverlays
 								fadeColor={scrollEdgeFadeConfig.fadeColor ?? "background"}

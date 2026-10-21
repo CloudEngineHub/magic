@@ -43,6 +43,7 @@ export function useFileManagerNames(
 		expandedKeys,
 		setExpandedKeys,
 		onDesignProjectCreate: operations.createDesignProject,
+		isCurrent: callbacks?.isCurrent,
 	})
 	const selfMedia = useVirtualSelfMediaProject({
 		attachments: props.attachments,

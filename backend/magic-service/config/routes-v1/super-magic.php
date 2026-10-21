@@ -172,6 +172,7 @@ Router::addGroup(
 
         // 微应用业务接口，仅使用 app_id 作为对外标识
         Router::addGroup('/micro-apps', static function () {
+            Router::post('/{appId}/transfer', [MicroAppProjectApi::class, 'transfer']);
             // 获取当前用户可访问的微应用列表
             Router::get('/queries', [MicroAppProjectApi::class, 'list']);
             // Mention 面板可引用的已发布微应用

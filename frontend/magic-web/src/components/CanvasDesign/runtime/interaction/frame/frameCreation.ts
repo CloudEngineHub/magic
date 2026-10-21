@@ -11,6 +11,22 @@ export interface FrameContentLayout {
 	height: number
 }
 
+export interface FrameChildrenBounds {
+	minX: number
+	maxX: number
+	minY: number
+	maxY: number
+	width: number
+	height: number
+	padding: number
+}
+
+export interface FrameChildrenBoundsOptions {
+	/** Preserve an already sufficient container size; only grow when required. */
+	existingWidth?: number
+	existingHeight?: number
+}
+
 interface ContentFrameSize {
 	width: number
 	height: number
@@ -43,6 +59,58 @@ export function resolveFrameContentLayout(
 	return {
 		padding,
 		...frameSize,
+	}
+}
+
+/**
+ * Recomputes a container's local size without moving its top-left origin.
+ * Children created by Canvas are normally already inside the positive local quadrant;
+ * the max-with-right-edge fallback preserves the fixed origin and prevents an existing
+ * positive offset from being lost when the union is converted back to container size.
+ */
+export function resolveFrameChildrenBounds(
+	children: readonly Pick<LayerElement, "x" | "y" | "width" | "height">[],
+	options: FrameChildrenBoundsOptions = {},
+): FrameChildrenBounds | null {
+	if (children.length === 0) return null
+
+	const bounds = children.reduce(
+		(result, child) => {
+			const x = Number.isFinite(child.x) ? (child.x as number) : 0
+			const y = Number.isFinite(child.y) ? (child.y as number) : 0
+			const width = Math.max(0, Number.isFinite(child.width) ? (child.width as number) : 0)
+			const height = Math.max(0, Number.isFinite(child.height) ? (child.height as number) : 0)
+			return {
+				minX: Math.min(result.minX, x),
+				maxX: Math.max(result.maxX, x + width),
+				minY: Math.min(result.minY, y),
+				maxY: Math.max(result.maxY, y + height),
+			}
+		},
+		{ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity },
+	)
+	const contentWidth = Math.max(0, bounds.maxX - bounds.minX)
+	const contentHeight = Math.max(0, bounds.maxY - bounds.minY)
+	const { padding } = resolveFrameContentLayout({
+		width: contentWidth,
+		height: contentHeight,
+	})
+	const normalizedSize = normalizeFrameCreationSize(
+		Math.max(0, bounds.maxX + padding, contentWidth + padding * 2),
+		Math.max(0, bounds.maxY + padding, contentHeight + padding * 2),
+	)
+	const existingWidth = Number.isFinite(options.existingWidth)
+		? Math.max(0, options.existingWidth as number)
+		: 0
+	const existingHeight = Number.isFinite(options.existingHeight)
+		? Math.max(0, options.existingHeight as number)
+		: 0
+
+	return {
+		...bounds,
+		width: Math.max(existingWidth, normalizedSize.width),
+		height: Math.max(existingHeight, normalizedSize.height),
+		padding,
 	}
 }
 

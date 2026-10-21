@@ -79,6 +79,32 @@ describe("MediaResourceOfflineCacheManager", () => {
 		).toBeUndefined()
 	})
 
+	it("keeps asset URLs out of workspace and persistent media caches", async () => {
+		const manager = createOfflineCacheManager()
+		const resolveStoredResourcePath = (
+			manager as unknown as {
+				resolveStoredResourcePath: (path: string) => string | undefined
+			}
+		).resolveStoredResourcePath.bind(manager)
+
+		expect(resolveStoredResourcePath("asset://asset-1")).toBeUndefined()
+		await expect(
+			manager.rememberResolvedResource({
+				path: "asset://asset-1",
+				url: "https://assets.test/signed.png",
+				mediaType: "image",
+			}),
+		).resolves.toBeNull()
+		await expect(
+			manager.resolveResourceUrl({
+				path: "asset://asset-1",
+				url: "https://assets.test/signed.png",
+				mediaType: "image",
+			}),
+		).resolves.toBe("https://assets.test/signed.png")
+		await expect(manager.getCachedResource("asset://asset-1", "image")).resolves.toBeNull()
+	})
+
 	it("reuses the current app service worker and does not send duplicate metadata to it", async () => {
 		const register = vi.fn()
 		const postMessage = vi.fn()

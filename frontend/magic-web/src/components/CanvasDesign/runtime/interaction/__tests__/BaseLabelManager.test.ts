@@ -583,7 +583,7 @@ describe("BaseLabelManager candidate cache", () => {
 
 		requestLayerDraw.mockClear()
 		selectedIds.delete("image-1")
-		eventEmitter.emit("element:deselect")
+		eventEmitter.emit("element:deselect", { data: { elementIds: ["image-1"] } })
 		expect(manager.hasLabel("image-1")).toBe(false)
 		expect(requestLayerDraw).toHaveBeenCalledTimes(1)
 

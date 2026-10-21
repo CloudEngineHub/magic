@@ -15,6 +15,7 @@ export type SkillSourceType =
 	| "MARKET"
 	| "GITHUB"
 	| "AGENT_CREATED"
+	| "DIALOGUE_CREATION"
 	| "AGENT_THIRD_PARTY_IMPORT"
 	| "SYSTEM"
 	| "CREW_IMPORT"

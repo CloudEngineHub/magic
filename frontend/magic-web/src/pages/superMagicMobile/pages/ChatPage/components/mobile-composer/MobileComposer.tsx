@@ -28,6 +28,7 @@ import MobileComposerAttachments from "./MobileComposerAttachments"
 import MobileComposerHeader from "./MobileComposerHeader"
 import MobileVoiceEdgeGlow from "./MobileVoiceEdgeGlow"
 import MobileScenePanels from "./MobileScenePanels"
+import { getMobileComposerEditorClassName } from "./mobileComposerEditorClassName"
 import useMobileComposerLogic from "./useMobileComposerLogic"
 import { useInvalidTopicModeFallback } from "@/pages/superMagic/components/MessageEditor/hooks/useInvalidTopicModeFallback"
 import EditorHost from "@/pages/superMagic/components/MessageEditor/components/WechatChatHistory/EditorHost"
@@ -39,26 +40,6 @@ interface MobileComposerProps {
 	scenes?: SceneItem[]
 	enableReEditMessageFromPubSub?: boolean
 }
-
-const mobileComposerEditorClassName = cn(
-	"max-h-[100px] min-h-0 overflow-hidden text-sm text-foreground",
-	"[&_.ProseMirror]:m-0 [&_.ProseMirror]:max-h-[100px] [&_.ProseMirror]:overflow-y-auto",
-	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
-	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
-	"[&_.ProseMirror_.is-editor-empty:first-child]:relative",
-	// Absolute pseudo-elements shrink to their content unless their width is explicit.
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:pointer-events-none",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:absolute",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:left-0",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:top-0",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:block",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:w-full",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:overflow-hidden",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:whitespace-nowrap",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-ellipsis",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:text-muted-foreground",
-	"[&_.ProseMirror_.is-editor-empty:first-child::before]:content-[attr(data-placeholder)]",
-)
 
 const MOBILE_VOICE_WAVEFORM_BAR_COUNT = 76
 const MOBILE_VOICE_WAVEFORM_HEIGHT = 40
@@ -240,9 +221,10 @@ function MobileComposerComponent({
 		enableReEditMessageFromPubSub,
 	})
 	const wechatScrollRef = useRef<HTMLDivElement>(null)
+	// Homepage defers project creation, but the recording expert still needs its text/recording switch.
 	const isRecordSummaryMode =
 		editorContext.topicMode === TopicMode.RecordSummary &&
-		!editorContext.deferProjectCreationUntilSend
+		(!editorContext.deferProjectCreationUntilSend || editorContext.editorModeSwitch != null)
 	const effectiveScenes =
 		scenes ??
 		superMagicModeService.getModeConfigWithLegacy(
@@ -555,7 +537,7 @@ function MobileComposerComponent({
 						<div
 							ref={logic.domRef}
 							className={cn(
-								mobileComposerEditorClassName,
+								getMobileComposerEditorClassName(logic.placeholder),
 								"max-h-none [&_.ProseMirror]:max-h-none [&_.ProseMirror]:overflow-visible",
 								logic.wechatChat.activeId && "[&_.ProseMirror>p]:hidden",
 							)}

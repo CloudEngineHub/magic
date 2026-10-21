@@ -50,6 +50,15 @@ const CONSOLE_GESTURES = `<script>document.addEventListener('click', function(ev
   {targetOrigin:window.opener.location.origin, delegate:'fullscreen'});
 }, true);</script>`
 
+async function exitPresenterFullscreen(target: HTMLElement | null) {
+	const exitFullscreen = document.exitFullscreen
+	// React clears DOM refs before passive cleanup; equal empty values do not own fullscreen.
+	if (!target || document.fullscreenElement !== target || typeof exitFullscreen !== "function")
+		return
+	// Keep synchronous API failures in the same Promise error path as rejected exits.
+	await exitFullscreen.call(document)
+}
+
 /** Fullscreen the existing slide first: opening an audience popup consumes the gesture.
  * The browser permits a companion window after a targeted fullscreen request. */
 export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
@@ -69,8 +78,7 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 		popupRef.current = null
 		setConsoleContainer(null)
 		setIsOpen(false)
-		if (document.fullscreenElement === targetRef.current)
-			void document.exitFullscreen().catch(() => undefined)
+		void exitPresenterFullscreen(targetRef.current).catch(() => undefined)
 	}, [targetRef])
 
 	const open = useCallback(async (): Promise<PPTPresenterOpenResult> => {
@@ -79,6 +87,7 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 		const getScreenDetails = (window as WindowWithManagement).getScreenDetails
 		if (
 			!target?.requestFullscreen ||
+			typeof document.exitFullscreen !== "function" ||
 			!getScreenDetails ||
 			(window.screen as Screen & { isExtended?: boolean }).isExtended !== true
 		)
@@ -114,7 +123,7 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 			if (operation !== generation.current) {
 				popup?.close()
 				if (!pending.current && !popupRef.current && document.fullscreenElement === target)
-					await document.exitFullscreen()
+					await exitPresenterFullscreen(target)
 				return "cancelled"
 			}
 			if (document.fullscreenElement !== target) {
@@ -189,7 +198,7 @@ export function usePPTPresenterWindow(targetRef: RefObject<HTMLElement>) {
 						!popupRef.current &&
 						document.fullscreenElement === target
 					)
-						await document.exitFullscreen()
+						await exitPresenterFullscreen(target)
 					return false
 				}
 				setSelectedScreen(index)

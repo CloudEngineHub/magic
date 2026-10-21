@@ -29,6 +29,7 @@ class AiAbilityConfigAppServiceTest extends TestCase
             ->willReturn([
                 $this->createAbility(AiAbilityCode::ImageConvertHigh, true, ['model_id' => 'model-1']),
                 $this->createAbility(AiAbilityCode::ImageRemoveBackground, false),
+                $this->createAbility(AiAbilityCode::VolcengineArkAssets, true),
             ]);
 
         $providerModelDomainService = $this->createMock(ProviderModelDomainService::class);
@@ -50,6 +51,7 @@ class AiAbilityConfigAppServiceTest extends TestCase
                     'image_remove_background' => ['enabled' => false],
                     'image_eraser' => ['enabled' => false],
                     'image_expand' => ['enabled' => false],
+                    'volcengine_ark_assets' => ['enabled' => true],
                 ],
             ],
             $service->getAvailability($dataIsolation)

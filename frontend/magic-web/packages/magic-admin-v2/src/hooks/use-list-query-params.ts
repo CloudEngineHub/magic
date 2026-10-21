@@ -12,6 +12,17 @@ type ListPagination = {
 	resetKey: string
 }
 
+export type ListQueryParamsState<TDraft, TParams extends { page: number }> = {
+	filterDraft: TDraft
+	page: number
+	params: TParams
+	pageSize: number
+	setDebouncedField: (field: StringKey<TDraft>, value: string) => void
+	setFilterDraft: Dispatch<SetStateAction<TDraft>>
+	setPage: (page: number) => void
+	setPageSize: (pageSize: number) => void
+}
+
 const emptyDebounceFields: ReadonlyArray<never> = []
 
 function appliedText(raw: string, debounced: string) {

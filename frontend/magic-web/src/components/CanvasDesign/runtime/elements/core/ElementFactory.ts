@@ -16,7 +16,7 @@ import { VideoElement } from "../video/VideoElement"
 import { AudioElement } from "../audio/AudioElement"
 import { StoryboardElement } from "../storyboard/StoryboardElement"
 import { VideoEditElement } from "../video-edit/VideoEditElement"
-// import { GroupElement } from "../frame/GroupElement"
+import { GroupElement } from "../frame/GroupElement"
 import { FrameElement } from "../frame/FrameElement"
 import type { Canvas } from "../../core/Canvas"
 
@@ -84,14 +84,11 @@ export class ElementFactory {
 			case ElementTypeEnum.VideoEdit:
 				return new VideoEditElement(data, canvas)
 
-			// case ElementTypeEnum.Group:
-			// 	return new GroupElement(
-			// 		data,
-			// 		eventEmitter,
-			// 		methods,
-			// 		elementManager,
-			// 		selectionManager,
-			// 	)
+			case ElementTypeEnum.Group:
+				// Groups are layout scopes just like Frames, but intentionally have no
+				// clipping/background decoration. Keep them as real runtime elements so
+				// their direct children can be selected and arranged on a loaded canvas.
+				return new GroupElement(data, canvas)
 
 			case ElementTypeEnum.Frame:
 				return new FrameElement(data, canvas)
@@ -358,9 +355,9 @@ export class ElementFactory {
 				specificConfig = FrameElement.getDefaultConfig()
 				break
 
-			// case ElementTypeEnum.Group:
-			// 	specificConfig = GroupElement.getDefaultConfig()
-			// 	break
+			case ElementTypeEnum.Group:
+				specificConfig = GroupElement.getDefaultConfig()
+				break
 
 			default:
 				console.warn(`Unknown element type: ${elementType}`)

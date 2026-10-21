@@ -12,6 +12,7 @@ import {
 import { Label } from "@/components/shadcn-ui/label"
 import { Input } from "@/components/shadcn-ui/input"
 import { Button } from "@/components/shadcn-ui/button"
+import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicPopup from "@/components/base-mobile/MagicPopup"
 import { LucideLazyIcon } from "@/utils/lucideIconLoader"
 import { cn } from "@/utils/cn"
@@ -268,8 +269,8 @@ function FilterSelectItem({
 				<MagicPopup
 					visible={drawerOpen}
 					onClose={handleCloseDrawer}
-					className="rounded-t-[14px] border-0 bg-muted"
-					bodyClassName="rounded-t-[14px] border-0 bg-muted p-0 overflow-hidden"
+					className="rounded-t-[14px] border-0 bg-muted supports-[overflow:clip]:overflow-clip"
+					bodyClassName="rounded-t-[14px] border-0 bg-muted p-0 overflow-hidden supports-[overflow:clip]:overflow-clip"
 					handlerClassName="bg-muted-foreground mb-1.5 h-1 w-20 rounded-full"
 					title={lt(filter.label)}
 				>
@@ -296,7 +297,11 @@ function FilterSelectItem({
 							</div>
 						</div>
 
-						<div className="overflow-y-auto px-3 pb-5">
+						{/* Grid stretch keeps the viewport within the popup's content-driven height cap. */}
+						<ScrollArea
+							className="grid min-h-0"
+							viewportClassName="h-auto min-h-0 px-3 pb-5 [&>div]:!block"
+						>
 							<div className="flex flex-col gap-1">
 								{availableOptions.length > 0 ? (
 									availableOptions.map(({ option, optionValue }) => {
@@ -337,7 +342,7 @@ function FilterSelectItem({
 									{customInputControl}
 								</div>
 							) : null}
-						</div>
+						</ScrollArea>
 					</div>
 				</MagicPopup>
 			</div>
