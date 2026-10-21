@@ -17,6 +17,7 @@ import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import AiCanvasCreatePrompt from "./components/AiCanvasCreatePrompt"
 import AiCanvasHero from "./components/AiCanvasHero"
 import AiCanvasInspirations from "./components/AiCanvasInspirations"
+import AiCanvasNewCard from "./components/AiCanvasNewCard"
 import AiCanvasProjectCard from "./components/AiCanvasProjectCard"
 import { useDesignInspirations } from "./hooks/useDesignInspirations"
 import { useCanvasCovers } from "./hooks/useCanvasCovers"
@@ -252,20 +253,15 @@ function AiCanvasPage() {
 									{t("home.retry")}
 								</Button>
 							</div>
-						) : projects.length === 0 ? (
-							// Empty state doubles as the first creation entry point below the fold.
-							<button
-								type="button"
-								onClick={handleCreateCanvas}
-								disabled={!workspace || isCreating}
-								className="flex h-40 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border bg-muted/30 text-sm text-muted-foreground transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-							>
-								<Plus size={16} aria-hidden="true" />
-								{t("home.empty")}
-							</button>
 						) : (
 							<>
 								<div className="grid grid-cols-2 gap-x-4 gap-y-6 md:grid-cols-3 xl:grid-cols-4">
+									{/* Always first, so it also serves as the empty state. */}
+									<AiCanvasNewCard
+										creating={isCreating}
+										disabled={!workspace || isCreating}
+										onCreate={handleCreateCanvas}
+									/>
 									{projects.map((project) => (
 										<AiCanvasProjectCard
 											key={project.id}

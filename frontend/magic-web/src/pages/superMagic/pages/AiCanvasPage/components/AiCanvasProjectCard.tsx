@@ -19,8 +19,8 @@ import {
 import { Input } from "@/components/shadcn-ui/input"
 import type { ProjectListItem } from "@/pages/superMagic/pages/Workspace/types"
 import type { FileMediaMetadata } from "@/pages/superMagic/services/useFileMediaSource"
-import ArtworkPlaceholder from "./ArtworkPlaceholder"
 import CanvasMediaImage from "./CanvasMediaImage"
+import EmptyCanvasCover from "./EmptyCanvasCover"
 import { cn } from "@/utils/cn"
 
 interface AiCanvasProjectCardProps {
@@ -49,10 +49,7 @@ const COVER_CELL_CLASSES: Record<number, string[]> = {
 }
 
 function CanvasCover({ covers }: { covers: FileMediaMetadata[] | null | undefined }) {
-	const placeholder = (
-		<ArtworkPlaceholder kind="storyboard" className="size-full opacity-40 grayscale" />
-	)
-	if (!covers || covers.length === 0) return placeholder
+	if (!covers || covers.length === 0) return <EmptyCanvasCover loading={covers === undefined} />
 	const cells = COVER_CELL_CLASSES[covers.length] ?? COVER_CELL_CLASSES[4]
 	return (
 		// 1px gaps over a muted background read as thin dividers between tiles.

@@ -33,7 +33,19 @@ describe("assignBoardSlots", () => {
 			undefined,
 		])
 		expect(slots.character).toBeUndefined()
-		expect(slots.product).toBeUndefined()
+		expect(slots.products).toEqual([undefined, undefined, undefined])
+	})
+
+	it("fans extra products behind the front card before taking leftovers", () => {
+		const slots = assignBoardSlots([
+			{ key: "p1", kind: "product", url: "p1.webp" },
+			{ key: "p2", kind: "product", url: "p2.webp" },
+			{ key: "p3", kind: "product", url: "p3.webp" },
+			{ key: "s1", kind: "storyboard", url: "s1.webp" },
+		])
+
+		expect(slots.products.map((artwork) => artwork?.key)).toEqual(["p1", "p2", "p3"])
+		expect(slots.storyboard[0]?.key).toBe("s1")
 	})
 
 	it("prefers an artwork of the slot's own kind", () => {
@@ -43,7 +55,7 @@ describe("assignBoardSlots", () => {
 		])
 
 		expect(slots.poster?.key).toBe("b")
-		expect(slots.product?.key).toBe("a")
+		expect(slots.products[0]?.key).toBe("a")
 	})
 })
 

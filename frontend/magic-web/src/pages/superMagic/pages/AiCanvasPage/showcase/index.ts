@@ -3,6 +3,8 @@ import characterSheet from "./images/character-sheet.webp"
 import characterSheetDusk from "./images/character-sheet-dusk.webp"
 import poster from "./images/poster.webp"
 import product from "./images/product.webp"
+import product02 from "./images/product-02.webp"
+import product03 from "./images/product-03.webp"
 import storyboard01 from "./images/storyboard-01.webp"
 import storyboard02 from "./images/storyboard-02.webp"
 import storyboard03 from "./images/storyboard-03.webp"
@@ -28,13 +30,14 @@ export interface ShowcaseArtwork {
 
 /**
  * Built-in showcase artworks of the AI canvas home: one story ("a girl and her corgi at a
- * dusk seaside") shown as a character sheet, a key visual, a product and three storyboard
+ * dusk seaside") shown as a character sheet, a key visual, three products and three storyboard
  * frames. Storyboard 03 is storyboard 02 with only the background changed, matching the
  * annotation note on the hero board.
  *
  * They decorate the hero board and fill the inspiration wall when the design employee has
  * no configured inspirations. Sources and generation prompts are recorded in ./README.md.
- * Storyboard entries keep their order: the hero shows them left to right.
+ * Storyboard entries keep their order: the hero shows them left to right. Product entries keep
+ * theirs too: the first is the front card of the hero's product fan.
  */
 export const AI_CANVAS_SHOWCASE: ShowcaseArtwork[] = [
 	{
@@ -66,6 +69,26 @@ export const AI_CANVAS_SHOWCASE: ShowcaseArtwork[] = [
 		prompt: {
 			zh_CN: "拍一张高级感产品图：粉紫渐变的汽水玻璃瓶放在沙色石台上，黄昏侧光，背景干净",
 			en_US: "Shoot a premium product image: a glass soda bottle with a pink-to-violet gradient drink on a sand-colored stone pedestal, dusk side light, clean background",
+		},
+	},
+	{
+		key: "product-02",
+		kind: "product",
+		src: product02,
+		title: { zh_CN: "拍立得相机产品图", en_US: "Instant camera product shot" },
+		prompt: {
+			zh_CN: "拍一张高级感产品图：淡紫色复古拍立得相机放在沙色石台上，吐出一张空白相纸，黄昏侧光，背景干净",
+			en_US: "Shoot a premium product image: a lavender retro instant camera on a sand-colored stone pedestal, ejecting a blank photo, dusk side light, clean background",
+		},
+	},
+	{
+		key: "product-03",
+		kind: "product",
+		src: product03,
+		title: { zh_CN: "贝壳香水产品图", en_US: "Seashell perfume product shot" },
+		prompt: {
+			zh_CN: "拍一张高级感产品图：桃色到靛蓝渐变的多切面香水瓶，贝壳形珍珠白瓶盖，放在沙色石台上，黄昏侧光，背景干净",
+			en_US: "Shoot a premium product image: a faceted perfume bottle fading from peach to indigo with a pearl-white seashell cap on a sand-colored stone pedestal, dusk side light, clean background",
 		},
 	},
 	{

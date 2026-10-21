@@ -2,19 +2,21 @@
 	"home": {
 		"board": {
 			"character": "角色设定",
+			"composing": "合成视频中",
 			"cursor": "设计专家",
 			"edited": "已按批注修改",
 			"editing": "设计专家 · 修改中",
+			"generating": "生成中",
 			"note": "把背景换成黄昏的海边，人物保持不变",
 			"poster": "主视觉海报",
-			"product": "产品图",
-			"storyboard": "分镜 · 3 帧"
+			"product": "产品图 · 3 款",
+			"storyboard": "分镜 · 3 帧",
+			"storyboardVideo": "分镜视频 · 0:12"
 		},
 		"cancel": "取消",
 		"createFailed": "新建画布失败，请稍后重试",
 		"delete": "删除",
-		"empty": "还没有画布，点这里新建一个空白画布",
-		"heroTitle": "把想法铺在画布上",
+		"heroTitle": "把<circle>想法</circle>铺在画布上",
 		"inspirationAll": "全部",
 		"inspirationSubtitle": "选一个灵感，提示词会填入上方输入框，改一改就能开始",
 		"inspirationTitle": "灵感",
@@ -25,6 +27,7 @@
 		"myCanvasesSubtitle": "继续你最近的创作",
 		"newBlankCanvas": "新建空白画布",
 		"newCanvas": "新建画布",
+		"newCanvasHint": "从空白画布开始",
 		"or": "或者",
 		"placeholder": "描述你想在画布上创作的内容",
 		"rename": "重命名",
