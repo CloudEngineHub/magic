@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -14,8 +14,6 @@ const {
 } = vi.hoisted(() => ({
 	mockLoad: vi.fn(),
 	defaultMCPStoreMock: {
-		hasMCP: false,
-		hasEverAddedMcp: false,
 		initialized: true,
 		load: vi.fn(),
 	},
@@ -82,14 +80,6 @@ vi.mock("../../components/LazyScenePanel", () => ({
 	},
 }))
 
-vi.mock("../../components/PluginTips", () => ({
-	default: ({ onConnectClick }: { onConnectClick: () => void }) => (
-		<button type="button" onClick={onConnectClick}>
-			pluginTips.connectTools
-		</button>
-	),
-}))
-
 vi.mock("../../components/SelectedSkillBadge", () => ({
 	default: () => <div data-testid="current-scene-badge" />,
 }))
@@ -135,22 +125,11 @@ vi.mock("@/pages/superMagic/stores/core", () => ({
 	},
 }))
 
-vi.mock("@/components/Agent/AgentCommonModal", () => ({
-	AgentCommonModal: ({ children, open }: { children: ReactNode; open: boolean }) =>
-		open ? <div data-testid="agent-common-modal">{children}</div> : null,
-}))
-
-vi.mock("@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary", () => ({
-	default: () => <div data-testid="connector-library" />,
-}))
-
 import EditorLayout from "../EditorLayout"
 
 describe("EditorLayout", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
-		defaultMCPStoreMock.hasMCP = false
-		defaultMCPStoreMock.hasEverAddedMcp = false
 		defaultMCPStoreMock.initialized = true
 		defaultMCPStoreMock.load = mockLoad.mockResolvedValue(undefined)
 		mockPlaybooks.length = 0
@@ -164,53 +143,6 @@ describe("EditorLayout", () => {
 		render(<EditorLayout mode={"SMA-agent" as TopicMode} />)
 
 		expect(capturedEditorContext.current?.creationScene).toBe("workspace")
-	})
-
-	it("shows plugin tips when user has no global MCP", async () => {
-		render(<EditorLayout />)
-
-		await waitFor(() => {
-			expect(screen.getByText("pluginTips.connectTools")).toBeInTheDocument()
-		})
-	})
-
-	it("opens the connector library from plugin tips", async () => {
-		render(<EditorLayout />)
-
-		await waitFor(() => {
-			expect(screen.getByText("pluginTips.connectTools")).toBeInTheDocument()
-		})
-
-		fireEvent.click(screen.getByText("pluginTips.connectTools"))
-
-		await waitFor(() => {
-			expect(screen.getByTestId("connector-library")).toBeInTheDocument()
-		})
-		expect(screen.queryByTestId("agent-settings")).not.toBeInTheDocument()
-	})
-
-	it("hides plugin tips after user once added MCP but removed all", async () => {
-		defaultMCPStoreMock.hasEverAddedMcp = true
-
-		render(<EditorLayout />)
-
-		await waitFor(() => {
-			expect(mockLoad).toHaveBeenCalled()
-		})
-
-		expect(screen.queryByText("pluginTips.connectTools")).not.toBeInTheDocument()
-	})
-
-	it("hides plugin tips when user already has a global MCP", async () => {
-		defaultMCPStoreMock.hasMCP = true
-
-		render(<EditorLayout />)
-
-		await waitFor(() => {
-			expect(mockLoad).toHaveBeenCalled()
-		})
-
-		expect(screen.queryByText("pluginTips.connectTools")).not.toBeInTheDocument()
 	})
 
 	it("loads MCP state from shared store", async () => {
