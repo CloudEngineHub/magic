@@ -155,17 +155,43 @@ export const useDefaultModelPriceStyles = createStyles(({ css, token }) => ({
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 	`,
+	// 重置按钮始终占据固定列，输入框不会随空值和已填状态横移。
 	manualControl: css`
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 48px;
 		align-items: center;
-		justify-content: flex-end;
 		gap: 8px;
+		width: 100%;
+		max-width: 224px;
+		margin-left: auto;
 	`,
 	manualInput: css`
 		width: 100%;
-		max-width: 160px;
+		min-width: 0;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
+	`,
+	resetButton: css`
+		min-width: 0;
+		height: 36px;
+		padding: 0;
+		border: 0;
+		border-radius: 4px;
+		background: transparent;
+		color: ${token.colorTextSecondary};
+		font-size: 12px;
+		cursor: pointer;
+		&:hover:not(:disabled) {
+			background: ${token.colorFillTertiary};
+		}
+		&:focus-visible {
+			outline: 2px solid ${token.colorPrimary};
+			outline-offset: 2px;
+		}
+		&:disabled {
+			cursor: not-allowed;
+			opacity: 0.4;
+		}
 	`,
 	ratio: css`
 		min-width: 0;

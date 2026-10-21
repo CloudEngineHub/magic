@@ -97,6 +97,7 @@
 		"rate": "Current USD exchange rate",
 		"ratio": "Reference multiplier",
 		"reference": "Fixed usage: 10,000 input and 1,000 output tokens; excludes caching, tools and other fees. Multipliers are estimates only.",
+		"resetManual": "Reset",
 		"retry": "Retry",
 		"rules": "Original tier prices",
 		"snapshot": "Price snapshot · {{time}}",

@@ -262,25 +262,23 @@ export function DefaultModelPriceTable({
 											)
 										}
 									/>
-									<span>×</span>
-									{manual !== undefined ? (
-										<button
-											type="button"
-											className={classes.button}
-											aria-label={`${row.name}: ${t("modelPricePreview.clearManual")}`}
-											onClick={() =>
-												onOverridesChange(
-													updateModelMultiplierOverrides(
-														overrides,
-														model.model_id,
-														"",
-													),
-												)
-											}
-										>
-											×
-										</button>
-									) : null}
+									<button
+										type="button"
+										className={classes.resetButton}
+										disabled={manual === undefined}
+										aria-label={`${row.name}: ${t("modelPricePreview.clearManual")}`}
+										onClick={() =>
+											onOverridesChange(
+												updateModelMultiplierOverrides(
+													overrides,
+													model.model_id,
+													"",
+												),
+											)
+										}
+									>
+										{t("modelPricePreview.resetManual")}
+									</button>
 								</div>
 								{invalidManual ? (
 									<p role="alert" className={classes.muted}>
