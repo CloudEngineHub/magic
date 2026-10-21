@@ -109,6 +109,7 @@ Steps:
 2. Draft only the missing personas to fill the quota. Each new persona has all 7 dimensions, all 4 layers, `field_sources`, and evidence linking to desk-research sources. Within a segment, make personas differ in behavior and circumstances, not just demographics.
 3. Run the persona self-check in methods.md: no stance field may let a reader predict the persona's answer to any hypothesis.
 4. Save reused and new personas together with one `save_personas` call, in interview order, each with its quota `segment` and selection reason. Set `library_panel_name` only if the user asked to save the group.
+5. Photographic avatars (when the user asks for portraits or avatars): read [reference/persona-portraits.md](reference/persona-portraits.md) first, then call `assign_persona_portraits` for the whole panel. It binds images from the official library at no generation cost. Never call `generate_images` for avatars before its result is printed; generate only for personas it leaves unresolved.
 
 ### Phase 5: Interviews (`interview`)
 
