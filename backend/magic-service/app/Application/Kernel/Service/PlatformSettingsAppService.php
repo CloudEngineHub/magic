@@ -29,6 +29,12 @@ class PlatformSettingsAppService
         return $this->platformSettingsDomainService->get();
     }
 
+    /** 后台配置读取持久化值，避免不完整的展示缓存影响编辑和刷新。 */
+    public function getPersisted(): PlatformSettings
+    {
+        return $this->platformSettingsDomainService->getPersisted();
+    }
+
     public function save(PlatformSettings $settings): PlatformSettings
     {
         return $this->platformSettingsDomainService->save($settings);

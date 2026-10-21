@@ -20,7 +20,7 @@ use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
 /**
- * 模拟单价覆盖配置兼容、精度和倍率链路，不连接数据库或真实服务商。
+ * 模拟单价覆盖统一配置、精度和倍率链路，不连接数据库或真实服务商。
  * @internal
  */
 final class ModelBillingMultiplierSettingsTest extends TestCase
@@ -28,11 +28,11 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
     /** 新单价生成参考金额，前端回传的旧计算值不能覆盖结果。 */
     public function testTokenPricesDetermineReferenceAmount(): void
     {
-        $data = ['enabled' => true, 'input_price_cny' => '2.000000000001', 'output_price_cny' => '3', 'base_price_cny' => '999'];
+        $data = ['enabled' => true, 'input_price' => '2.000000000001', 'output_price' => '3', 'base_price_cny' => '999'];
         $settings = ModelBillingMultiplierSettings::fromArray($data);
         $this->assertSame('0.02300000000001', $settings->basePriceCny);
-        $this->assertSame('2.000000000001', $settings->inputPriceCny);
-        $this->assertSame('3', $settings->outputPriceCny);
+        $this->assertSame('2.000000000001', $settings->inputPrice);
+        $this->assertSame('3', $settings->outputPrice);
         $this->assertSame('7', $settings->usdToCnyRate);
         $restored = PlatformSettings::fromArray(['model_billing_multiplier' => $settings->toArray()]);
         $this->assertSame($settings->toArray(), $restored->toArray()['model_billing_multiplier']);
@@ -41,23 +41,24 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
     /** 最小合法输出单价不能被截断成零，最大精度回显仍可校验。 */
     public function testSmallestAndLargestPricesRemainExact(): void
     {
-        $small = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '0', 'output_price_cny' => '0.000000000001']);
+        $small = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '0', 'output_price' => '0.000000000001']);
         $this->assertSame('0.000000000000001', $small->basePriceCny);
-        $large = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '999999999999.999999999999', 'output_price_cny' => '999999999999.999999999999']);
+        $large = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '999999999999.999999999999', 'output_price' => '999999999999.999999999999']);
         $this->assertSame('10999999999.999999999999989', $large->basePriceCny);
-        $this->assertSame($large->toArray(), $large->withOverrides($large->toArray())->toArray());
+        $this->assertSame($large->toArray(), $large->withOverrides(array_diff_key($large->toArray(), ['base_price_cny' => true]))->toArray());
         $request = (new ReflectionClass(PlatformSettingsUpdateRequest::class))->newInstanceWithoutConstructor();
         $rules = $request->rules();
-        $this->assertSame('sometimes|nullable|string|max:25', $rules['model_billing_multiplier.input_price_cny']);
-        $this->assertSame('sometimes|nullable|string|max:25', $rules['model_billing_multiplier.output_price_cny']);
-        $this->assertSame('sometimes|nullable|string|max:52', $rules['model_billing_multiplier.base_price_cny']);
+        $this->assertSame('sometimes|nullable|string|max:25', $rules['model_billing_multiplier.input_price']);
+        $this->assertSame('sometimes|nullable|string|max:25', $rules['model_billing_multiplier.output_price']);
+        $this->assertArrayNotHasKey('model_billing_multiplier.base_price_cny', $rules);
+        $this->assertArrayNotHasKey('model_billing_multiplier.input_price_cny', $rules);
     }
 
     /** 一项可以为零；不因输入单价为零而错误回退到旧金额。 */
     public function testOneZeroPriceParticipates(): void
     {
-        $this->assertSame('0.003', ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '0', 'output_price_cny' => '3'])->basePriceCny);
-        $this->assertSame('0.02', ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '2', 'output_price_cny' => '0'])->basePriceCny);
+        $this->assertSame('0.003', ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '0', 'output_price' => '3'])->basePriceCny);
+        $this->assertSame('0.02', ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '2', 'output_price' => '0'])->basePriceCny);
     }
 
     /** 非法或不完整的新单价不能借旧金额绕过校验，关闭时同样拒绝无效已填值。 */
@@ -67,7 +68,7 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         foreach ([true, false] as $enabled) {
             foreach ($invalidPairs as [$input, $output]) {
                 try {
-                    ModelBillingMultiplierSettings::fromArray(['enabled' => $enabled, 'input_price_cny' => $input, 'output_price_cny' => $output, 'base_price_cny' => '0.1']);
+                    ModelBillingMultiplierSettings::fromArray(['enabled' => $enabled, 'input_price' => $input, 'output_price' => $output, 'base_price_cny' => '0.1']);
                     $this->fail('Invalid token prices must be rejected');
                 } catch (InvalidArgumentException) {
                     $this->addToAssertionCount(1);
@@ -76,48 +77,47 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         }
     }
 
-    /** 历史金额无需迁移，不反推单价，美元汇率默认值完全由后端补齐。 */
-    public function testHistoricalSettingsRemainReadable(): void
+    /** 空配置保持关闭，纯派生金额不能代替两项源单价。 */
+    public function testEmptySettingsAndMissingPrices(): void
     {
         $empty = ModelBillingMultiplierSettings::fromArray([]);
         $this->assertFalse($empty->enabled);
         $this->assertNull($empty->basePriceCny);
-        $this->assertNull($empty->inputPriceCny);
-        $this->assertNull($empty->outputPriceCny);
+        $this->assertNull($empty->inputPrice);
         $this->assertSame('7', $empty->usdToCnyRate);
-        foreach ([[], ['input_price_cny' => null, 'output_price_cny' => null]] as $prices) {
-            $legacy = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'base_price_cny' => '0.8', ...$prices]);
-            $this->assertSame('0.8', $legacy->basePriceCny);
-            $this->assertNull($legacy->inputPriceCny);
-            $this->assertNull($legacy->outputPriceCny);
-        }
+        $this->expectException(InvalidArgumentException::class);
+        ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'base_price_cny' => '0.8']);
     }
 
     /** 部分更新和关闭再开启保留两项单价，输入变化后重新计算。 */
     public function testPartialUpdatesPreservePrices(): void
     {
-        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '2', 'output_price_cny' => '3', 'usd_to_cny_rate' => '5']);
+        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '2', 'output_price' => '3', 'usd_to_cny_rate' => '5']);
         $disabled = $settings->withOverrides(['enabled' => false]);
         $this->assertFalse($disabled->enabled);
         $this->assertSame($settings->toArray(), $disabled->withOverrides(['enabled' => true])->toArray());
-        $changed = $settings->withOverrides(['input_price_cny' => '4']);
+        $changed = $settings->withOverrides(['input_price' => '4']);
         $this->assertSame('0.043', $changed->basePriceCny);
-        $this->assertSame('3', $changed->outputPriceCny);
+        $this->assertSame('3', $changed->outputPrice);
         $rateOnly = $settings->withOverrides(['usd_to_cny_rate' => '6']);
         $this->assertSame('0.023', $rateOnly->basePriceCny);
         $this->assertSame('6', $rateOnly->usdToCnyRate);
     }
 
-    /** 旧客户端仅改金额时继续生效；原样回传金额不会清空已保存单价。 */
-    public function testLegacyClientCanUpdateAmountWithoutLosingUnchangedPrices(): void
+    /** 只读金额和废弃别名必须明确拒绝，不再猜测客户端字段优先级。 */
+    public function testUnsupportedWriteFieldsAreRejected(): void
     {
-        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '2', 'output_price_cny' => '3']);
-        $this->assertSame($settings->toArray(), $settings->withOverrides(['base_price_cny' => '0.02300'])->toArray());
-        $changed = $settings->withOverrides(['base_price_cny' => '0.6']);
-        $this->assertSame('0.6', $changed->basePriceCny);
-        $this->assertNull($changed->inputPriceCny);
-        $this->assertNull($changed->outputPriceCny);
-        $this->assertSame('0.023', $settings->withOverrides(['base_price_cny' => '999', 'input_price_cny' => '2', 'output_price_cny' => '3'])->basePriceCny);
+        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '2', 'output_price' => '3']);
+        foreach (['base_price_cny', 'input_price_cny', 'output_price_cny', 'unknown'] as $key) {
+            foreach ([true, false] as $enabled) {
+                try {
+                    $settings->withOverrides(['enabled' => $enabled, 'input_price' => '2', 'output_price' => '3', $key => null]);
+                    $this->fail('Unsupported fields must be rejected before merging');
+                } catch (InvalidArgumentException) {
+                    $this->assertSame('2', $settings->inputPrice);
+                }
+            }
+        }
     }
 
     /** 原倍率计算链直接使用派生金额，不需要调整模型装配或实际扣费。 */
@@ -126,7 +126,7 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $model = new ProviderModelEntity();
         $model->setModelId('mock-model');
         $model->setConfig(['billing_type' => 'TextTokens', 'billing_currency' => 'CNY', 'input_pricing' => '4', 'output_pricing' => '6']);
-        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price_cny' => '2', 'output_price_cny' => '3']);
+        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '2', 'output_price' => '3']);
         $result = (new ModelBillingMultiplierCalculator())->calculate(['mock-model' => ['resolved_model_id' => 'mock-model']], ['mock-model' => [$model]], $settings);
         $this->assertSame(2.0, $result['mock-model']);
     }
@@ -138,7 +138,6 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $this->assertSame('0.115', $settings->basePriceCny);
         $this->assertSame('2', $settings->inputPrice);
         $this->assertSame('USD', $settings->currency);
-        $this->assertNull($settings->inputPriceCny);
         $this->assertSame($settings->toArray(), ModelBillingMultiplierSettings::fromArray($settings->toArray())->toArray());
         $this->assertSame('0.138', $settings->withOverrides(['usd_to_cny_rate' => '6'])->basePriceCny);
         $this->assertSame('0.023', $settings->withOverrides(['currency' => 'CNY'])->basePriceCny);
@@ -157,18 +156,18 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         $this->assertSame(1.0, $result['mock']);
     }
 
-    /** 旧字段可写入人民币价格，但不能把旧界面回传的空别名当作美元价格清空。 */
-    public function testLegacyPriceUpdateCompatibility(): void
+    /** 重复保存相同单价并修改汇率时，开启和关闭都不能清空单价。 */
+    public function testRepeatedStandardUpdatesPreserveBothPrices(): void
     {
-        $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'currency' => 'USD', 'input_price' => '2', 'output_price' => '3']);
-        $unchanged = $settings->withOverrides(['input_price_cny' => null, 'output_price_cny' => null]);
-        $this->assertSame($settings->toArray(), $unchanged->toArray());
-        $legacy = $settings->withOverrides(['input_price_cny' => '4', 'output_price_cny' => '6']);
-        $this->assertSame('CNY', $legacy->currency);
-        $this->assertSame('0.046', $legacy->basePriceCny);
-        $legacyPayload = $legacy->toArray();
-        $legacyPayload['input_price_cny'] = '8';
-        $this->assertSame('0.086', $legacy->withOverrides($legacyPayload)->basePriceCny);
+        foreach ([true, false] as $enabled) {
+            $settings = ModelBillingMultiplierSettings::fromArray(['enabled' => $enabled, 'currency' => 'CNY', 'input_price' => '2', 'output_price' => '3']);
+            $result = $settings->withOverrides(['enabled' => $enabled, 'currency' => 'CNY', 'input_price' => '2', 'output_price' => '3', 'usd_to_cny_rate' => '6']);
+            $this->assertSame('2', $result->inputPrice);
+            $this->assertSame('3', $result->outputPrice);
+            $this->assertSame('0.023', $result->basePriceCny);
+            $this->assertArrayNotHasKey('input_price_cny', $result->toArray());
+            $this->assertArrayNotHasKey('output_price_cny', $result->toArray());
+        }
     }
 
     /** 币种使用严格枚举，历史缺失与空值在后端统一默认人民币。 */
@@ -191,7 +190,7 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
     {
         $stored = new PlatformSettings();
         $service = $this->createMock(PlatformSettingsAppService::class);
-        $service->method('get')->willReturnCallback(static function () use (&$stored) { return $stored; });
+        $service->method('getPersisted')->willReturnCallback(static function () use (&$stored) { return $stored; });
         $service->expects($this->exactly(2))->method('updateModelBillingMultiplier')->willReturnCallback(static function (array $overrides) use (&$stored) {
             $data = $stored->toArray();
             $data['model_billing_multiplier'] = $stored->getModelBillingMultiplier()->withOverrides($overrides)->toArray();
@@ -200,17 +199,17 @@ final class ModelBillingMultiplierSettingsTest extends TestCase
         });
         $api = new ModelBillingMultiplierApi($service);
         $request = $this->createMock(ModelBillingMultiplierUpdateRequest::class);
-        $request->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => true, 'input_price_cny' => '2.000000000001', 'output_price_cny' => '3', 'base_price_cny' => null]]);
+        $request->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => true, 'input_price' => '2.000000000001', 'output_price' => '3']]);
         $response = $api->update($request);
         $this->assertSame('0.02300000000001', $response['model_billing_multiplier']['base_price_cny']);
-        $this->assertSame('2.000000000001', $response['model_billing_multiplier']['input_price_cny']);
+        $this->assertSame('2.000000000001', $response['model_billing_multiplier']['input_price']);
         $this->assertSame('7', $response['model_billing_multiplier']['usd_to_cny_rate']);
         $disable = $this->createMock(ModelBillingMultiplierUpdateRequest::class);
         $disable->method('validated')->willReturn(['model_billing_multiplier' => ['enabled' => false]]);
         $api->update($disable);
         $after = $api->show()['model_billing_multiplier'];
         $this->assertFalse($after['enabled']);
-        $this->assertSame('2.000000000001', $after['input_price_cny']);
+        $this->assertSame('2.000000000001', $after['input_price']);
         $this->assertSame('0.02300000000001', $after['base_price_cny']);
     }
 }

@@ -42,10 +42,16 @@ class PlatformSettingsDomainService
             return PlatformSettings::fromArray($data);
         }
 
-        $entity = $this->magicUserSettingRepository->getGlobal(UserSettingKey::PlatformSettings->value);
-        $settings = $entity ? PlatformSettings::fromArray($entity->getValue()) : new PlatformSettings();
+        $settings = $this->getPersisted();
         $this->redis->set(self::CACHE_KEY, json_encode($settings->toArray()));
         return $settings;
+    }
+
+    /** 管理配置和写入链共用持久化读取，不能用展示缓存替代已保存状态。 */
+    public function getPersisted(): PlatformSettings
+    {
+        $entity = $this->magicUserSettingRepository->getGlobal(UserSettingKey::PlatformSettings->value);
+        return $entity ? PlatformSettings::fromArray($entity->getValue()) : new PlatformSettings();
     }
 
     /**
@@ -109,8 +115,7 @@ class PlatformSettingsDomainService
             throw new LockException();
         }
         try {
-            $entity = $this->magicUserSettingRepository->getGlobal(UserSettingKey::PlatformSettings->value);
-            $current = $entity ? PlatformSettings::fromArray($entity->getValue()) : new PlatformSettings();
+            $current = $this->getPersisted();
             $settings = $updater($current);
             return $this->persist($settings);
         } finally {

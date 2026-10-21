@@ -186,6 +186,26 @@ final class ModelMultiplierPermissionTest extends TestCase
         $this->assertSame('another prompt', $stored['global_system_prompt']);
     }
 
+    /** 管理读取跳过空展示缓存，多次刷新均返回持久化单价，不触发写入。 */
+    public function testAdminReadsPersistedPricesWithoutUsingDisplayCache(): void
+    {
+        $entity = new MagicUserSettingEntity();
+        $entity->setValue(['model_billing_multiplier' => ['enabled' => true, 'currency' => 'CNY', 'input_price' => '2', 'output_price' => '3', 'usd_to_cny_rate' => '6']]);
+        $repository = $this->createMock(MagicUserSettingRepositoryInterface::class);
+        $repository->expects($this->exactly(2))->method('getGlobal')->willReturn($entity);
+        $repository->expects($this->never())->method('saveGlobal');
+        $this->redis->expects($this->never())->method('get');
+        $locker = $this->createMock(LockerInterface::class);
+        $service = new PlatformSettingsAppService(new PlatformSettingsDomainService($repository, $this->redis, $locker));
+        $api = new ModelBillingMultiplierApi($service);
+        foreach (range(1, 2) as $attempt) {
+            $settings = $api->show()['model_billing_multiplier'];
+            $this->assertSame('2', $settings['input_price']);
+            $this->assertSame('3', $settings['output_price']);
+            $this->assertSame('0.023', $settings['base_price_cny']);
+        }
+    }
+
     /** 未取到锁不能写入，回调异常也必须释放已经取得的锁。 */
     public function testLockFailureAndExceptionRelease(): void
     {

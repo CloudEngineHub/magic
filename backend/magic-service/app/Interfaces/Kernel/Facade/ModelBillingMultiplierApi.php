@@ -30,7 +30,7 @@ class ModelBillingMultiplierApi
     #[CheckPermission(MagicResourceEnum::PLATFORM_AI_MODEL_MULTIPLIER, MagicOperationEnum::QUERY)]
     public function show(): array
     {
-        return ['model_billing_multiplier' => $this->settings->get()->getModelBillingMultiplier()->toArray()];
+        return ['model_billing_multiplier' => $this->settings->getPersisted()->getModelBillingMultiplier()->toArray()];
     }
 
     /** 保存倍率字段并返回服务端重新计算后的配置。 */

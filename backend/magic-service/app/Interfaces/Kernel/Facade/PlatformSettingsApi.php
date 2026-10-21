@@ -35,7 +35,7 @@ class PlatformSettingsApi
     #[CheckPermission(MagicResourceEnum::PLATFORM_SETTING_PLATFORM_INFO, MagicOperationEnum::QUERY)]
     public function show(): array
     {
-        $settings = $this->platformSettingsAppService->get()->toArray();
+        $settings = $this->platformSettingsAppService->getPersisted()->toArray();
         return self::platformSettingsToResponse($settings);
     }
 

@@ -30,10 +30,6 @@ class ModelBillingMultiplierUpdateRequest extends FormRequest
             'model_billing_multiplier.currency' => 'sometimes|string|in:CNY,USD',
             'model_billing_multiplier.input_price' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.output_price' => 'sometimes|nullable|string|max:25',
-            // 参考金额含美元换汇后最多有 27 位小数，允许管理端原样回传。
-            'model_billing_multiplier.base_price_cny' => 'sometimes|nullable|string|max:52',
-            'model_billing_multiplier.input_price_cny' => 'sometimes|nullable|string|max:25',
-            'model_billing_multiplier.output_price_cny' => 'sometimes|nullable|string|max:25',
             'model_billing_multiplier.usd_to_cny_rate' => 'sometimes|nullable|string|max:25',
         ];
     }

@@ -21,6 +21,7 @@ use App\Domain\Provider\DTO\Item\TokenPricing\BillingTierPriceRule;
 use App\Domain\Provider\DTO\Item\TokenPricing\BillingTiers;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Status;
+use App\Infrastructure\Util\Locker\LockerInterface;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
 use Hyperf\Context\ApplicationContext;
 use Hyperf\Redis\Redis;
@@ -128,7 +129,7 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         $calculator = new ModelBillingMultiplierCalculator();
         $capabilities = ['mock-auto' => ['resolved_model_id' => 'mock-leaf'], 'mock-leaf' => ['resolved_model_id' => 'mock-leaf']];
         $groups = ['mock-leaf' => [$this->model(['input_pricing' => '2', 'output_pricing' => '8'])]];
-        $enabled = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'base_price_cny' => '0.1', 'usd_to_cny_rate' => '7']);
+        $enabled = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '10', 'output_price' => '0', 'usd_to_cny_rate' => '7']);
         $result = $calculator->calculate($capabilities, $groups, $enabled);
         $this->assertSame($result['mock-leaf'], $result['mock-auto']);
         $this->assertSame(['mock-auto' => null, 'mock-leaf' => null], $calculator->calculate($capabilities, $groups, ModelBillingMultiplierSettings::fromArray([])));
@@ -159,12 +160,12 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
     /** 配置往返不丢金额精度，历史关闭且保留已填内容。 */
     public function testSettingsRoundTripAndDefaults(): void
     {
-        $this->assertSame(['enabled' => false, 'base_price_cny' => null, 'usd_to_cny_rate' => '7', 'input_price_cny' => null, 'output_price_cny' => null, 'currency' => 'CNY', 'input_price' => null, 'output_price' => null], (new PlatformSettings())->toArray()['model_billing_multiplier']);
+        $this->assertSame(['enabled' => false, 'base_price_cny' => null, 'usd_to_cny_rate' => '7', 'currency' => 'CNY', 'input_price' => null, 'output_price' => null], (new PlatformSettings())->toArray()['model_billing_multiplier']);
         foreach ([[], ['usd_to_cny_rate' => null], ['usd_to_cny_rate' => '']] as $unconfigured) {
             $this->assertSame('7', ModelBillingMultiplierSettings::fromArray($unconfigured)->toArray()['usd_to_cny_rate']);
         }
-        $this->assertSame('7', ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'base_price_cny' => '0.1'])->toArray()['usd_to_cny_rate']);
-        $data = ['enabled' => true, 'base_price_cny' => '0.000123456789', 'usd_to_cny_rate' => '7.123456789012', 'input_price_cny' => null, 'output_price_cny' => null, 'currency' => 'CNY', 'input_price' => null, 'output_price' => null];
+        $data = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'currency' => 'CNY', 'input_price' => '0.0123456789', 'output_price' => '0', 'usd_to_cny_rate' => '7.123456789012'])->toArray();
+        $this->assertSame('0.000123456789', $data['base_price_cny']);
         $this->assertSame($data, PlatformSettings::fromArray(['model_billing_multiplier' => $data])->toArray()['model_billing_multiplier']);
         foreach ([null, '', '0', '-1', 'NaN', '1e3', [], '0.0000000000000000000000000001'] as $invalid) {
             try {
@@ -206,9 +207,12 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         $container->method('get')->with(Redis::class)->willReturn($redis);
         ApplicationContext::setContainer($container);
         try {
-            $service = new PlatformSettingsDomainService($repository, $redis);
+            $locker = $this->createMock(LockerInterface::class);
+            $locker->method('spinLock')->willReturn(true);
+            $locker->method('release')->willReturn(true);
+            $service = new PlatformSettingsDomainService($repository, $redis, $locker);
             $this->assertFalse($service->get()->getModelBillingMultiplier()->enabled);
-            $data = ['enabled' => true, 'base_price_cny' => '0.023', 'usd_to_cny_rate' => '7', 'input_price_cny' => '2', 'output_price_cny' => '3', 'currency' => 'CNY', 'input_price' => '2', 'output_price' => '3'];
+            $data = ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '2', 'output_price' => '3', 'currency' => 'CNY', 'usd_to_cny_rate' => '7'])->toArray();
             $service->save(PlatformSettings::fromArray(['model_billing_multiplier' => $data]));
             $this->assertContains('magic:platform_settings_cache', $deleted);
             $this->assertContains('globalConfig:all', $deleted);
@@ -227,7 +231,7 @@ class ModelBillingMultiplierCalculatorTest extends TestCase
         return (new ModelBillingMultiplierCalculator())->calculate(
             ['mock-model' => ['resolved_model_id' => 'mock-model']],
             ['mock-model' => $models],
-            ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'base_price_cny' => '0.1', 'usd_to_cny_rate' => '7'])
+            ModelBillingMultiplierSettings::fromArray(['enabled' => true, 'input_price' => '10', 'output_price' => '0', 'usd_to_cny_rate' => '7'])
         );
     }
 
