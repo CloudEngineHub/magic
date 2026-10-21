@@ -3809,7 +3809,9 @@
 		"withdrawnDraft": "已撤下的消息"
 	},
 	"messageRenderError": {
+		"refresh": "刷新页面",
 		"retry": "重试",
+		"staleVersion": "页面有新版本，刷新后即可显示这条消息",
 		"title": "这条消息暂时无法显示"
 	},
 	"messageSendFailed": "消息未发送，请检查网络后点击消息旁的感叹号重试",
