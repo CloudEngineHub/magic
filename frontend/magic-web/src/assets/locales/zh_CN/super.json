@@ -3472,6 +3472,8 @@
 		"previewRefreshFailed": "预览未能更新，当前内容可能不是最新版本。",
 		"previewRefreshTooltip": "重新加载最新内容，并重新运行页面。",
 		"previewRetry": "重试",
+		"previewSlowLoading": "文件较大，仍在加载…",
+		"previewSlowRendering": "页面较大，仍在渲染…",
 		"previewUpdating": "正在更新预览…",
 		"projectContextUnavailable": "分享场景下，该功能暂不支持，可尝试通过协作的方式进行分享。",
 		"projectFileOperationConfirm": {

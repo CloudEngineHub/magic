@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 export type HtmlPreviewPhase = "idle" | "updating" | "rendering" | "failed"
-export const HTML_PREVIEW_READY_TIMEOUT = 15_000
+/** Past this the user is told it is slow; it is not a failure yet (large files, weak networks). */
+export const HTML_PREVIEW_SLOW_THRESHOLD = 15_000
+/** Production data: most 15s "failures" later rendered, so give up only well past the slow notice. */
+export const HTML_PREVIEW_READY_TIMEOUT = 60_000
 
 /**
  * Why a preview generation ended in `failed`. The notice itself is generic, so the
@@ -35,11 +38,17 @@ export function useHtmlPreviewFreshness(
 	const onFailedRef = useRef(onFailed)
 	onFailedRef.current = onFailed
 	const timer = useRef<ReturnType<typeof setTimeout>>()
+	const slowTimer = useRef<ReturnType<typeof setTimeout>>()
 	const mounted = useRef(true)
 	const [phase, setPhase] = useState<HtmlPreviewPhase>("idle")
+	const [slow, setSlow] = useState(false)
 	const [hasRendered, setHasRendered] = useState(false)
 	const hasRenderedRef = useRef(false)
-	const clearTimer = useCallback(() => clearTimeout(timer.current), [])
+	const clearTimer = useCallback(() => {
+		clearTimeout(timer.current)
+		clearTimeout(slowTimer.current)
+		setSlow(false)
+	}, [])
 	const isCurrent = useCallback(
 		(request: number) => mounted.current && generation.current === request,
 		[],
@@ -53,6 +62,20 @@ export function useHtmlPreviewFreshness(
 			error,
 		})
 	}, [])
+	const armTimers = useCallback(
+		(
+			request: number,
+			reason: Extract<HtmlPreviewFailureReason, "update_timeout" | "render_timeout">,
+		) => {
+			slowTimer.current = setTimeout(() => {
+				if (isCurrent(request)) setSlow(true)
+			}, HTML_PREVIEW_SLOW_THRESHOLD)
+			timer.current = setTimeout(() => {
+				if (isCurrent(request)) markFailed(reason)
+			}, HTML_PREVIEW_READY_TIMEOUT)
+		},
+		[isCurrent, markFailed],
+	)
 	const begin = useCallback(
 		(track = true) => {
 			const request = ++generation.current
@@ -60,12 +83,10 @@ export function useHtmlPreviewFreshness(
 			startedAt.current = Date.now()
 			if (!track) return request
 			setPhase("updating")
-			timer.current = setTimeout(() => {
-				if (isCurrent(request)) markFailed("update_timeout")
-			}, HTML_PREVIEW_READY_TIMEOUT)
+			armTimers(request, "update_timeout")
 			return request
 		},
-		[clearTimer, isCurrent, markFailed],
+		[clearTimer, armTimers],
 	)
 	const ready = useCallback(
 		(request: number) => {
@@ -83,11 +104,9 @@ export function useHtmlPreviewFreshness(
 			clearTimer()
 			setPhase("rendering")
 			// Background resource checks only start a timeout once a new document is sent.
-			timer.current = setTimeout(() => {
-				if (isCurrent(request)) markFailed("render_timeout")
-			}, HTML_PREVIEW_READY_TIMEOUT)
+			armTimers(request, "render_timeout")
 		},
-		[clearTimer, isCurrent, markFailed],
+		[clearTimer, armTimers],
 	)
 	const fail = useCallback(
 		(
@@ -113,5 +132,5 @@ export function useHtmlPreviewFreshness(
 			clearTimer()
 		}
 	}, [fileId, clearTimer])
-	return { phase, hasRendered, begin, ready, rendering, fail, isCurrent }
+	return { phase, slow, hasRendered, begin, ready, rendering, fail, isCurrent }
 }

@@ -1,6 +1,10 @@
 import { act, renderHook } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { HTML_PREVIEW_READY_TIMEOUT, useHtmlPreviewFreshness } from "../useHtmlPreviewFreshness"
+import {
+	HTML_PREVIEW_READY_TIMEOUT,
+	HTML_PREVIEW_SLOW_THRESHOLD,
+	useHtmlPreviewFreshness,
+} from "../useHtmlPreviewFreshness"
 
 describe("HTML preview freshness", () => {
 	it("keeps background checks quiet but times out an actual render", () => {
@@ -14,6 +18,38 @@ describe("HTML preview freshness", () => {
 		act(() => result.current.rendering(request))
 		act(() => vi.advanceTimersByTime(HTML_PREVIEW_READY_TIMEOUT))
 		expect(result.current.phase).toBe("failed")
+	})
+	it("flags a slow update without failing it, then recovers on acknowledgement", () => {
+		const onFailed = vi.fn()
+		const { result } = renderHook(() => useHtmlPreviewFreshness("file-a", onFailed))
+		let request = 0
+		act(() => {
+			request = result.current.begin()
+		})
+		act(() => vi.advanceTimersByTime(HTML_PREVIEW_SLOW_THRESHOLD))
+		expect(result.current.phase).toBe("updating")
+		expect(result.current.slow).toBe(true)
+		expect(onFailed).not.toHaveBeenCalled()
+		act(() => result.current.ready(request))
+		expect(result.current.phase).toBe("idle")
+		expect(result.current.slow).toBe(false)
+	})
+	it("fails only after the hard timeout and reports the elapsed time", () => {
+		const onFailed = vi.fn()
+		const { result } = renderHook(() => useHtmlPreviewFreshness("file-a", onFailed))
+		act(() => {
+			result.current.begin()
+		})
+		act(() => vi.advanceTimersByTime(HTML_PREVIEW_READY_TIMEOUT - 1))
+		expect(result.current.phase).toBe("updating")
+		act(() => vi.advanceTimersByTime(1))
+		expect(result.current.phase).toBe("failed")
+		expect(onFailed).toHaveBeenCalledWith(
+			expect.objectContaining({
+				reason: "update_timeout",
+				elapsedMs: HTML_PREVIEW_READY_TIMEOUT,
+			}),
+		)
 	})
 	beforeEach(() => vi.useFakeTimers())
 	afterEach(() => vi.useRealTimers())
