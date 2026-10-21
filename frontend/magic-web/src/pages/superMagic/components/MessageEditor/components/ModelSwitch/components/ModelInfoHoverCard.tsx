@@ -169,6 +169,8 @@ export function ModelInfoHoverProvider({
 			},
 			setEffortMenuOpen(menuOpen: boolean) {
 				state.effortMenuOpen = menuOpen
+				// 打开菜单前可能已有排队的关闭（例如行失焦），菜单打开即以菜单为准，撤销它。
+				if (menuOpen) cancelClose()
 				// 菜单收起（选完或点到外面）后，鼠标多半已不在卡片上，直接收起卡片。
 				if (!menuOpen) hide(false)
 			},
@@ -325,6 +327,11 @@ export function ModelInfoHoverCard({
 		},
 		onBlur: (event) => {
 			children.props.onBlur?.(event)
+			// 焦点移进卡片（点卡片里的强度按钮时，之前点选过的行会先失焦）不算离开。
+			const next = event.relatedTarget
+			if (next instanceof Element && next.closest("[data-model-switch-details-overlay]")) {
+				return
+			}
 			hover.leave(id)
 		},
 	})

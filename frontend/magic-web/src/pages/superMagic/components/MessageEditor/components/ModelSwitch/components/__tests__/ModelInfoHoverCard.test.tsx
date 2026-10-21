@@ -271,4 +271,24 @@ describe("ModelInfoHoverCard", () => {
 		advance(MODEL_INFO_HOVER_OPEN_DELAY_MS)
 		expect(screen.getByTestId("model-info-hover-card")).toHaveTextContent("GLM 5")
 	})
+
+	it("stays open when focus moves from a clicked row into the card's reasoning selector", () => {
+		renderCard(createModel({ reasoning_effort_levels: ["low", "high"] }), vi.fn())
+		const row = screen.getByTestId("model-switch-item")
+		// 先点选过这一行，焦点留在行上；再悬停打开卡片。
+		fireEvent.focus(row)
+		hoverRow(row)
+		const card = screen.getByTestId("model-info-hover-card")
+		fireEvent.pointerLeave(row, { pointerType: "mouse" })
+		fireEvent.pointerEnter(card, { pointerType: "mouse" })
+
+		const trigger = screen.getByTestId("model-switch-reasoning-trigger")
+		// 按下按钮时焦点从行移进卡片，行先收到 blur。
+		fireEvent.blur(row, { relatedTarget: trigger })
+		fireEvent.click(trigger)
+		advance(1000)
+
+		expect(screen.getByTestId("model-info-hover-card")).toBeTruthy()
+		expect(screen.getByTestId("model-switch-reasoning-menu")).toBeTruthy()
+	})
 })
