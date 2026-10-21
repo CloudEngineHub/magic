@@ -27,10 +27,6 @@ import {
 	resolveDesignProjectBasePathFromAttachments,
 } from "./utils/utils"
 import { resolveDesignCanvasResourceFileItem } from "./utils/designResourceReferenceResolver"
-import {
-	buildCanvasElementFileIndex,
-	setCanvasElementFileIndex,
-} from "./utils/canvasElementFileIndex"
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -798,22 +794,6 @@ function DesignViewer(props: DesignViewerProps) {
 		}
 	}, [designProjectId, displayName, isTabActive, resolveCanvasResourceFile])
 
-	useEffect(() => {
-		if (!designProjectId || isTabActive === false) {
-			setCanvasElementFileIndex(designProjectId, null)
-			return
-		}
-
-		const elements = designData.canvas?.elements
-		const index = buildCanvasElementFileIndex({
-			elements,
-			resolveFileBySrc: resolveCanvasResourceFile,
-		})
-		setCanvasElementFileIndex(designProjectId, index)
-
-		return () => setCanvasElementFileIndex(designProjectId, null)
-	}, [designData.canvas?.elements, designProjectId, isTabActive, resolveCanvasResourceFile])
-
 	const downloadPolicy = useDesignDownloadPolicy()
 	const getContentViewElement = useCallback(
 		(element: CanvasFileElement) =>
@@ -1009,6 +989,7 @@ function DesignViewer(props: DesignViewerProps) {
 		isInitialLoading,
 		canvasDesignRef,
 		isPlaybackMode,
+		resolveFileBySrc: resolveCanvasResourceFile,
 	})
 
 	// 获取画布设备信息：布局沿用业务断点，输入能力由画布统一检测
