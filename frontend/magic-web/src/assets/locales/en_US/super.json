@@ -5462,7 +5462,6 @@
 		"noMatchingProjects": "No matching projects",
 		"noProjects": "No projects",
 		"openInNewWindow": "Open in new window",
-		"personaResearchName": "AI research",
 		"pin": "Pin",
 		"pleaseSelectWorkspace": "Please select workspace",
 		"projectsCount": "{{count}} Projects",
@@ -5647,7 +5646,6 @@
 		"chat": "Chat project",
 		"magicClaw": "Lobster project",
 		"microApp": "Micro-app project",
-		"personaResearch": "AI research project",
 		"skill": "Skill project"
 	},
 	"recordingSummary": {

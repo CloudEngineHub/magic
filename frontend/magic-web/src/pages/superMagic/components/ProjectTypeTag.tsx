@@ -1,6 +1,6 @@
 import type { ComponentType } from "react"
 import type { LucideProps } from "lucide-react"
-import { Boxes, Bot, MessageCircle, Mic, Users, Wrench } from "lucide-react"
+import { Boxes, Bot, MessageCircle, Mic, Wrench } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import MagicTooltip from "@/components/base/MagicTooltip"
@@ -20,7 +20,6 @@ type ProjectTypeTagLabelKey =
 	| "projectTypeTag.skill"
 	| "projectTypeTag.audio"
 	| "projectTypeTag.chat"
-	| "projectTypeTag.personaResearch"
 
 const PROJECT_TYPE_ICONS: Record<
 	string,
@@ -34,7 +33,6 @@ const PROJECT_TYPE_ICONS: Record<
 	custom_skill: { Icon: Wrench, labelKey: "projectTypeTag.skill" },
 	audio: { Icon: Mic, labelKey: "projectTypeTag.audio" },
 	chat: { Icon: MessageCircle, labelKey: "projectTypeTag.chat" },
-	persona_research: { Icon: Users, labelKey: "projectTypeTag.personaResearch" },
 }
 
 /** 最近项目将类型标记放在置顶和协作标记所在的位置，不发起额外请求。 */

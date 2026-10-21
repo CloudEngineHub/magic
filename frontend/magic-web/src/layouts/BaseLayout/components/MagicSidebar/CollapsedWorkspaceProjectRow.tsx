@@ -17,7 +17,6 @@ import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatus
 import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
 import { canDragSidebarProject } from "./projectDndUtils"
 import { Button } from "@/components/shadcn-ui/button"
-import { TopicMode } from "@/pages/superMagic/pages/Workspace/types"
 
 type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void>
 
@@ -73,11 +72,7 @@ function CollapsedWorkspaceProjectRow({
 	const [isRenamePending, setIsRenamePending] = useState(false)
 	const suppressProjectItemClickRef = useRef(false)
 
-	// 研究项目名是内部标识，不允许改名。
-	const canRename =
-		canManageProject(project.user_role) &&
-		!!onRenameProject &&
-		project.project_mode !== TopicMode.PersonaResearch
+	const canRename = canManageProject(project.user_role) && !!onRenameProject
 	const canDrag = canDragSidebarProject(project, dndDisabled)
 
 	const {
@@ -118,11 +113,7 @@ function CollapsedWorkspaceProjectRow({
 	const showCollaborationTag =
 		isWorkspaceShortcutProject(project) || isCollaborationProject(project)
 	const hideNameTooltip = tooltipDisabled || isMenuOpen || isEditing || isRenamePending
-	// 研究项目的 project_name 是内部标识 persona_research，侧边栏统一显示产品名。
-	const projectName =
-		project.project_mode === TopicMode.PersonaResearch
-			? t("project.personaResearchName")
-			: project.project_name || t("project.unnamedProject")
+	const projectName = project.project_name || t("project.unnamedProject")
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
 		return (
@@ -228,7 +219,9 @@ function CollapsedWorkspaceProjectRow({
 			data-collapsed-sidebar-dnd-source={canDrag ? "project" : undefined}
 			data-collapsed-sidebar-dnd-workspace-id={workspaceId}
 			data-collapsed-sidebar-dnd-project-id={project.id}
-			data-collapsed-sidebar-dnd-label={canDrag ? projectName : undefined}
+			data-collapsed-sidebar-dnd-label={
+				canDrag ? project.project_name || t("project.unnamedProject") : undefined
+			}
 			data-collapsed-sidebar-dnd-drop-type="project"
 			onDragStart={blockProjectItemClickTemporarily}
 			onDragEnd={blockProjectItemClickTemporarily}
