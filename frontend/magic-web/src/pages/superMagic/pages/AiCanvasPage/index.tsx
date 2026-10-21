@@ -16,12 +16,10 @@ import { createAiCanvasDocument } from "@/pages/superMagic/pages/TopicPage/utils
 import { preloadTopicPage } from "@/pages/superMagic/pages/TopicPage/utils"
 import AiCanvasCreatePrompt from "./components/AiCanvasCreatePrompt"
 import AiCanvasHero from "./components/AiCanvasHero"
-import AiCanvasInspirations from "./components/AiCanvasInspirations"
 import AiCanvasNewCard from "./components/AiCanvasNewCard"
 import AiCanvasProjectCard from "./components/AiCanvasProjectCard"
-import { useDesignInspirations } from "./hooks/useDesignInspirations"
 import { useCanvasCovers } from "./hooks/useCanvasCovers"
-import { buildBoardArtworks, buildShowcaseInspirationGroups } from "./utils/boardArtworks"
+import { buildBoardArtworks } from "./utils/boardArtworks"
 
 const PAGE_SIZE = 60
 // Stable empty list so memoized derivations do not recompute before the workspace loads.
@@ -48,23 +46,9 @@ function AiCanvasPage() {
 
 	const projects = workspace ? projectStore.getProjectsByWorkspace(workspace.id) : NO_PROJECTS
 	const actions = useProjectItemActionProps({ selectedWorkspace: workspace })
-	const viewportRef = useRef<HTMLDivElement>(null)
-	const { groups: configuredInspirationGroups } = useDesignInspirations()
 	const covers = useCanvasCovers(projects)
-	// Configured design inspirations win; the built-in showcase only fills an empty wall.
-	const inspirationGroups = useMemo(
-		() =>
-			configuredInspirationGroups.length > 0
-				? configuredInspirationGroups
-				: buildShowcaseInspirationGroups(t("home.showcaseGroup")),
-		[configuredInspirationGroups, t],
-	)
 	// Static: the hero board only shows the built-in showcase (placeholders until it exists).
 	const boardArtworks = useMemo(() => buildBoardArtworks(), [])
-	// After picking an inspiration the prompt lands in the composer at the top of the page.
-	const scrollToComposer = useMemoizedFn(() => {
-		viewportRef.current?.scrollTo({ top: 0, behavior: "smooth" })
-	})
 
 	const loadWorkspace = useMemoizedFn(async () => {
 		setWorkspaceError(false)
@@ -190,7 +174,6 @@ function AiCanvasPage() {
 		// with the hero and the sections below sharing one surface.
 		<ScrollArea
 			className="m-2 h-[calc(100%_-_16px)] w-[calc(100%_-_16px)] overflow-hidden rounded-2xl border border-border/70 bg-background shadow-sm"
-			viewportRef={viewportRef}
 			data-testid="ai-canvas-page"
 		>
 			{/* The hero is full-bleed; the sections below keep a centered reading width. */}
@@ -297,11 +280,6 @@ function AiCanvasPage() {
 							</>
 						)}
 					</section>
-
-					<AiCanvasInspirations
-						groups={inspirationGroups}
-						onPromptApplied={scrollToComposer}
-					/>
 				</div>
 			</div>
 			{actions.projectModals}
