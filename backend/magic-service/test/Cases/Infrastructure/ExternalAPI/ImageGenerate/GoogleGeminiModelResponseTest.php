@@ -160,6 +160,23 @@ class GoogleGeminiModelResponseTest extends TestCase
         ], $response->getUsage()->toArray());
     }
 
+    public function testImageOutputTokensFallbackToCandidateCountWithoutImageDetails(): void
+    {
+        $model = new TestableGoogleGeminiModel();
+        $reflection = new ReflectionClass(GoogleGeminiModel::class);
+        $method = $reflection->getMethod('extractTokenUsage');
+        $method->setAccessible(true);
+
+        $usage = $method->invoke($model, [
+            'candidatesTokenCount' => 34,
+            'candidatesTokensDetails' => [
+                ['modality' => 'TEXT', 'tokenCount' => 34],
+            ],
+        ]);
+
+        self::assertSame(34, $usage['completion_tokens']);
+    }
+
     public function testImageSafetyResponseThrowsBusinessExceptionWithRawResponse(): void
     {
         $finishMessage = 'Unable to show the generated image because it violated safety policies.';

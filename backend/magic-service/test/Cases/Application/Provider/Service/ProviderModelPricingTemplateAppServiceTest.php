@@ -167,8 +167,8 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
         $labels = array_column($template['items'], 'label', 'billing_object');
         self::assertSame('文本输入 Token', $labels[BillingObject::IMAGE_INPUT_TOKEN]);
         self::assertSame('文本输入 Token 成本', $labels[BillingObject::IMAGE_INPUT_TOKEN_COST]);
-        self::assertSame('文本输出 Token', $labels[BillingObject::THOUGHT_TOKEN]);
-        self::assertSame('文本输出 Token 成本', $labels[BillingObject::THOUGHT_TOKEN_COST]);
+        self::assertSame('文本｜思考输出 Token', $labels[BillingObject::THOUGHT_TOKEN]);
+        self::assertSame('文本｜思考输出 Token 成本', $labels[BillingObject::THOUGHT_TOKEN_COST]);
     }
 
     public function testQueriesSkipsModelSpecificTemplateWhenModelIdMissing(): void

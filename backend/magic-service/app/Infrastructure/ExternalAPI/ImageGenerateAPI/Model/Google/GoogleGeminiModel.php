@@ -430,6 +430,9 @@ class GoogleGeminiModel extends AbstractImageGenerate
                 }
             }
         }
+        if ($completionTokens <= 0) {
+            $completionTokens = (int) ($usageMetadata['candidatesTokenCount'] ?? 0);
+        }
 
         return [
             'prompt_tokens' => (int) ($usageMetadata['promptTokenCount'] ?? 0),
