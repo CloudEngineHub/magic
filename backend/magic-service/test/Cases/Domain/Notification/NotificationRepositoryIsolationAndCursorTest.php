@@ -29,7 +29,7 @@ final class NotificationRepositoryIsolationAndCursorTest extends TestCase
     {
         parent::setUp();
 
-        if (! Schema::hasTable('magic_notifications') || ! Schema::hasColumn('magic_notifications', 'business_result')) {
+        if (! Schema::hasTable('magic_notifications')) {
             self::markTestSkipped('notification table is not fully migrated');
         }
     }
@@ -138,7 +138,6 @@ final class NotificationRepositoryIsolationAndCursorTest extends TestCase
             'message_status' => NotificationMessageStatus::WITHDRAWN->value,
             'read_at' => '2026-10-16 10:00:00',
             'action_status' => NotificationActionStatus::NONE->value,
-            'business_result' => null,
             'actioned_at' => null,
             'actioned_by' => null,
             'created_at' => '2026-10-16 09:00:00',
@@ -194,7 +193,6 @@ final class NotificationRepositoryIsolationAndCursorTest extends TestCase
             'message_status' => 'active',
             'read_at' => null,
             'action_status' => 'none',
-            'business_result' => null,
             'actioned_at' => null,
             'actioned_by' => null,
             'created_at' => $createdAt,

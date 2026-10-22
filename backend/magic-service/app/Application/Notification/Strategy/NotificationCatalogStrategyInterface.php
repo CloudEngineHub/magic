@@ -22,4 +22,7 @@ interface NotificationCatalogStrategyInterface
     public function supportsEvent(string $eventType): bool;
 
     public function supportsNotification(string $notificationType): bool;
+
+    /** @param array<string, mixed> $payload */
+    public function notificationTypeForEvent(string $eventType, array $payload = []): ?string;
 }

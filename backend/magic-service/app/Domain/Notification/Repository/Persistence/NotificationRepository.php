@@ -319,7 +319,7 @@ final class NotificationRepository implements NotificationRepositoryInterface
             ->where('message_status', NotificationMessageStatus::WITHDRAWN->value)
             ->update([
                 'category' => $entity->getCategory()?->value,
-                'type' => $entity->getType(),
+                'type' => $entity->getType()?->value,
                 'template_version' => $entity->getTemplateVersion(),
                 'payload' => json_encode($entity->getPayload(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
                 'source_domain' => $entity->getSourceDomain(),
@@ -329,7 +329,6 @@ final class NotificationRepository implements NotificationRepositoryInterface
                 'message_status' => NotificationMessageStatus::ACTIVE->value,
                 'read_at' => null,
                 'action_status' => $entity->getActionStatus()->value,
-                'business_result' => null,
                 'actioned_at' => null,
                 'actioned_by' => null,
                 'created_at' => $this->now(),
