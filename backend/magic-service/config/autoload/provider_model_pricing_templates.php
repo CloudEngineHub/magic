@@ -123,11 +123,11 @@ return [
             'items' => [
                 [
                     'billing_object' => BillingObject::IMAGE_INPUT_TOKEN,
-                    'label' => '图片输入 Token',
+                    'label' => '文本输入 Token',
                 ],
                 [
                     'billing_object' => BillingObject::IMAGE_INPUT_TOKEN_COST,
-                    'label' => '图片输入 Token 成本',
+                    'label' => '文本输入 Token 成本',
                 ],
                 [
                     'billing_object' => BillingObject::IMAGE_OUTPUT_TOKEN,
@@ -139,11 +139,11 @@ return [
                 ],
                 [
                     'billing_object' => BillingObject::THOUGHT_TOKEN,
-                    'label' => '思考 Token',
+                    'label' => '文本｜思考输出 Token',
                 ],
                 [
                     'billing_object' => BillingObject::THOUGHT_TOKEN_COST,
-                    'label' => '思考 Token 成本',
+                    'label' => '文本｜思考输出 Token 成本',
                 ],
             ],
         ],
