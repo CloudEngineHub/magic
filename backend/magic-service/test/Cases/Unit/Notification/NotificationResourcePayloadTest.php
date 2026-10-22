@@ -36,5 +36,18 @@ final class NotificationResourcePayloadTest extends TestCase
         $entity->setType('task_finished');
         $entity->setSourceId('task-1');
         self::assertArrayNotHasKey('resource_id', NotificationResourcePayload::forNotification($entity));
+        self::assertFalse(NotificationResourcePayload::canOpenResource($entity));
+    }
+
+    public function testSharingRequiresTheShareCodeAndRevokedResourcesCannotOpen(): void
+    {
+        $entity = new NotificationEntity();
+        $entity->setType('project_shared');
+        $entity->setSourceId('share-id');
+        self::assertFalse(NotificationResourcePayload::canOpenResource($entity));
+        $entity->setPayload(['share_code' => 'code']);
+        self::assertTrue(NotificationResourcePayload::canOpenResource($entity));
+        $entity->setMessageStatus('withdrawn');
+        self::assertFalse(NotificationResourcePayload::canOpenResource($entity));
     }
 }

@@ -108,15 +108,18 @@ final readonly class ReviewNotificationAppService
             'version_name' => $versionName,
         ];
 
-        $this->publisher->publish(new EventEnvelope(
-            eventId: (string) IdGenerator::getSnowId(),
-            eventType: $eventType,
-            occurredAt: date('Y-m-d H:i:s'),
-            producer: 'super_magic.review',
-            organizationCode: $organizationCode,
-            source: new EventSource('review', $resourceType, $resourceId, $versionId),
-            recipients: $recipients,
-            payload: $payload,
-        ));
+        // Keep department fan-out within the envelope validator's recipient limit.
+        foreach (array_chunk($recipients, 500) as $batch) {
+            $this->publisher->publish(new EventEnvelope(
+                eventId: (string) IdGenerator::getSnowId(),
+                eventType: $eventType,
+                occurredAt: date('Y-m-d H:i:s'),
+                producer: 'super_magic.review',
+                organizationCode: $organizationCode,
+                source: new EventSource('review', $resourceType, $resourceId, $versionId),
+                recipients: $batch,
+                payload: $payload,
+            ));
+        }
     }
 }

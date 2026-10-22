@@ -24,10 +24,25 @@ final class NotificationResourcePayload
             return false;
         }
         if ($notification->getCategory()?->value === 'authorization') {
-            return $notification->getActionStatus()->value === 'accepted'
-                && $businessResult === 'applied';
+            if ($notification->getActionStatus()->value !== 'accepted' || $businessResult !== 'applied') {
+                return false;
+            }
         }
-        return ! empty(self::forNotification($notification)['resource_type']);
+        $payload = self::forNotification($notification);
+        if (in_array($type, ['project_shared', 'file_shared'], true)) {
+            return ! empty($payload['share_code']);
+        }
+        if (($payload['project_mode'] ?? '') === 'magiclaw') {
+            return ! empty($payload['resource_code']);
+        }
+        if (in_array($type, ['task_finished', 'task_failed'], true)) {
+            return ! empty($payload['project_id']) && ! empty($payload['topic_id']);
+        }
+        return match ($payload['resource_type'] ?? null) {
+            'agent', 'skill' => ! empty($payload['resource_code']),
+            'project', 'micro_app' => ! empty($payload['resource_id']),
+            default => false,
+        };
     }
 
     /** @return array<string, mixed> */
