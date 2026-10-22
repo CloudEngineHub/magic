@@ -28,10 +28,13 @@ class AssetTagDomainService
     ) {
     }
 
-    /** @return AssetTagEntity[] */
-    public function listVisible(AssetDataIsolation $dataIsolation): array
+    /**
+     * @param null|string $businessType 只看某个业务类型的标签；null 表示不过滤（后台管理查看全部）
+     * @return AssetTagEntity[]
+     */
+    public function listVisible(AssetDataIsolation $dataIsolation, ?string $businessType = null): array
     {
-        return $this->tags->queryVisibleTree($dataIsolation, $dataIsolation->getCurrentUserId());
+        return $this->tags->queryVisibleTree($dataIsolation, $dataIsolation->getCurrentUserId(), $businessType);
     }
 
     /** @param array<int, array{name_i18n: array{default: string, zh_CN: string, en_US: string}, tags: array<int, array{default: string, zh_CN: string, en_US: string}>}> $groups */
@@ -79,12 +82,18 @@ class AssetTagDomainService
         return $this->tags->save($dataIsolation, $entity);
     }
 
-    public function createOfficial(AssetDataIsolation $dataIsolation, string $name, AssetTagNodeType $nodeType, int $parentId): AssetTagEntity
-    {
-        $this->assertStructure($dataIsolation, $nodeType, $parentId);
+    public function createOfficial(
+        AssetDataIsolation $dataIsolation,
+        string $name,
+        AssetTagNodeType $nodeType,
+        int $parentId,
+        string $businessType = AssetTagEntity::DEFAULT_BUSINESS_TYPE,
+    ): AssetTagEntity {
+        $this->assertStructure($dataIsolation, $nodeType, $parentId, null, $businessType);
         $uid = $dataIsolation->getCurrentUserId();
         $entity = (new AssetTagEntity())
             ->setOrganizationCode($dataIsolation->getCurrentOrganizationCode())
+            ->setBusinessType($businessType)
             ->setNameI18n(['default' => trim($name)])
             ->setNodeType($nodeType->value)
             ->setParentId($parentId)
@@ -99,7 +108,8 @@ class AssetTagDomainService
         if ($entity === null || $entity->getOwnerUid() !== null) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
         }
-        $this->assertStructure($dataIsolation, $nodeType, $parentId, $id);
+        // 业务类型创建后不可更改，移动节点时只检查它与新父级是否同类型。
+        $this->assertStructure($dataIsolation, $nodeType, $parentId, $id, $entity->getBusinessType());
         $entity->setNameI18n(['default' => trim($name)])->setParentId($parentId)->setUpdatedUid($dataIsolation->getCurrentUserId());
         return $this->tags->save($dataIsolation, $entity);
     }
@@ -148,7 +158,7 @@ class AssetTagDomainService
     /** @param array<int, int|string> $tagIds */
     public function syncAssetTags(AssetDataIsolation $dataIsolation, AssetEntity $asset, array $tagIds): void
     {
-        $tags = $this->resolveUsableTags($dataIsolation, $tagIds);
+        $tags = $this->resolveUsableTags($dataIsolation, $tagIds, $asset->getAssetBusinessType());
         $asset->setSearchText($this->searchTextBuilder->build($asset, $tags));
         Db::transaction(function () use ($dataIsolation, $asset, $tags): void {
             $this->relations->syncAssetTags($dataIsolation, (string) $asset->getId(), array_map(static fn (AssetTagEntity $tag): int => (int) $tag->getId(), $tags), $dataIsolation->getCurrentUserId());
@@ -235,8 +245,13 @@ class AssetTagDomainService
      * 个人标签允许直接建在根级：根级节点既可以是标签组，也可以是暂时没有下级的普通标签。
      * 树最多两级，二级节点只能挂在根级节点下，不能再被挂子级。
      */
-    private function assertStructure(AssetDataIsolation $dataIsolation, AssetTagNodeType $nodeType, int $parentId, null|int|string $ignoreId = null): void
-    {
+    private function assertStructure(
+        AssetDataIsolation $dataIsolation,
+        AssetTagNodeType $nodeType,
+        int $parentId,
+        null|int|string $ignoreId = null,
+        string $businessType = AssetTagEntity::DEFAULT_BUSINESS_TYPE,
+    ): void {
         if ($parentId === 0) {
             return;
         }
@@ -258,11 +273,21 @@ class AssetTagDomainService
         if ($parent->getOwnerUid() !== null && $parent->getOwnerUid() !== $dataIsolation->getCurrentUserId()) {
             ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
         }
+        // 标签组和其下的标签必须属于同一业务类型，否则一个组里会混进别的场景的标签。
+        if ($parent->getBusinessType() !== $businessType) {
+            ExceptionBuilder::throw(AssetErrorCode::TAG_STRUCTURE_INVALID);
+        }
     }
 
-    /** @return AssetTagEntity[] */
-    private function resolveUsableTags(AssetDataIsolation $dataIsolation, array $tagIds): array
+    /**
+     * 素材只能挂同业务类型的标签：头像库的标签不能挂到通用素材上，反之亦然。
+     * 素材未指定业务类型时按通用处理，与创建素材时的默认值一致。
+     *
+     * @return AssetTagEntity[]
+     */
+    private function resolveUsableTags(AssetDataIsolation $dataIsolation, array $tagIds, ?string $assetBusinessType = null): array
     {
+        $businessType = trim((string) $assetBusinessType) === '' ? AssetTagEntity::DEFAULT_BUSINESS_TYPE : trim((string) $assetBusinessType);
         $result = [];
         foreach (array_values(array_unique(array_filter(array_map('intval', $tagIds), static fn (int $id): bool => $id > 0))) as $tagId) {
             $tag = $this->tags->findById($dataIsolation, $tagId);
@@ -270,6 +295,7 @@ class AssetTagDomainService
             if ($tag === null
                 || $this->tags->hasChildren($dataIsolation, $tagId)
                 || ($tag->getOwnerUid() !== null && $tag->getOwnerUid() !== $dataIsolation->getCurrentUserId())
+                || $tag->getBusinessType() !== $businessType
             ) {
                 ExceptionBuilder::throw(AssetErrorCode::TAG_NOT_ALLOWED);
             }

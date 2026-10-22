@@ -3857,9 +3857,12 @@
 		"withdrawnDraft": "已撤下的消息"
 	},
 	"messageRenderError": {
+		"refresh": "刷新页面",
 		"retry": "重试",
+		"staleVersion": "页面有新版本，刷新后即可显示这条消息",
 		"title": "这条消息暂时无法显示"
 	},
+	"messageSendFailed": "消息未发送，请检查网络后点击消息旁的感叹号重试",
 	"microAppPage": {
 		"conversation": {
 			"collapse": "收起消息面板",
@@ -4891,6 +4894,7 @@
 			"navMagiClaw": "{{clawBrand}}",
 			"navMicroApps": "微应用",
 			"navMyCrew": "数字员工",
+			"navPersonaResearch": "AI 研究",
 			"navRecording": "录音与纪要",
 			"navSuper": "首页",
 			"navTrash": "回收站",

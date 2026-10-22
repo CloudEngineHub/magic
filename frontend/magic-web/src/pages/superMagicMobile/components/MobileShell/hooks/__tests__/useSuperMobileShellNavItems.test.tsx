@@ -116,6 +116,12 @@ describe("useSuperMobileShellNavItems", () => {
 				nativeRecordingTab: "ai_recording",
 			},
 			{
+				key: "personaResearch",
+				label: "label:mobile.shell.navPersonaResearch",
+				routeName: RouteName.PersonaResearch,
+				nativeRecordingTab: undefined,
+			},
+			{
 				key: "myCrew",
 				label: "label:mobile.shell.navMyCrew",
 				routeName: RouteName.MyCrew,

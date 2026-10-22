@@ -113,6 +113,11 @@ export const enum RoutePath {
 	AiCanvas = "/super/ai-canvas",
 	/** AI 画布项目：ai-canvas 项目的专属地址；话题不进地址，切换话题时地址不变 */
 	AiCanvasProjectState = "/super/ai-canvas/:projectId",
+	PersonaResearch = "/super/research",
+	PersonaResearchPersonas = "/super/research/personas",
+	PersonaResearchTemplates = "/super/research/templates",
+	PersonaResearchStudies = "/super/research/studies",
+	PersonaResearchStudy = "/super/research/:topicId",
 	SuperAssistant = "/super/assistant",
 	CrewMarket = "/market",
 	CrewMarketCrew = "/market/crew",

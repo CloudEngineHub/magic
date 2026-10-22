@@ -13,10 +13,10 @@ use App\Domain\Asset\Entity\AssetTagEntity;
 interface AssetTagRepositoryInterface
 {
     /** @return AssetTagEntity[] */
-    public function queryVisible(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array;
+    public function queryVisible(AssetDataIsolation $dataIsolation, ?string $ownerUid = null, ?string $businessType = null): array;
 
     /** @return AssetTagEntity[] */
-    public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null): array;
+    public function queryVisibleTree(AssetDataIsolation $dataIsolation, ?string $ownerUid = null, ?string $businessType = null): array;
 
     public function findById(AssetDataIsolation $dataIsolation, int|string $id): ?AssetTagEntity;
 

@@ -58,6 +58,12 @@ export enum TopicMode {
 	AiCanvas = "ai-canvas",
 
 	/**
+	 * AI 消费者研究
+	 * 不会在模式列表中存在，只用于 AI 研究独立页面的话题
+	 */
+	PersonaResearch = "persona_research",
+
+	/**
 	 * 默认模式
 	 * 用于获取默认模式模型列表
 	 */

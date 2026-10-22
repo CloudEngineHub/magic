@@ -10,6 +10,7 @@ import type { MentionPanelToolsStore } from "./domains/tools/store"
 import type { MentionPanelUploadFilesStore } from "./domains/upload-files/store"
 import type { MentionPanelWorkspaceFilesStore } from "./domains/workspace-files/store"
 import type { MentionPanelMicroAppsStore } from "./domains/micro-apps"
+import type { MentionPanelSceneCatalogStore } from "./domains/scene-catalog/store"
 
 interface MentionPanelCatalogPluginHost {
 	agentsStore: Pick<MentionPanelAgentsStore, "getItems">
@@ -21,6 +22,7 @@ interface MentionPanelCatalogPluginHost {
 	toolsStore: Pick<MentionPanelToolsStore, "getItems">
 	uploadFilesStore: Pick<MentionPanelUploadFilesStore, "getItems">
 	microAppsStore: Pick<MentionPanelMicroAppsStore, "getItems">
+	sceneCatalogStore: Pick<MentionPanelSceneCatalogStore, "getItems">
 }
 
 interface MentionPanelSearchPluginHost {
@@ -34,6 +36,7 @@ interface MentionPanelSearchPluginHost {
 	uploadFilesStore: Pick<MentionPanelUploadFilesStore, "searchItems">
 	workspaceFilesStore: Pick<MentionPanelWorkspaceFilesStore, "searchItems">
 	microAppsStore: Pick<MentionPanelMicroAppsStore, "searchItems">
+	sceneCatalogStore: Pick<MentionPanelSceneCatalogStore, "searchItems">
 }
 
 interface MentionPanelValidationPluginHost {

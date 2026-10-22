@@ -28,6 +28,7 @@ enum ProjectMode: string
     case MAGICLAW = 'magiclaw'; // magic 龙虾模式
     case CHAT = 'chat';         // 对话模式
     case MICRO_APP = 'micro-app'; // 微应用开发模式
+    case PERSONA_RESEARCH = 'persona_research'; // AI 研究模式（每个用户一个的特殊项目）
 
     /**
      * AI 画布模式：项目位于 ai-canvas 专属工作区，打开后只展示一个画布和对话。
@@ -75,6 +76,8 @@ enum ProjectMode: string
             self::MAGICLAW->value,
             self::CHAT->value,
             self::MICRO_APP->value,
+            // 研究项目没有项目工作区入口，由「AI 研究」页通过特殊项目接口按 key 读取，不进入项目列表。
+            self::PERSONA_RESEARCH->value,
         ];
     }
 
@@ -116,6 +119,7 @@ enum ProjectMode: string
             self::CHAT => '对话模式',
             self::MICRO_APP => '微应用开发模式',
             self::AI_CANVAS => 'AI 画布模式',
+            self::PERSONA_RESEARCH => 'AI 研究模式',
         };
     }
 }

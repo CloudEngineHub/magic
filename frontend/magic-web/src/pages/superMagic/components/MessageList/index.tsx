@@ -60,6 +60,8 @@ import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import { extractTurns } from "./export/extractMessageContent"
 
 import { MessageListProvider, useMessageListContext } from "./context"
+import { buildFoldedToolRuns } from "./folded-tool-runs"
+import { FoldedToolRunsContext } from "./folded-tool-runs-context"
 import { useFileBundleDownload } from "@/pages/superMagic/hooks/useFileBundleDownload"
 import defaultProjectFilesStore from "@/stores/projectFiles"
 import MessageRenderContent from "./components/MessageRenderContent"
@@ -317,29 +319,40 @@ const MessageList = observer(
 		// 	mainDisplayData
 		// })
 
-		const { messages, messageKeys, messageTurnGroups, normalVirtualMessageItems } =
-			useMemo(() => {
-				// Visibility has already been decided at the User-turn boundary. Do not let the
-				// converter filter a temporarily revoked Assistant out of an otherwise restored turn.
-				const messages = messagesConverter(
-					mainDisplayData,
-					false,
-					projectionCachesRef.current.main,
-					projectionVersion,
-				)
-				const projection = buildVirtualMessageProjection(messages)
-				const stableItems = stabilizeVirtualMessageItems(
-					normalVirtualMessageItemsRef.current,
-					projection.items,
-				)
-				normalVirtualMessageItemsRef.current = stableItems
-				return {
-					messages,
-					messageKeys: projection.messageKeys,
-					messageTurnGroups: projection.messageTurnGroups,
-					normalVirtualMessageItems: stableItems,
-				}
-			}, [mainDisplayData, projectionVersion])
+		const {
+			messages,
+			messageKeys,
+			messageTurnGroups,
+			normalVirtualMessageItems,
+			foldedToolRuns,
+		} = useMemo(() => {
+			// Visibility has already been decided at the User-turn boundary. Do not let the
+			// converter filter a temporarily revoked Assistant out of an otherwise restored turn.
+			const messages = messagesConverter(
+				mainDisplayData,
+				false,
+				projectionCachesRef.current.main,
+				projectionVersion,
+			)
+			// Repeated identical tool failures (research interviews only) fold into one card.
+			const foldedToolRuns = buildFoldedToolRuns(messages)
+			const projection = buildVirtualMessageProjection(
+				messages,
+				foldedToolRuns.hiddenSourceIndices,
+			)
+			const stableItems = stabilizeVirtualMessageItems(
+				normalVirtualMessageItemsRef.current,
+				projection.items,
+			)
+			normalVirtualMessageItemsRef.current = stableItems
+			return {
+				messages,
+				messageKeys: projection.messageKeys,
+				messageTurnGroups: projection.messageTurnGroups,
+				normalVirtualMessageItems: stableItems,
+				foldedToolRuns: foldedToolRuns.attemptsByLeadId,
+			}
+		}, [mainDisplayData, projectionVersion])
 
 		const displayPreference = useMessageDisplayPreference(enableSimpleMode && !isShare)
 		const collapseProcesses =
@@ -969,7 +982,7 @@ const MessageList = observer(
 
 		return (
 			<MessageListProvider value={augmentedMessageListContext}>
-				<>
+				<FoldedToolRunsContext.Provider value={foldedToolRuns}>
 					{fileBundleDownload.agreementModal}
 					<div
 						className={cn(
@@ -1044,7 +1057,7 @@ const MessageList = observer(
 							/>
 						)}
 					</div>
-				</>
+				</FoldedToolRunsContext.Provider>
 			</MessageListProvider>
 		)
 	},

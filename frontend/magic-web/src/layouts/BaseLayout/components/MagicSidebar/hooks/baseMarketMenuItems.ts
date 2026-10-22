@@ -1,4 +1,4 @@
-import { Mic, Palette, Presentation, type LucideIcon } from "lucide-react"
+import { Mic, Palette, Presentation, UsersRound, type LucideIcon } from "lucide-react"
 import { MagiClaw, Skills } from "@/enhance/lucide-react"
 import { RouteName } from "@/routes/constants"
 import type { SidebarMarketMenuItem } from "@/layouts/BaseLayout/components/MagicSidebar/hooks/useSidebarMarketMenuItems.types"
@@ -24,6 +24,19 @@ export const BASE_MARKET_MENU_ITEMS: SidebarMarketMenuItem[] = [
 		activeRouteNames: [RouteName.AiCanvas, RouteName.AiCanvasProjectState],
 		testId: "sidebar-content-ai-canvas-button",
 		Icon: Palette,
+	},
+	{
+		titleKey: "sidebar:personaResearch.title",
+		routeName: RouteName.PersonaResearch,
+		activeRouteNames: [
+			RouteName.PersonaResearch,
+			RouteName.PersonaResearchPersonas,
+			RouteName.PersonaResearchTemplates,
+			RouteName.PersonaResearchStudies,
+			RouteName.PersonaResearchStudy,
+		],
+		testId: "sidebar-content-persona-research-button",
+		Icon: UsersRound,
 	},
 	{
 		titleKey: "sidebar:superLobster.title",

@@ -3859,9 +3859,12 @@
 		"withdrawnDraft": "Withdrawn message"
 	},
 	"messageRenderError": {
+		"refresh": "Refresh",
 		"retry": "Retry",
+		"staleVersion": "A new version is available. Refresh to show this message",
 		"title": "This message is temporarily unavailable"
 	},
+	"messageSendFailed": "Message not sent. Check your network, then tap the warning icon next to it to retry.",
 	"microAppPage": {
 		"conversation": {
 			"collapse": "Collapse message panel",
@@ -4893,6 +4896,7 @@
 			"navMagiClaw": "{{clawBrand}}",
 			"navMicroApps": "Micro Apps",
 			"navMyCrew": "My Crew",
+			"navPersonaResearch": "AI Research",
 			"navRecording": "Recordings & summaries",
 			"navSuper": "Home",
 			"navTrash": "Trash",

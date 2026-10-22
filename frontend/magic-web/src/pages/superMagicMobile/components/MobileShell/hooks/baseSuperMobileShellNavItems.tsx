@@ -8,6 +8,7 @@ import {
 	Mic,
 	Palette,
 	Trash2,
+	UsersRound,
 } from "lucide-react"
 
 import { FUNCTION_PERMISSION_CODE } from "@/apis/modules/function-permission"
@@ -42,6 +43,12 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		labelKey: "mobile.shell.navRecording",
 		routeName: RouteName.AudioRecordings,
 		nativeRecordingTab: "ai_recording",
+	},
+	{
+		key: "personaResearch",
+		icon: UsersRound,
+		labelKey: "mobile.shell.navPersonaResearch",
+		routeName: RouteName.PersonaResearch,
 	},
 	{
 		key: "myCrew",

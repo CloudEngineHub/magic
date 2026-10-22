@@ -116,7 +116,13 @@ class AdminAssetApi extends AbstractApi
         $authorization = $this->getAuthorization();
         $this->assertAdmin($authorization);
         $request = SaveAssetTagRequestDTO::fromRequest($this->request);
-        return AssetAssembler::createTagItem($this->assetAppService->createOfficialTag($authorization, $request->getName(), $request->getNodeType(), $request->getParentId()));
+        return AssetAssembler::createTagItem($this->assetAppService->createOfficialTag(
+            $authorization,
+            $request->getName(),
+            $request->getNodeType(),
+            $request->getParentId(),
+            $request->getBusinessType(),
+        ));
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::QUERY)]
@@ -124,7 +130,9 @@ class AdminAssetApi extends AbstractApi
     {
         $authorization = $this->getAuthorization();
         $this->assertAdmin($authorization);
-        return AssetAssembler::createTagList($this->assetAppService->listOfficialTags($authorization));
+        // 不传 business_type 返回全部业务类型，便于后台总览；传了只看该类型。
+        $businessType = trim((string) $this->request->input('business_type', ''));
+        return AssetAssembler::createTagList($this->assetAppService->listOfficialTags($authorization, $businessType === '' ? null : $businessType));
     }
 
     #[CheckPermission([MagicResourceEnum::PLATFORM_ASSET], MagicOperationEnum::EDIT)]

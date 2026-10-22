@@ -209,6 +209,8 @@ class TopicShareableResource implements ResourceFactoryInterface
         if (empty($result)) {
             return [];
         }
+        // The share page renders mode-specific views (e.g. research results) from this field.
+        $result['topic_mode'] = $topicEntity->getTopicMode();
         return $result;
     }
 
@@ -219,7 +221,9 @@ class TopicShareableResource implements ResourceFactoryInterface
             return [];
         }
 
-        return $this->topicAppService->getMessagesByTopicIdAfterId((int) $resourceId, $afterId, $limit);
+        $result = $this->topicAppService->getMessagesByTopicIdAfterId((int) $resourceId, $afterId, $limit);
+        $result['topic_mode'] = $topicEntity->getTopicMode();
+        return $result;
     }
 
     public function getResourceName(string $resourceId): string
