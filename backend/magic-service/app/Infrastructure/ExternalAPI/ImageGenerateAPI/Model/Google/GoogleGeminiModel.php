@@ -420,9 +420,20 @@ class GoogleGeminiModel extends AbstractImageGenerate
      */
     private function extractTokenUsage(array $usageMetadata): array
     {
+        $candidateDetails = $usageMetadata['candidatesTokensDetails'] ?? [];
+        $completionTokens = (int) ($usageMetadata['candidatesTokenCount'] ?? 0);
+        if (is_array($candidateDetails) && $candidateDetails !== []) {
+            $completionTokens = 0;
+            foreach ($candidateDetails as $detail) {
+                if (is_array($detail) && ($detail['modality'] ?? '') === 'IMAGE') {
+                    $completionTokens += max(0, (int) ($detail['tokenCount'] ?? 0));
+                }
+            }
+        }
+
         return [
             'prompt_tokens' => (int) ($usageMetadata['promptTokenCount'] ?? 0),
-            'completion_tokens' => (int) ($usageMetadata['candidatesTokenCount'] ?? 0),
+            'completion_tokens' => $completionTokens,
             'thoughts_tokens' => (int) ($usageMetadata['thoughtsTokenCount'] ?? 0),
             'total_tokens' => (int) ($usageMetadata['totalTokenCount'] ?? 0),
         ];
