@@ -90,8 +90,8 @@ final class AuditHourlyRecordRepository implements AuditHourlyRecordRepositoryIn
             ->first();
 
         return [
-            'request_count' => (int) ($row?->request_count ?? 0),
-            'row_count' => (int) ($row?->row_count ?? 0),
+            'request_count' => (int) ($row->request_count ?? 0),
+            'row_count' => (int) ($row->row_count ?? 0),
         ];
     }
 

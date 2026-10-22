@@ -468,7 +468,8 @@ class MagicFSFileAppService extends AbstractAppService
     ): FileInfoResponseDTO {
         $source = $this->assertFileAccessible($fileId, $authorization, MemberRole::EDITOR);
 
-        if ($requestDTO->new_parent_id !== null && $requestDTO->new_parent_id !== $source->getParentId()) {
+        // DTO 使用字符串传输文件 ID，按领域层的整数类型比较，并保留未指定目录的语义。
+        if ($requestDTO->new_parent_id !== null && (int) $requestDTO->new_parent_id !== $source->getParentId()) {
             // Replacing into a directory the caller cannot write would let a
             // rename mutate a tree outside their permission scope.
             $this->assertFileAccessible($requestDTO->new_parent_id, $authorization, MemberRole::EDITOR);
