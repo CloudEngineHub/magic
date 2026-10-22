@@ -17,7 +17,7 @@ import { MAGIC_PROJECT_VERSION_V3 } from "../utils/magicProjectCompression"
 import type { DesignDraftReason, DesignDraftWriteResult } from "../utils/designDraftStorage"
 import type { ElementDetailsProvenance } from "@/components/CanvasDesign/runtime/document"
 import type { DesignLoadIssue, DesignSidecarStatus } from "../utils/designDataLoader"
-import type { DesignVersionLoadResult } from "../managers/DesignVersionManager"
+import type { DesignCurrentFileLoadResult } from "../managers/types"
 import type { CanvasAccessMode } from "@/components/CanvasDesign/public/props"
 import { resolveDesignAccessMode } from "../managers/types"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
@@ -66,14 +66,13 @@ export interface UseDesignProjectManagerReturn {
 	generateContent: (data?: DesignData) => string
 
 	loadWithVersion: (version: number) => Promise<DesignData | null>
-	loadLatest: () => Promise<DesignVersionLoadResult>
+	loadLatest: () => Promise<DesignCurrentFileLoadResult>
 
 	checkRemoteUpdate: () => Promise<{
 		hasUpdate: boolean
-		currentVersion: number | null
+		currentFingerprint: string | null
 		isCheckReliable: boolean
 	}>
-	updateLocalVersion: (version: number) => void
 
 	accessMode: CanvasAccessMode
 	setAccessMode: (value: CanvasAccessMode) => void
@@ -150,7 +149,6 @@ export function useDesignProjectManager(
 	const conflictStateRef = useRef<DesignConflict | null>(conflictState)
 	const magicProjectJsFileIdRef = useRef<string | null>(null)
 	const accessModeRef = useRef(accessMode)
-	const magicProjectJsVersionRef = useRef<number | null>(null)
 	const prevDesignDataFingerprintRef = useRef<string>("")
 	const fileVersionsListRef = useRef<FileHistoryVersion[]>([])
 	const fileVersionRef = useRef<number | undefined>(undefined)
@@ -184,10 +182,6 @@ export function useDesignProjectManager(
 			getSidecarStatus: () => sidecarStatusRef.current,
 			getConflictState: () => conflictStateRef.current,
 			getMagicProjectJsFileId: () => magicProjectJsFileIdRef.current,
-			getMagicProjectJsVersion: () => magicProjectJsVersionRef.current,
-			setMagicProjectJsVersion: (v) => {
-				magicProjectJsVersionRef.current = v
-			},
 			getPrevDesignDataFingerprint: () => prevDesignDataFingerprintRef.current,
 			setPrevDesignDataFingerprint: (v) => {
 				prevDesignDataFingerprintRef.current = v
@@ -295,11 +289,7 @@ export function useDesignProjectManager(
 		[updateDesignData, manager],
 	)
 
-	const isNewestVersion = useMemo(() => {
-		if (!fileVersionsList?.length) return true
-		if (!fileVersion) return true
-		return fileVersion === fileVersionsList[0].version
-	}, [fileVersion, fileVersionsList])
+	const isNewestVersion = fileVersion === undefined
 
 	const loadFromRemote = useCallback(() => manager.loadFromRemote(), [manager])
 	const reloadPreservingLocalDraft = useCallback(
@@ -355,7 +345,6 @@ export function useDesignProjectManager(
 		loadLatest: () => manager.loadLatest(),
 
 		checkRemoteUpdate: () => manager.checkRemoteUpdate(),
-		updateLocalVersion: (v) => manager.updateLocalVersion(v),
 
 		accessMode,
 		setAccessMode: (v) => manager.setAccessMode(v),

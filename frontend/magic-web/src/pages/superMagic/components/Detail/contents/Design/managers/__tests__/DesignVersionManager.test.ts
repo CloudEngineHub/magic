@@ -28,8 +28,6 @@ function stateBag(): DesignProjectStateBag {
 		}),
 		getConflictState: () => null,
 		getMagicProjectJsFileId: () => "main-file",
-		getMagicProjectJsVersion: () => 1,
-		setMagicProjectJsVersion: vi.fn(),
 		getPrevDesignDataFingerprint: () => "",
 		setPrevDesignDataFingerprint: vi.fn(),
 		getAccessMode: () => "edit",
@@ -80,8 +78,8 @@ describe("DesignVersionManager", () => {
 			stateBag(),
 			options,
 			{ cancelAutoSave: vi.fn(), clearRemoteConflict: vi.fn() } as never,
-			() => [],
 			() => undefined,
+			vi.fn(),
 		)
 
 		await manager.loadWithVersion(7)
@@ -115,8 +113,8 @@ describe("DesignVersionManager", () => {
 				flatAttachments: [],
 			},
 			{ cancelAutoSave: vi.fn(), clearRemoteConflict: vi.fn() } as never,
-			() => [],
 			() => 7,
+			vi.fn(),
 		)
 
 		await manager.reloadCurrentVersion()
@@ -145,8 +143,8 @@ describe("DesignVersionManager", () => {
 				flatAttachments: [],
 			},
 			{ cancelAutoSave: vi.fn(), clearRemoteConflict: vi.fn() } as never,
-			() => [],
 			() => undefined,
+			vi.fn(),
 		)
 
 		manager.applyVersionData(

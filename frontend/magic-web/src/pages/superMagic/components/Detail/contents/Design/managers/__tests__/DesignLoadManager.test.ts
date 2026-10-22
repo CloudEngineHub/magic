@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DesignLoadManager } from "../DesignLoadManager"
-import type { DesignProjectManagerOptions, DesignProjectStateBag } from "../types"
+import type {
+	DesignCurrentFileLoadResult,
+	DesignProjectManagerOptions,
+	DesignProjectStateBag,
+} from "../types"
 import type { DesignData } from "../../types"
 import type { RectangleElement } from "@/components/CanvasDesign/runtime/document/types"
 import {
@@ -62,6 +66,29 @@ function createDesignData(name: string): DesignData {
 	}
 }
 
+function snapshot(name: string, fileId = "magic-a"): DesignCurrentFileLoadResult {
+	const data = createDesignData(name)
+	return {
+		fileId,
+		accessIdentity: "test",
+		data,
+		loadResult: {
+			data,
+			sourceVersion: "2.0.0",
+			didUpgrade: false,
+			needsPersist: false,
+			sidecarStatus: "missing",
+		},
+	}
+}
+const readCurrentSnapshot =
+	vi.fn<
+		(
+			fileId: string,
+			options: DesignProjectManagerOptions,
+		) => Promise<DesignCurrentFileLoadResult>
+	>()
+
 function createDeferred<T>() {
 	let resolve!: (value: T) => void
 	const promise = new Promise<T>((resolvePromise) => {
@@ -90,16 +117,11 @@ function createOptions(
 function createStateBag() {
 	let designData = createDesignData("initial")
 	let magicProjectJsFileId: string | null = null
-	let magicProjectJsVersion: number | null = null
 	let previousFingerprint = ""
 	const stateBag: DesignProjectStateBag = {
 		getDesignData: () => designData,
 		getConflictState: () => null,
 		getMagicProjectJsFileId: () => magicProjectJsFileId,
-		getMagicProjectJsVersion: () => magicProjectJsVersion,
-		setMagicProjectJsVersion: (version) => {
-			magicProjectJsVersion = version
-		},
 		getPrevDesignDataFingerprint: () => previousFingerprint,
 		setPrevDesignDataFingerprint: (fingerprint) => {
 			previousFingerprint = fingerprint
@@ -132,6 +154,14 @@ function createStateBag() {
 describe("DesignLoadManager request identity", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
+		vi.spyOn(DesignLoadManager.prototype, "readCurrentFile").mockImplementation(
+			readCurrentSnapshot,
+		)
+		readCurrentSnapshot
+			.mockReset()
+			.mockImplementation(async (fileId) =>
+				snapshot(fileId === "magic-b" ? "B" : "A", fileId),
+			)
 		vi.mocked(resolveActualDesignCurrentFile).mockImplementation(({ currentFile }) => {
 			if (!currentFile?.id || !currentFile.name) return null
 			return { id: currentFile.id, name: currentFile.name }
@@ -150,8 +180,8 @@ describe("DesignLoadManager request identity", () => {
 	})
 
 	it("discards a stale file response and loads the current file independently", async () => {
-		const loadA = createDeferred<{ fileId: string; content: string } | null>()
-		const loadB = createDeferred<{ fileId: string; content: string } | null>()
+		const loadA = createDeferred<{ fileId: string } | null>()
+		const loadB = createDeferred<{ fileId: string } | null>()
 		vi.mocked(findMagicProjectJsFile).mockImplementation(({ currentFileId }) =>
 			currentFileId === "file-a" ? loadA.promise : loadB.promise,
 		)
@@ -166,11 +196,11 @@ describe("DesignLoadManager request identity", () => {
 		const secondLoad = loadManager.loadFromRemote()
 
 		expect(findMagicProjectJsFile).toHaveBeenCalledTimes(2)
-		loadA.resolve({ fileId: "magic-a", content: "A" })
+		loadA.resolve({ fileId: "magic-a" })
 		expect(await firstLoad).toBe(false)
 		expect(stateBag.setters.setDesignData).not.toHaveBeenCalled()
 
-		loadB.resolve({ fileId: "magic-b", content: "B" })
+		loadB.resolve({ fileId: "magic-b" })
 		expect(await secondLoad).toBe(true)
 		expect(getDesignData().name).toBe("B")
 		expect(stateBag.setters.setMagicProjectJsFileId).toHaveBeenCalledTimes(1)
@@ -178,7 +208,7 @@ describe("DesignLoadManager request identity", () => {
 	})
 
 	it("coalesces concurrent loads for the same project and file", async () => {
-		const load = createDeferred<{ fileId: string; content: string } | null>()
+		const load = createDeferred<{ fileId: string } | null>()
 		vi.mocked(findMagicProjectJsFile).mockReturnValue(load.promise)
 		const { stateBag } = createStateBag()
 		const loadManager = new DesignLoadManager(
@@ -190,17 +220,21 @@ describe("DesignLoadManager request identity", () => {
 		const secondLoad = loadManager.loadFromRemote()
 
 		expect(findMagicProjectJsFile).toHaveBeenCalledTimes(1)
-		load.resolve({ fileId: "magic-a", content: "A" })
+		load.resolve({ fileId: "magic-a" })
 		expect(await firstLoad).toBe(true)
 		expect(await secondLoad).toBe(true)
 		expect(stateBag.setters.setDesignData).toHaveBeenCalledTimes(1)
 	})
 
 	it("does not reuse a file cache entry after its project identity becomes available", async () => {
+		readCurrentSnapshot
+			.mockResolvedValueOnce(snapshot("A"))
+			.mockResolvedValueOnce(snapshot("B"))
+			.mockResolvedValueOnce(snapshot("A-again"))
 		vi.mocked(findMagicProjectJsFile)
-			.mockResolvedValueOnce({ fileId: "magic-a", content: "A" })
-			.mockResolvedValueOnce({ fileId: "magic-a", content: "B" })
-			.mockResolvedValueOnce({ fileId: "magic-a", content: "A-again" })
+			.mockResolvedValueOnce({ fileId: "magic-a" })
+			.mockResolvedValueOnce({ fileId: "magic-a" })
+			.mockResolvedValueOnce({ fileId: "magic-a" })
 		const { stateBag, getDesignData } = createStateBag()
 		const loadManager = new DesignLoadManager(
 			stateBag,

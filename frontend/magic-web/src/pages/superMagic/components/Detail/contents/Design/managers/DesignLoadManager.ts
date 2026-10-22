@@ -1,16 +1,19 @@
 import {
 	findMagicProjectJsFile,
+	resolveActualDesignCurrentFile,
+	loadMagicProjectJsContent,
 	resolveDesignDirectoryNameFromAttachments,
 	resolveDesignProjectBasePathFromAttachments,
-	resolveActualDesignCurrentFile,
 } from "../utils/utils"
 import { hashDesignDataComparable } from "../utils/designContentHash"
-import { SuperMagicApi } from "@/apis"
 import {
 	resolveDesignAccessMode,
+	getDesignRequestIdentity,
 	type DesignProjectStateBag,
 	type DesignProjectManagerOptions,
 	type PendingDesignUpgrade,
+	type DesignCurrentFileLoadResult,
+	getDesignBaseAccessMode,
 } from "./types"
 import {
 	DesignLoadError,
@@ -50,6 +53,52 @@ export class DesignLoadManager {
 	constructor(stateBag: DesignProjectStateBag, options: DesignProjectManagerOptions) {
 		this.stateBag = stateBag
 		this.options = options
+	}
+
+	async readCurrentFile(
+		fileId: string,
+		requestOptions: DesignProjectManagerOptions,
+	): Promise<DesignCurrentFileLoadResult> {
+		const accessIdentity = getDesignRequestIdentity(requestOptions)
+		if (getDesignBaseAccessMode(requestOptions) === "share" && !requestOptions.fileApi)
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: "Shared Canvas requires its bound file client",
+				fileId,
+			})
+		try {
+			const content = await loadMagicProjectJsContent(fileId, {
+				fileApi: requestOptions.fileApi,
+				forceRefresh: true,
+			})
+			const loaded = await loadDesignDataToRuntime({
+				content,
+				nameOverride: resolveDesignDirectoryNameFromAttachments(requestOptions),
+				elementDetailsContext: {
+					attachments: requestOptions.attachments,
+					flatAttachments: requestOptions.flatAttachments,
+					mainFileId: fileId,
+					projectId: requestOptions.projectId,
+					fileApi: requestOptions.fileApi,
+				},
+				pathContext: {
+					projectBasePath: resolveDesignProjectBasePathFromAttachments(requestOptions),
+					flatAttachments: requestOptions.flatAttachments,
+					attachmentIndex: requestOptions.attachmentIndex,
+				},
+				fileId,
+			})
+			return { fileId, accessIdentity, data: loaded.data, loadResult: loaded }
+		} catch (error) {
+			if (error instanceof DesignLoadError) throw error
+			throw new DesignLoadError({
+				kind: "invalid-envelope",
+				stage: "parse-envelope",
+				message: stringifyUnknownError(error),
+				fileId,
+			})
+		}
 	}
 
 	updateOptions(options: DesignProjectManagerOptions) {
@@ -134,7 +183,7 @@ export class DesignLoadManager {
 			identityKey: JSON.stringify([
 				projectId ?? null,
 				actualCurrentFile.id,
-				this.options.fileApi?.identityKey ?? "none",
+				getDesignRequestIdentity(this.options),
 			]),
 			options: this.options,
 			currentFile: actualCurrentFile,
@@ -147,7 +196,7 @@ export class DesignLoadManager {
 
 	private async loadFromRemoteInternal(request: DesignLoadRequest): Promise<DesignLoadResult> {
 		const {
-			options: { attachments, flatAttachments, projectPath, projectId, attachmentIndex },
+			options: { attachments, projectId },
 			currentFile: { id: currentFileId, name: currentFileName },
 		} = request
 		if (!attachments) {
@@ -176,43 +225,19 @@ export class DesignLoadManager {
 				attachments,
 				currentFileId,
 				currentFileName,
-				fileApi: this.options.fileApi,
+				fileApi: request.options.fileApi,
 			})
 			if (!this.isCurrentLoadRequest(request)) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
-			if (!result?.fileId || result.content === undefined || result.content === null) {
+			if (!result?.fileId) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
 
-			const directoryName = resolveDesignDirectoryNameFromAttachments({
-				currentFile: { id: currentFileId, name: currentFileName },
-				flatAttachments,
-				attachments,
-				projectPath,
-			})
-			const dslBase = resolveDesignProjectBasePathFromAttachments({
-				currentFile: { id: currentFileId, name: currentFileName },
-				flatAttachments,
-				attachments,
-			})
-			const loaded = await loadDesignDataToRuntime({
-				content: result.content,
-				nameOverride: directoryName,
-				elementDetailsContext: {
-					attachments,
-					flatAttachments,
-					mainFileId: result.fileId,
-					projectId: projectId ?? undefined,
-					fileApi: request.options.fileApi,
-				},
-				pathContext: {
-					projectBasePath: dslBase,
-					flatAttachments,
-					attachmentIndex,
-				},
-				fileId: result.fileId,
-			})
+			const snapshot = await this.readCurrentFile(result.fileId, request.options)
+			const loaded = snapshot.loadResult
+			if (!snapshot.data || !loaded)
+				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			if (!this.isCurrentLoadRequest(request)) {
 				return { didLoad: false, pendingUpgrade: null, sidecarStatus }
 			}
@@ -241,17 +266,6 @@ export class DesignLoadManager {
 			this.stateBag.setters.setAccessMode(
 				sidecarStatus === "unsupported" ? "readonly" : accessMode,
 			)
-
-			if (accessMode !== "share") {
-				try {
-					const fileInfo = await SuperMagicApi.getFileInfo({ file_id: result.fileId })
-					if (this.isCurrentLoadRequest(request) && fileInfo?.version !== undefined) {
-						this.stateBag.setMagicProjectJsVersion(fileInfo.version)
-					}
-				} catch {
-					// ignore
-				}
-			}
 
 			return { didLoad: true, pendingUpgrade, issue: loadIssue, sidecarStatus }
 		} catch (error) {

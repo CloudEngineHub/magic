@@ -25,7 +25,6 @@ export interface DesignDraftEntry extends DesignDraftIdentity {
 	key: string
 	schemaVersion: typeof DESIGN_DRAFT_SCHEMA_VERSION
 	designProjectBasePath?: string
-	baseRemoteVersion: number | null
 	baseRemoteFingerprint: string
 	localFingerprint: string
 	localUpdatedAt: number

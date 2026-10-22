@@ -9,7 +9,6 @@ import pytest
 from pydantic import ValidationError
 
 import app.tools.canvas.tools as canvas_tools
-import app.tools.design.tools as design_tools
 import tests.tools.canvas.helpers  # noqa: F401
 from agentlang.context.tool_context import ToolContext
 from agentlang.tools.tool_result import ToolResult
@@ -150,24 +149,6 @@ def test_canvas_tool_schemas_reject_unknown_top_level_parameters() -> None:
     for tool_class in tools:
         parameters = tool_class().to_param()["function"]["parameters"]
         assert parameters["additionalProperties"] is False, tool_class.__name__
-
-
-def test_canvas_tools_do_not_conflict_with_legacy_tool_names() -> None:
-    """Canvas 工具在并行迁移期间必须避免覆盖旧 Design 工具。"""
-    canvas_names = {
-        getattr(tool_class, "_tool_name")
-        for _, tool_class in inspect.getmembers(canvas_tools, inspect.isclass)
-        if getattr(tool_class, "_is_tool", False)
-    }
-    design_names = {
-        getattr(tool_class, "_tool_name")
-        for _, tool_class in inspect.getmembers(design_tools, inspect.isclass)
-        if getattr(tool_class, "_is_tool", False)
-    }
-
-    assert canvas_names.isdisjoint(design_names)
-    assert ManageCanvasConnections._tool_name == "manage_canvas_connections"
-    assert SearchCanvasImages._tool_name == "search_canvas_image_candidates"
 
 
 def test_content_input_accepts_text_and_rejects_incomplete_generation() -> None:
