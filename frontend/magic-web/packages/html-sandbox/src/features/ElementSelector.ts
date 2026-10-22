@@ -1012,6 +1012,20 @@ export class ElementSelector {
 			}
 		})
 
+		// Shift + click adds to the selection. Without this the browser also extends a text
+		// range from the previous click, which then makes the click handler skip the element.
+		document.addEventListener(
+			"mousedown",
+			(e) => {
+				if (!this.enabled || !e.shiftKey) return
+				const target = e.target as HTMLElement
+				if (!target || target.isContentEditable || isInjectedElement(target)) return
+				e.preventDefault()
+				window.getSelection()?.removeAllRanges()
+			},
+			true,
+		)
+
 		// Click
 		document.addEventListener(
 			"click",
@@ -1036,7 +1050,7 @@ export class ElementSelector {
 				const hasTextSelection =
 					selection && !selection.isCollapsed && selection.toString().trim().length > 0
 
-				if (hasTextSelection) {
+				if (hasTextSelection && !e.shiftKey) {
 					// User is selecting text, don't trigger element selection
 					console.log(
 						"[ElementSelector] Text selection detected, skipping element selection",
