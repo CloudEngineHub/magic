@@ -14,7 +14,6 @@ use App\ErrorCode\AssetErrorCode;
 use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\Core\ValueObject\Page;
-use App\Infrastructure\Util\Auth\PermissionChecker;
 use App\Infrastructure\Util\Permission\Annotation\CheckPermission;
 use App\Interfaces\Asset\Assembler\AssetAssembler;
 use App\Interfaces\Asset\DTO\Request\CreateAssetRequestDTO;
@@ -44,7 +43,6 @@ class AdminPersonaAvatarApi extends AbstractApi
     {
         $requestDTO = CreateAssetRequestDTO::fromRequest($this->request);
         $authorization = $this->getAuthorization();
-        $this->assertAdmin($authorization);
         $asset = $this->avatarAppService->createAvatar($authorization, $requestDTO);
         return AssetAssembler::createItem($asset, null, true, null)->toArray();
     }
@@ -54,7 +52,6 @@ class AdminPersonaAvatarApi extends AbstractApi
     {
         $requestDTO = QueryAssetRequestDTO::fromRequest($this->request);
         $authorization = $this->getAuthorization();
-        $this->assertAdmin($authorization);
         $result = $this->avatarAppService->listAvatars($authorization, $requestDTO);
         $page = new Page($requestDTO->getPage(), $requestDTO->getPageSize());
         return AssetAssembler::createList($result['list'], $page, $result['total'], [], true, [])->toArray();
@@ -65,7 +62,6 @@ class AdminPersonaAvatarApi extends AbstractApi
     {
         $requestDTO = UpdateAssetRequestDTO::fromRequest($this->request);
         $authorization = $this->getAuthorization();
-        $this->assertAdmin($authorization);
         // 请求里没有 tag_ids 表示不改标签；传空数组表示清空。
         $tagIds = $this->request->has('tag_ids')
             ? array_values(array_unique(array_filter(
@@ -84,18 +80,7 @@ class AdminPersonaAvatarApi extends AbstractApi
     public function delete(int|string $assetId): array
     {
         $authorization = $this->getAuthorization();
-        $this->assertAdmin($authorization);
         $deleted = $this->avatarAppService->deleteAvatar($authorization, $assetId);
         return AssetAssembler::createDeleteDTO($assetId, $deleted, true)->toArray();
-    }
-
-    private function assertAdmin(object $authorization): void
-    {
-        if (! PermissionChecker::isOrganizationAdminByUserId(
-            $authorization->getOrganizationCode(),
-            $authorization->getId(),
-        )) {
-            ExceptionBuilder::throw(AssetErrorCode::ADMIN_DENIED);
-        }
     }
 }

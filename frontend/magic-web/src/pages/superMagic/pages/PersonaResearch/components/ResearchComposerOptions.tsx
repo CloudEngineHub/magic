@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useSize } from "ahooks"
 import {
 	Check,
@@ -37,10 +37,11 @@ import {
 import { PRESSABLE } from "./surface"
 
 /**
- * Row width (padding included) the four chips and the trailing action need with "· Auto" on
- * each unset chip, measured at about 634px in Chinese;
- * below it the suffix is dropped so the row stays on one line (measured, not the viewport,
- * since the composer narrows with the side panels).
+ * Row width (padding included) below which the "· Auto" suffix is never shown. Between this and
+ * the width the chips really need, the row is measured: if it wraps (the trailing action drops to
+ * a line of its own), the suffix is dropped for that width and tried again once the row is wider.
+ * Measuring beats a fixed number: the need changes with the language, the font and the trailing
+ * action (the picked-persona chip is wider than "pick from the library").
  */
 const AUTO_SUFFIX_MIN_WIDTH = 640
 
@@ -97,7 +98,26 @@ export default function ResearchComposerOptions({
 	const isPresetPanel = (PANEL_SIZES as readonly unknown[]).includes(value.panelSize)
 	const rowRef = useRef<HTMLDivElement>(null)
 	const rowSize = useSize(rowRef)
-	const showAuto = (rowSize?.width ?? AUTO_SUFFIX_MIN_WIDTH) >= AUTO_SUFFIX_MIN_WIDTH
+	const rowWidth = rowSize?.width
+	// Widest row at which the suffix was seen to wrap the row; the suffix stays off up to it.
+	const [autoWrapsAtWidth, setAutoWrapsAtWidth] = useState(0)
+	const showAuto =
+		(rowWidth ?? AUTO_SUFFIX_MIN_WIDTH) >= AUTO_SUFFIX_MIN_WIDTH &&
+		(rowWidth ?? Number.POSITIVE_INFINITY) > autoWrapsAtWidth
+
+	// A different trailing chip (library prompt vs picked avatars) has a different width.
+	useLayoutEffect(() => setAutoWrapsAtWidth(0), [pickedCount])
+
+	useLayoutEffect(() => {
+		const row = rowRef.current
+		if (!row || !showAuto || !rowWidth) return
+		const first = row.firstElementChild as HTMLElement | null
+		if (!first) return
+		const wrapped = Array.from(row.children).some(
+			(child) => (child as HTMLElement).offsetTop - first.offsetTop > first.offsetHeight / 2,
+		)
+		if (wrapped) setAutoWrapsAtWidth(rowWidth)
+	}, [showAuto, rowWidth, pickedCount, value])
 
 	return (
 		<div
