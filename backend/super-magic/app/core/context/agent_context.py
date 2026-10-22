@@ -128,6 +128,8 @@ class AgentContext(BaseAgentContext):
         # 普通路径与隔离路径都走同一初始化逻辑；共享实例由 is_initialized 保护避免重复注册。
         self._init_shared_fields()
         self.model_context = AgentModelContext()
+        # 仅当前主会话运行使用，未指定时恢复模型默认，不参与 fork 或 session 持久化。
+        self.reasoning_effort: object = None
         self._user_context_host: str = ""
         self._user_context_auth: MagicServiceAuthConfig | None = None
         self._user_context_config_loaded = False
@@ -192,6 +194,20 @@ class AgentContext(BaseAgentContext):
 
         # AgentHorizon 懒初始化，per-agent 上下文工程基础设施
         self._horizon: Optional["AgentHorizon"] = None
+
+    def set_reasoning_effort(self, effort: object) -> None:
+        """原样保存本轮强度，合法性由 Odin 判断；空值清除上轮覆盖。"""
+        self.reasoning_effort = effort
+
+    def get_reasoning_extra_body(self) -> Optional[dict[str, object]]:
+        """仅主会话推理覆盖强度，压缩和子 Agent 使用各自模型配置。"""
+        if (
+            self.is_main_agent
+            and not self.model_context.has_active_compact_text_model()
+            and self.reasoning_effort is not None
+        ):
+            return {"reasoning_effort": self.reasoning_effort}
+        return None
 
     @property
     def context_id(self) -> str:

@@ -9,6 +9,7 @@ return [
     'magic_claw_reconciliation_busy' => '权限正在更新，请稍后重试。',
     'magic_claw_runtime_denied' => '龙虾已被管理员停用。恢复使用权限后，请手动启动。',
     'resource' => [
+        'model_multiplier' => '模型倍率',
         'admin' => '管理后台',
         'admin_ai' => 'AI管理',
         'admin_safe' => '安全与权限',

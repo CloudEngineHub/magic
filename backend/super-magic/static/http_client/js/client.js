@@ -519,6 +519,7 @@ const customAgentCodeGroup = document.getElementById('customAgentCodeGroup');
 const localCrewAgentOptions = document.getElementById('localCrewAgentOptions');
 const modelIdInput = document.getElementById('modelIdInput');
 const modelIdSelect = document.getElementById('modelIdSelect');
+const reasoningEffortSelect = document.getElementById('reasoningEffortSelect');
 const imageModelSelect = document.getElementById('imageModelSelect');
 const videoModelSelect = document.getElementById('videoModelSelect');
 const advancedModeToggle = document.getElementById('advancedModeToggle');
@@ -2288,6 +2289,7 @@ async function clearRemoteChatHistory() {
     }
 }
 
+/** 统一应用普通与原始 JSON 模式的调试选项，思考强度为空时不发送该字段。 */
 function applyLocalDebugOptions(messageData) {
     if (!messageData || typeof messageData !== 'object') return;
     messageData.dynamic_config = Object.assign({}, messageData.dynamic_config, {
@@ -2296,6 +2298,13 @@ function applyLocalDebugOptions(messageData) {
         client_context: buildLocalDebugClientContext(),
         super_magic_execution_source: currentExecutionSource || 'human_chat',
     });
+    // 调试面板直接透传所选档位，切回默认时移除覆盖，不执行模型能力判断。
+    const reasoningEffort = reasoningEffortSelect ? reasoningEffortSelect.value : '';
+    if (reasoningEffort) {
+        messageData.dynamic_config.reasoning_effort = reasoningEffort;
+    } else {
+        delete messageData.dynamic_config.reasoning_effort;
+    }
     if (currentMessageVersion) {
         messageData.dynamic_config.message_version = currentMessageVersion;
     } else {
