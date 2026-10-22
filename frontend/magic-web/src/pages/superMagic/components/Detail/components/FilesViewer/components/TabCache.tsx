@@ -3,6 +3,8 @@ import {
 	FileAccessProvider as RequestFileAccessProvider,
 } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { lazy, Suspense, memo, useCallback, useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
+import MagicSpin from "@/components/base/MagicSpin"
 import { cn } from "@/utils/cn"
 import useFullscreenMode from "@/hooks/useFullscreenMode"
 import Render from "../../../Render"
@@ -15,6 +17,7 @@ import type { FileManagerSnapshot } from "@/models/config/repositories/SuperProj
 import type { KnowledgeBaseTabData } from "../hooks/useKnowledgeBaseTab"
 import type { PublishedMicroAppTabData } from "../hooks/usePublishedMicroAppTab"
 import { getFileViewerTabType } from "../utils/tabType"
+import { shouldSyncWithAttachments } from "../hooks/previewPolicy"
 import {
 	FILE_VIEWER_DOCUMENT_FLOW_FULLSCREEN_TAB_CONTENT_CLASS_NAME,
 	FILE_VIEWER_FULLSCREEN_BROWSER_TAB_CONTENT_CLASS_NAME,
@@ -90,6 +93,7 @@ const TabCache = memo(
 		fillPortalSurface = false,
 		onCloseTab,
 	}: TabCacheProps) => {
+		const { t } = useTranslation("super")
 		const tabType = getFileViewerTabType(tab)
 		const managerState = tab.fileManager
 			? (getFileManagerState(tab.fileManager) ?? tab.fileManagerState)
@@ -149,7 +153,29 @@ const TabCache = memo(
 
 		const inheritedRequestAccess = useRequestFileAccess()
 		const recycleBin = tab.fileData?.recycleBin
-		const filePreview = (
+		// 只替换尚未解析的项目文件占位；已显示的预览不因后台清单刷新而卸载。
+		const isPendingProjectFile =
+			tabType === "file" &&
+			tab.isLoading &&
+			!recycleBin &&
+			tab.fileData?.space_type !== "user" &&
+			shouldSyncWithAttachments(tab.fileData)
+		const attachmentLoadState = managerProps.attachmentLoadState
+		const hasAttachmentLoadError =
+			attachmentLoadState?.projectId === managerProps.selectedProject?.id &&
+			attachmentLoadState?.status === "error"
+		const filePreview = isPendingProjectFile ? (
+			<div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
+				{hasAttachmentLoadError ? (
+					<span role="alert">{t("detail.unknownFileLoadFailed")}</span>
+				) : (
+					<>
+						<MagicSpin spinning />
+						<span role="status">{t("topicFiles.loadingFiles")}</span>
+					</>
+				)}
+			</div>
+		) : (
 			<Render
 				key={tab.refreshKey || tab.id}
 				{...renderProps}
