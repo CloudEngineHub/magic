@@ -850,9 +850,6 @@
 		"sourceReused": "复用"
 	},
 	"transcript": {
-		"collapse": "收起",
-		"expand": "展开",
-		"expandRound": "展开全部",
 		"failed": "这场访谈没有完成",
 		"inProgress": "访谈进行中…",
 		"inferredHint": "这部分是 AI 根据人设推测的，不来自资料",

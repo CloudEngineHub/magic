@@ -853,9 +853,6 @@
 		"sourceReused": "Reused"
 	},
 	"transcript": {
-		"collapse": "Show less",
-		"expand": "Show more",
-		"expandRound": "Expand all",
 		"failed": "This interview did not finish",
 		"inProgress": "Interview in progress…",
 		"inferredHint": "Inferred by the AI from the persona, not from sources",
