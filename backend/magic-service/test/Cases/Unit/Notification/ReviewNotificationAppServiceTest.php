@@ -12,10 +12,13 @@ use App\Application\Notification\Contract\NotificationEventPublisherInterface;
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
+use App\Application\SuperMagic\Review\Service\ReviewNotificationAppServiceFactory;
 use App\Application\SuperMagic\Review\Service\ReviewNotificationRecipientsInterface;
 use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use App\Domain\SuperMagic\Agent\Entity\AgentVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
+use Hyperf\Di\Container;
+use Hyperf\Di\Definition\DefinitionSource;
 use PHPUnit\Framework\TestCase;
 
 /** @internal */
@@ -39,7 +42,12 @@ final class ReviewNotificationAppServiceTest extends TestCase
             self::assertNotSame($event->recipients[0]->sourceEventKey, $event->recipients[1]->sourceEventKey);
             return [];
         });
-        (new ReviewNotificationAppService($publisher, $recipients))->publishAgentApproved($version, '1001');
+        $container = new Container(new DefinitionSource([
+            ReviewNotificationAppService::class => ReviewNotificationAppServiceFactory::class,
+        ]));
+        $container->set(NotificationEventPublisherInterface::class, $publisher);
+        $container->set(ReviewNotificationRecipientsInterface::class, $recipients);
+        $container->get(ReviewNotificationAppService::class)->publishAgentApproved($version, '1001');
     }
 
     public function testAgentApprovalPublishesVersionedEventToCreator(): void
