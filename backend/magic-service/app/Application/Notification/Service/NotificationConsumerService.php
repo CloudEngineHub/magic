@@ -75,6 +75,21 @@ final readonly class NotificationConsumerService
         }
 
         try {
+            // 已持久化的任务事件按“处理完成、生成零条通知”结束，避免补偿任务反复派发；
+            // 这里只处理通知事件，不改变 AI 任务状态，也不撤回用户已有的通知。
+            if (! $this->config->get('notification.task_enabled', false)
+                && in_array($event->getEventType(), [NotificationEventType::TASK_FINISHED, NotificationEventType::TASK_ERROR], true)) {
+                if (! $this->events->markSucceeded($eventId, $token, 0, date('Y-m-d H:i:s'))) {
+                    throw new RuntimeException('Notification event lease was lost');
+                }
+                $this->logger->info('Task notification event skipped because task notifications are disabled', [
+                    'event_id' => $eventId,
+                    'event_type' => $event->getEventType()?->value,
+                    'notification_count' => 0,
+                ]);
+                return;
+            }
+
             $envelope = EventEnvelope::fromArray($this->validator->validate($event->getEventPayload()));
             $notificationCount = Db::transaction(function () use ($event, $envelope, $eventId, $token): int {
                 $count = $this->consumeEnvelope($event, $envelope);
