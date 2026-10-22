@@ -6,6 +6,7 @@ import {
 	renderTemplateParts,
 	templateCatalogKey,
 } from "./renderNotificationTemplate"
+import { applyInboxResourceNameFallbacks } from "./inboxResourceFallback"
 import type { InboxMessage } from "./types"
 
 const logger = Logger.createLogger("InboxCopy")
@@ -55,6 +56,7 @@ export function resolveInboxCopy(
 		payload.project_name =
 			message.payload.project_name || i18next.t("project.unnamedProject", { ns: "super" })
 	}
+	applyInboxResourceNameFallbacks(message, payload)
 	if (!template) {
 		logger.error({
 			eventKey: "inbox_template_unavailable",

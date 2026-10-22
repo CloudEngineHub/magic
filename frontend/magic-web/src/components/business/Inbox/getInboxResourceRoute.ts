@@ -6,6 +6,9 @@ import type { InboxMessage } from "./types"
 
 const logger = Logger.createLogger("InboxRoute")
 
+const RESOURCE_NAME_FIELDS = ["resource_name"]
+const PROJECT_NAME_FIELDS = ["resource_name", "project_name"]
+
 function routeValue(value: unknown): string | undefined {
 	if (typeof value === "string") {
 		const text = value.trim()
@@ -15,14 +18,33 @@ function routeValue(value: unknown): string | undefined {
 	return undefined
 }
 
-export function getInboxResourceRoute(message: InboxMessage) {
+function resourceTypeValue(payload: Record<string, unknown>): string | undefined {
+	const type = routeValue(payload.resource_type)
+	return type?.toLowerCase()
+}
+
+function buildRoute(name: RouteName, params: Record<string, string>) {
+	return getRoutePath({
+		name,
+		params: Object.fromEntries(
+			Object.entries(params).map(([key, value]) => [key, encodeURIComponent(value)]),
+		),
+	})
+}
+
+function isTaskNotification(message: InboxMessage) {
 	const payload = message.payload
-	const isTask =
+	return (
 		message.type === "task_finished" ||
 		message.type === "task_failed" ||
 		message.type.startsWith("task.") ||
 		(typeof payload.event_type === "string" && payload.event_type.startsWith("task."))
-	const isShare =
+	)
+}
+
+function isShareNotification(message: InboxMessage) {
+	const payload = message.payload
+	return (
 		message.type === "project_shared" ||
 		message.type === "file_shared" ||
 		[message.type, payload.event_type].some(
@@ -30,62 +52,151 @@ export function getInboxResourceRoute(message: InboxMessage) {
 				typeof value === "string" &&
 				(value.startsWith("share.project.") || value.startsWith("share.file.")),
 		)
-	const resourceType = payload.resource_type
-	const shareCode = routeValue(payload.share_code)
+	)
+}
+
+function taskTopicRoute(projectId: string, topicId: string) {
+	return {
+		path: buildRoute(RouteName.SuperWorkspaceProjectTopicState, { projectId, topicId }),
+		nameFields: PROJECT_NAME_FIELDS,
+	}
+}
+
+function projectWorkspaceRoute(payload: Record<string, unknown>, projectId: string) {
+	if (payload.project_mode === "magiclaw") {
+		const code = routeValue(payload.resource_code)
+		if (!code) return undefined
+		return {
+			path: buildRoute(RouteName.ClawPlayground, { code }),
+			nameFields: PROJECT_NAME_FIELDS,
+		}
+	}
+	return {
+		path: buildRoute(RouteName.SuperWorkspaceProjectState, { projectId }),
+		nameFields: PROJECT_NAME_FIELDS,
+	}
+}
+
+/** Share access is keyed only by share_code; never share_id or resource_id. */
+function shareRoute(shareCode: string) {
+	return {
+		path: fillRoute(RoutePath.SuperMagicFilesShare, {
+			resourceId: encodeURIComponent(shareCode),
+		}),
+		nameFields: RESOURCE_NAME_FIELDS,
+	}
+}
+
+function resolveShareRoute(message: InboxMessage) {
+	if (!isShareNotification(message)) return undefined
+	const shareCode = routeValue(message.payload.share_code)
+	if (!shareCode) return undefined
+	return shareRoute(shareCode)
+}
+
+function resolveApprovalRoute(message: InboxMessage) {
+	const payload = message.payload
+	const resourceType = resourceTypeValue(payload)
+	const code = routeValue(payload.resource_code)
+
+	if (message.type === "skill_approved") {
+		if (resourceType !== "skill" || !code) return undefined
+		return {
+			path: buildRoute(RouteName.SkillEdit, { code }),
+			nameFields: RESOURCE_NAME_FIELDS,
+		}
+	}
+	if (message.type === "agent_approved") {
+		if (resourceType !== "agent" || !code) return undefined
+		return {
+			path: buildRoute(RouteName.CrewConversation, { code }),
+			nameFields: RESOURCE_NAME_FIELDS,
+		}
+	}
+	return undefined
+}
+
+/** Each notification type owns its jump contract. */
+function resolvePathByNotificationType(message: InboxMessage) {
+	const share = resolveShareRoute(message)
+	if (share) return share
+
+	const approval = resolveApprovalRoute(message)
+	if (approval) return approval
+
+	const payload = message.payload
 	const id = routeValue(payload.resource_id)
 	const code = routeValue(payload.resource_code)
 	const projectId = routeValue(payload.project_id)
 	const topicId = routeValue(payload.topic_id)
-	const nameFields =
-		resourceType === "project" ? ["resource_name", "project_name"] : ["resource_name"]
-	const route = (name: RouteName, params: Record<string, string>) =>
-		getRoutePath({
-			name,
-			params: Object.fromEntries(
-				Object.entries(params).map(([key, value]) => [key, encodeURIComponent(value)]),
-			),
-		})
-	let path: string | null | undefined
-	// Share codes are access identifiers; database IDs and passwords must never replace them.
-	if (shareCode) {
-		path = fillRoute(RoutePath.SuperMagicFilesShare, {
-			resourceId: encodeURIComponent(shareCode),
-		})
-	} else if (!isShare) {
-		switch (resourceType) {
-			case "project":
-				// Claw codes are not project IDs; never fall back to a /super route for a Claw.
-				if (payload.project_mode === "magiclaw") {
-					if (code) path = route(RouteName.ClawPlayground, { code })
-				} else if (isTask) {
-					if (projectId && topicId)
-						path = route(RouteName.SuperWorkspaceProjectTopicState, {
-							projectId,
-							topicId,
-						})
-				} else if (id) {
-					path = route(RouteName.SuperWorkspaceProjectState, { projectId: id })
+
+	switch (message.type) {
+		case "task_finished":
+		case "task_failed":
+			if (projectId && topicId) return taskTopicRoute(projectId, topicId)
+			return undefined
+		case "skill_invitation":
+		case "skill_access_revoked":
+			if (code) {
+				return {
+					path: buildRoute(RouteName.SkillEdit, { code }),
+					nameFields: RESOURCE_NAME_FIELDS,
 				}
-				break
-			case "micro_app":
-				if (id) path = route(RouteName.MicroApp, { appId: id })
-				break
-			case "agent":
-				if (code) path = route(RouteName.CrewConversation, { code })
-				break
-			case "skill":
-				if (code) path = route(RouteName.SkillEdit, { code })
-				break
-			// Other file messages need their own routing contract, not a guessed share URL.
-		}
+			}
+			return undefined
+		case "agent_invitation":
+		case "agent_access_revoked":
+			if (code) {
+				return {
+					path: buildRoute(RouteName.CrewConversation, { code }),
+					nameFields: RESOURCE_NAME_FIELDS,
+				}
+			}
+			return undefined
+		case "micro_app_invitation":
+		case "micro_app_access_revoked":
+			if (id) {
+				return {
+					path: buildRoute(RouteName.MicroApp, { appId: id }),
+					nameFields: RESOURCE_NAME_FIELDS,
+				}
+			}
+			return undefined
+		case "project_invitation":
+		case "project_access_revoked":
+			if (id) return projectWorkspaceRoute(payload, id)
+			return undefined
+		case "project_shared":
+		case "file_shared":
+			return undefined
+		default:
+			return undefined
 	}
-	if (!path) {
+}
+
+function resolveLegacyPath(message: InboxMessage) {
+	const share = resolveShareRoute(message)
+	if (share) return share
+
+	const payload = message.payload
+	const projectId = routeValue(payload.project_id)
+	const topicId = routeValue(payload.topic_id)
+
+	if (isTaskNotification(message) && projectId && topicId) {
+		return taskTopicRoute(projectId, topicId)
+	}
+	return undefined
+}
+
+export function getInboxResourceRoute(message: InboxMessage) {
+	const resolved = resolvePathByNotificationType(message) ?? resolveLegacyPath(message)
+	if (!resolved) {
 		logger.warn({
 			eventKey: "inbox_route_unavailable",
 			message: "Notification resource is missing required route parameters",
-			context: { notificationId: message.id, type: message.type, resourceType },
+			context: { notificationId: message.id, type: message.type },
 		})
 		return undefined
 	}
-	return { path, nameFields }
+	return resolved
 }

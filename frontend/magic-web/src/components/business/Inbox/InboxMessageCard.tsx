@@ -7,6 +7,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
 import { getInboxResourceRoute } from "./getInboxResourceRoute"
 import InboxMessageIcon from "./InboxMessageIcon"
+import { inboxResourceLinkLabel } from "./inboxResourceFallback"
 import { resolveInboxCopy } from "./resolveInboxCopy"
 import { inboxStore } from "./store"
 import type { InboxMessage } from "./types"
@@ -126,10 +127,12 @@ const InboxMessageCard = observer(function InboxMessageCard({
 								rel="noopener noreferrer"
 								className="rounded-sm text-blue-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-blue-400"
 							>
-								{/* Resource identity controls navigation; a missing display name still needs a visible link. */}
-								{String(copy.payload[part.field] ?? "").trim()
-									? part.text
-									: t("inbox.openResource")}
+								{inboxResourceLinkLabel(
+									message,
+									part.field,
+									copy.payload,
+									part.text,
+								)}
 							</Link>
 						)
 					}) ?? copy.body}
