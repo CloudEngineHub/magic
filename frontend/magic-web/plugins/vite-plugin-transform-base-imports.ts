@@ -49,98 +49,99 @@ export default function vitePluginTransformBaseImports(
 	return {
 		name: "vite-plugin-transform-base-imports",
 		enforce: "pre",
-		transform(code, id) {
-			// Only process TypeScript/JavaScript files
-			if (!/\.(ts|tsx|js|jsx)$/.test(id)) {
-				return null
-			}
-
-			// Skip node_modules
-			if (id.includes("node_modules")) {
-				return null
-			}
-
-			const sourceFile = createSourceFile(
-				id,
-				code,
-				ScriptTarget.Latest,
-				true,
-				getScriptKindFromId(id),
-			)
-
-			let hasChanges = false
-			const replacements: Array<{ start: number; end: number; text: string }> = []
-
-			for (const statement of sourceFile.statements) {
-				if (!isImportDeclaration(statement)) continue
-				if (!statement.importClause || statement.importClause.isTypeOnly) continue
-				if (!isStringLiteral(statement.moduleSpecifier)) continue
-
-				const importPath = statement.moduleSpecifier.text
-				const target = targetPaths.find((item) => item.base === importPath)
-				if (!target) continue
-
-				const namedBindings = statement.importClause.namedBindings
-				if (!namedBindings || !isNamedImports(namedBindings)) continue
-
-				const valueSpecifiers = namedBindings.elements.filter(
-					(element) => !element.isTypeOnly,
-				)
-				const typeSpecifiers = namedBindings.elements.filter(
-					(element) => element.isTypeOnly,
-				)
-				if (valueSpecifiers.length === 0) continue
-
-				hasChanges = true
-
-				const nextImports: string[] = []
-				if (statement.importClause.name) {
-					nextImports.push(
-						`import ${statement.importClause.name.text} from "${importPath}"`,
-					)
-				}
-
-				if (typeSpecifiers.length > 0) {
-					nextImports.push(
-						`import type { ${typeSpecifiers
-							.map((specifier) => formatSpecifierText(specifier))
-							.join(", ")} } from "${importPath}"`,
-					)
-				}
-
-				for (const specifier of valueSpecifiers) {
-					const importedName = specifier.propertyName?.text ?? specifier.name.text
-					const localName = specifier.name.text
-
-					nextImports.push(
-						`import ${localName} from "${buildImportPath({
-							base: importPath,
-							subDirectory: target.subDirectory,
-							query: target.query,
-							componentName: target.componentNameFormatter
-								? target.componentNameFormatter(importedName)
-								: importedName,
-						})}"`,
-					)
-				}
-
-				replacements.push({
-					start: statement.getStart(sourceFile),
-					end: statement.getEnd(),
-					text: nextImports.join("\n"),
-				})
-			}
-
-			if (!hasChanges) {
-				return null
-			}
-
-			return {
-				code: applyReplacements(code, replacements),
-				map: null, // Source map can be generated if needed
-			}
+		transform: {
+			// Hook filters are evaluated natively by Rolldown, so modules that cannot contain a
+			// configured base import never enter JS or the TypeScript parser (~4s of a full build).
+			filter: {
+				// Only process TypeScript/JavaScript files, and skip node_modules.
+				id: { include: /\.(?:ts|tsx|js|jsx)$/, exclude: /node_modules/ },
+				code: createBaseImportCodeFilter(targetPaths),
+			},
+			handler: transformBaseImports,
 		},
 	}
+
+	function transformBaseImports(code: string, id: string) {
+		const sourceFile = createSourceFile(
+			id,
+			code,
+			ScriptTarget.Latest,
+			true,
+			getScriptKindFromId(id),
+		)
+
+		let hasChanges = false
+		const replacements: Array<{ start: number; end: number; text: string }> = []
+
+		for (const statement of sourceFile.statements) {
+			if (!isImportDeclaration(statement)) continue
+			if (!statement.importClause || statement.importClause.isTypeOnly) continue
+			if (!isStringLiteral(statement.moduleSpecifier)) continue
+
+			const importPath = statement.moduleSpecifier.text
+			const target = targetPaths.find((item) => item.base === importPath)
+			if (!target) continue
+
+			const namedBindings = statement.importClause.namedBindings
+			if (!namedBindings || !isNamedImports(namedBindings)) continue
+
+			const valueSpecifiers = namedBindings.elements.filter((element) => !element.isTypeOnly)
+			const typeSpecifiers = namedBindings.elements.filter((element) => element.isTypeOnly)
+			if (valueSpecifiers.length === 0) continue
+
+			hasChanges = true
+
+			const nextImports: string[] = []
+			if (statement.importClause.name) {
+				nextImports.push(`import ${statement.importClause.name.text} from "${importPath}"`)
+			}
+
+			if (typeSpecifiers.length > 0) {
+				nextImports.push(
+					`import type { ${typeSpecifiers
+						.map((specifier) => formatSpecifierText(specifier))
+						.join(", ")} } from "${importPath}"`,
+				)
+			}
+
+			for (const specifier of valueSpecifiers) {
+				const importedName = specifier.propertyName?.text ?? specifier.name.text
+				const localName = specifier.name.text
+
+				nextImports.push(
+					`import ${localName} from "${buildImportPath({
+						base: importPath,
+						subDirectory: target.subDirectory,
+						query: target.query,
+						componentName: target.componentNameFormatter
+							? target.componentNameFormatter(importedName)
+							: importedName,
+					})}"`,
+				)
+			}
+
+			replacements.push({
+				start: statement.getStart(sourceFile),
+				end: statement.getEnd(),
+				text: nextImports.join("\n"),
+			})
+		}
+
+		if (!hasChanges) {
+			return null
+		}
+
+		return {
+			code: applyReplacements(code, replacements),
+			map: null, // Source map can be generated if needed
+		}
+	}
+}
+
+/** Superset check: a configured base can only be imported through its quoted specifier. */
+function createBaseImportCodeFilter(targetPaths: Array<{ base: string }>): RegExp {
+	const bases = targetPaths.map(({ base }) => base.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"))
+	return new RegExp(`["'\`](?:${bases.join("|")})["'\`]`)
 }
 
 function normalizeTargetPaths(paths?: TransformBaseImportsOptions["paths"]) {
