@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest"
 import type { PlatformWatermarkConfig } from "@/apis/types"
 import {
 	USER_ID_WATERMARK_CONFIG,
-	WATERMARK_CONFIG,
 	resolveUserWatermarkMode,
 	resolveUserWatermarkRenderConfig,
 	setPlatformWatermarkConfig,
@@ -80,13 +79,15 @@ describe("resolveUserWatermarkRenderConfig", () => {
 		expect(alphaOf(config.textColor ?? "")).toBeLessThan(alphaOf("rgba(0, 0, 0, 0.03)"))
 	})
 
-	it("keeps the default legacy watermark for shared organizations", () => {
+	it("keeps the environment watermark almost transparent for shared organizations", () => {
 		setWatermarkOrganizationType(false)
 
 		const { config, key } = resolveUserWatermarkRenderConfig("legacy")
 
 		expect(key).toBe("legacy")
-		expect(config.textColor).toBe(WATERMARK_CONFIG.textColor)
+		expect(config.textColor).toBe(USER_ID_WATERMARK_CONFIG.textColor)
+		// 团队/企业组织与个人组织一致，必须比平台水印最浅档（0.03）还淡。
+		expect(alphaOf(config.textColor ?? "")).toBeLessThan(alphaOf("rgba(0, 0, 0, 0.03)"))
 	})
 
 	it("returns a different render key per variant so the watermark remounts on switches", () => {

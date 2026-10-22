@@ -31,7 +31,7 @@ export interface OrganizationResponse {
 }
 
 export class UserService {
-	private readonly contactApi: typeof apis.ContactApi
+	protected readonly contactApi: typeof apis.ContactApi
 
 	private readonly service: Container
 
@@ -116,16 +116,28 @@ export class UserService {
 	}
 
 	/**
+	 * 写入用户信息前的扩展点：子类可在这里补全各版本专属的用户字段。
+	 * 开源版没有组织架构相关的展示需求，默认原样返回。
+	 */
+	protected async enrichUserInfo(
+		userInfo: StructureUserItem,
+		_options?: Pick<RequestConfig, "skipAppInitWait">,
+	): Promise<StructureUserItem> {
+		return userInfo
+	}
+
+	/**
 	 * @description 获取当前组织下当前用户信息
 	 */
 	fetchUserInfo = async (
 		options?: Pick<RequestConfig, "skipAppInitWait" | "headers">,
 	): Promise<StructureUserItem | null> => {
-		const userInfo = await this.contactApi.getAccountUserInfo(undefined, options)
+		const accountUser = await this.contactApi.getAccountUserInfo(undefined, options)
 
-		if (userInfo) {
-			this.setUserInfo(userTransformer(userInfo))
-		}
+		if (!accountUser) return null
+
+		const userInfo = await this.enrichUserInfo(accountUser, options)
+		this.setUserInfo(userTransformer(userInfo))
 
 		return userInfo
 	}
@@ -140,7 +152,11 @@ export class UserService {
 		if (!user_id || !magic_id) {
 			return null
 		}
-		const userInfoResponse = await this.contactApi.getAccountUserInfo()
+		const accountUser = await this.contactApi.getAccountUserInfo()
+		if (!accountUser) return null
+
+		// 刷新走的是同一个账号接口，同样经过子类的字段补全扩展点。
+		const userInfoResponse = await this.enrichUserInfo(accountUser)
 
 		// 更新用户信息
 		const user = new UserRepository()
@@ -301,13 +317,16 @@ export class UserService {
 			// })
 
 			stage = "fetch_target_user"
-			const targetUser = await this.contactApi.getAccountUserInfo({
+			const accountUser = await this.contactApi.getAccountUserInfo({
 				organization_code: magic_organization_code,
 			})
 
-			if (!targetUser) {
+			if (!accountUser) {
 				throw new Error("targetUser is null")
 			}
+
+			// 切换组织后同样经过子类的字段补全扩展点。
+			const targetUser = await this.enrichUserInfo(accountUser)
 
 			stage = "transform_target_user"
 			const userInfo = userTransformer(targetUser)
