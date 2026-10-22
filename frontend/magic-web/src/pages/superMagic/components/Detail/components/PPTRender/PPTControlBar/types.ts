@@ -1,5 +1,7 @@
 export interface PPTControlBarProps {
+	animationOnly?: boolean
 	activeIndex: number
+	buildProgress?: { step: number; total: number }
 	totalSlides: number
 	canGoPrevious?: boolean
 	canGoNext?: boolean
@@ -22,11 +24,15 @@ export interface PPTControlBarProps {
 	notesVisible?: boolean
 	onToggleNotes?: () => void
 	onOpenTransitions?: () => void
+	onToggleBuildPanel?: () => void
+	buildPanelOpen?: boolean
 	scaleRatio: number
 	isAutoScale: boolean
 	portalContainer: HTMLElement | null
 	onScaleChange: (scale: number) => void
 	onResetScale: () => void
 	className?: string
+	/** Right offset (CSS length) that keeps the bar clear of a docked side panel. */
+	rightInset?: string | number
 	currentFileId?: string
 }

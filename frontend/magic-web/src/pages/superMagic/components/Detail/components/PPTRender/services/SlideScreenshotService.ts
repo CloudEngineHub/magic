@@ -8,6 +8,7 @@ import {
 	resolvePptScaleContentDimensions,
 	type CanonicalContentDimensions,
 } from "../../../contents/HTML/utils/slide-dimensions"
+import { prepareScreenshotAnimations } from "./prepareScreenshotAnimations"
 import { stabilizeSingleLineTextForSnapdom } from "./snapdomTextStabilizer"
 import {
 	createPPTThumbnailCacheKey,
@@ -767,6 +768,9 @@ export class SlideScreenshotService {
 			}
 
 			const renderingReady = await this.waitForRenderingReady(iframeDoc, signal)
+			await prepareScreenshotAnimations(iframeDoc, screenshotTarget, signal, (delay, abort) =>
+				this.waitForAbortableDelay(delay, abort),
+			)
 
 			const restoreTextStyles = stabilizeSingleLineTextForSnapdom(screenshotTarget)
 			let restoreImageSources: () => void = () => undefined
@@ -808,8 +812,11 @@ export class SlideScreenshotService {
 
 				this.throwIfAborted(signal)
 
-				// 当前预览继续沿用原 fallback；已知缺图／字体未就绪的结果不进入长期缓存。
-				onCacheable?.(renderingReady && !usedFallbackImage)
+				// A resource-budget fallback can render, but must not persist a snapshot
+				// taken before late styles/scripts have finished loading.
+				onCacheable?.(
+					renderingReady && iframeDoc.readyState === "complete" && !usedFallbackImage,
+				)
 
 				const webpGeneration = result.toWebp({
 					width: width / THUMBNAIL_SCALE,
@@ -940,8 +947,7 @@ export class SlideScreenshotService {
 		signal: AbortSignal
 	}): Promise<void> {
 		const IFRAME_LOAD_TIMEOUT = 10000
-		const RENDER_WAIT_TIME = 1200
-		const FALLBACK_WAIT_TIME = 2000
+		const IFRAME_RESOURCE_WAIT_BUDGET = 2000
 
 		// 用于清理所有监听器和定时器
 		const cleanupFunctions: Array<() => void> = []
@@ -983,6 +989,9 @@ export class SlideScreenshotService {
 
 					// 注入早期媒体暂停脚本（在 HTML 内容中）
 					const earlyPauseScript = `
+					<style data-screenshot-animation-fill>
+					*,*::before,*::after{animation-fill-mode:both!important}
+					</style>
 					<script data-screenshot-pause>
 					(function() {
 						// 立即暂停所有媒体元素
@@ -1042,47 +1051,42 @@ export class SlideScreenshotService {
 					iframe.contentDocument.write(fullContent)
 					iframe.contentDocument.close()
 
+					// Wait for load, not DOMContentLoaded: slides often start their scripted
+					// entrances in window.onload after external scripts/styles finish.
 					const doc = iframe.contentDocument
-
-					// 策略2: 监听文档就绪状态变化
-					if (doc) {
-						const checkReadyState = () => {
-							if (doc.readyState === "complete") {
-								handleResolve()
-							}
-						}
-						doc.addEventListener("readystatechange", checkReadyState)
-						cleanupFunctions.push(() =>
-							doc.removeEventListener("readystatechange", checkReadyState),
-						)
-
-						// 立即检查当前状态
-						checkReadyState()
-
-						// 策略3: DOMContentLoaded 作为备用
-						const domContentLoadedHandler = () => handleResolve()
-						doc.addEventListener("DOMContentLoaded", domContentLoadedHandler)
-						cleanupFunctions.push(() =>
-							doc.removeEventListener("DOMContentLoaded", domContentLoadedHandler),
-						)
+					let completionScheduled = false
+					const checkComplete = () => {
+						if (doc.readyState !== "complete" || completionScheduled) return
+						completionScheduled = true
+						// A task boundary lets the document's load handlers run before capture,
+						// including engines that omit the parent iframe's load notification.
+						const completionTimer = setTimeout(handleResolve, 0)
+						cleanupFunctions.push(() => clearTimeout(completionTimer))
 					}
+					doc.addEventListener("readystatechange", checkComplete)
+					cleanupFunctions.push(() =>
+						doc.removeEventListener("readystatechange", checkComplete),
+					)
+					checkComplete()
 
-					// 策略4: 最终备用方案 - 等待合理的时间
-					const fallbackTimer = setTimeout(() => {
-						if (!resolved && iframe.contentDocument?.body) {
+					// External fonts/images can keep load (and parser-blocked scripts)
+					// pending indefinitely. Keep the existing best-effort body fallback;
+					// resource checks and animation sampling still run before snapDOM.
+					const resourceWaitTimer = setTimeout(() => {
+						if (
+							doc.body &&
+							(doc.body.childElementCount > 0 || doc.body.textContent?.trim())
+						) {
 							handleResolve()
 						}
-					}, FALLBACK_WAIT_TIME)
-					cleanupFunctions.push(() => clearTimeout(fallbackTimer))
+					}, IFRAME_RESOURCE_WAIT_BUDGET)
+					cleanupFunctions.push(() => clearTimeout(resourceWaitTimer))
 				}),
 				signal,
 			)
 
 			// 等待内容加载后注入暂停脚本
 			await this.injectPauseScript(iframe, signal)
-
-			// 等待渲染完成
-			await this.waitForAbortableDelay(RENDER_WAIT_TIME, signal)
 
 			const doc = iframe.contentDocument
 			const win = iframe.contentWindow
@@ -1103,7 +1107,7 @@ export class SlideScreenshotService {
 	}
 
 	/**
-	 * Inject script to pause animations and media playback
+	 * Keep media playback disabled while preparing the screenshot
 	 */
 	private async injectPauseScript(iframe: HTMLIFrameElement, signal: AbortSignal): Promise<void> {
 		const win = iframe.contentWindow
@@ -1146,14 +1150,6 @@ export class SlideScreenshotService {
 			const pauseScript = doc.createElement("script")
 			pauseScript.textContent = `
 				(function() {
-					// 暂停 CSS 动画
-					var style = document.createElement('style');
-					style.id = 'magic-animation-pause';
-					style.textContent = '*{animation:none!important}*::before,*::after{animation:none!important}';
-					if (document.head) {
-						document.head.appendChild(style);
-					}
-					
 					// 暂停媒体元素的函数
 					function pauseMediaElement(element) {
 						try {

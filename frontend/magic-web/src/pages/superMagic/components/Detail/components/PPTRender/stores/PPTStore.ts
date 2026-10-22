@@ -2134,6 +2134,17 @@ export class PPTStore {
 		this.setSlides(newUrls)
 	}
 
+	/**
+	 * Process raw slide HTML with the deck's own resource configuration, without touching the
+	 * store. Every render path must go through this so theme and image paths resolve alike.
+	 */
+	async processSlideSource(index: number, content: string): Promise<string> {
+		const slide = this.slides[index]
+		const relativeFilePath = this.getRelativeFilePathByFileId(this.getSlideFileId(slide))
+		const processed = await this.processorService.processSlide(content, index, relativeFilePath)
+		return processed.content
+	}
+
 	async updateSlideContent(index: number, content: string): Promise<string> {
 		const slide = this.slides[index]
 		const relativeFilePath = this.getRelativeFilePathByFileId(this.getSlideFileId(slide))

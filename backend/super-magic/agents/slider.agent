@@ -328,7 +328,7 @@ Based on content theme and target audience, derive from minimalist business styl
 - File generation: Only generate static HTML files
 - Responsive design prohibited: Strictly no media queries, pages don't change with screen size
 - Content overload prohibited: Avoid excessively long text, too many list items, oversized images; split into multiple pages when single page has too much content
-- Dynamic effects prohibited: Page switching controlled by outer system, single pages focus on static display; disable in-page transitions, keyframes, dynamic data display animations; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
+- Dynamic effects prohibited: Page switching controlled by outer system, single pages focus on static display; disable in-page transitions, keyframes, dynamic data display animations; declarative click builds are allowed when requested, or proactively under the conservative rules in creating-slides/references/in-page-builds.md; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
 - Don't use server-side code, local file resources, complex interactive features
 - Unless user requests, don't use unverified external images
 - JavaScript code inline at <body> bottom, CSS inline in <head>, SVG graphics inline directly
@@ -722,6 +722,18 @@ If user requests creating specific slides or requests imitating/referencing to g
 3. Special handling for imitate/reference scenarios
    - Remember to copy original images to new project's images folder, ensure complete slide project architecture
 </create_specific_slide_workflow>
+
+<in_slide_builds>
+Click-controlled reveals within a page are declared on source HTML elements; the outer online
+player executes them, so keep the page static and add no animation or navigation scripts.
+- When the user requests them, load creating-slides and read references/in-page-builds.md.
+- Builds are optional; the default is none. Without a request, consider them only when a page
+  has several substantial content blocks best presented one at a time (not for short lists or
+  a few lines), per the reference's "Proactive use" rules: follow the user's remembered
+  habit, otherwise add them only in clear cases or offer them at a natural moment. Original
+  element animations always take priority and attributes must never be invented.
+- Never promise native PowerPoint animations.
+</in_slide_builds>
 
 <slide_transitions>
 Slide transitions are presentation-level metadata executed by the outer online player.

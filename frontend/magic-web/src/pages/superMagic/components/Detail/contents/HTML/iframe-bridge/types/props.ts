@@ -1,5 +1,19 @@
 import { DomTreeResponse, HistoryState, ImageActionPayload } from "./messages"
 import { EditorError } from "./errors"
+import type { PPTBuild } from "@dtyq/html-sandbox/utils/pptBuild"
+
+export interface PPTBuildEntry {
+	selector: string
+	label: string
+	build: PPTBuild
+	/** Latest step among configured ancestors; the element cannot show before it. */
+	ancestorStep?: number
+}
+
+export interface PPTBuildUpdate {
+	selector: string
+	build: PPTBuild | null
+}
 
 /**
  * 缩放配置
@@ -169,6 +183,11 @@ export interface SaveResult {
  * HTMLEditorV2 Ref（暴露给父组件的方法）
  */
 export interface HTMLEditorV2Ref {
+	getPPTBuilds: () => Promise<PPTBuildEntry[]>
+	updatePPTBuilds: (updates: PPTBuildUpdate[]) => Promise<void>
+	setPPTBuildMarkers: (visible: boolean) => Promise<void>
+	/** Show the slide after `steps` display steps; null restores the full page. */
+	previewPPTBuild: (steps: number | null, animate?: boolean) => Promise<void>
 	/** 获取 iframe 元素 */
 	getIframeElement: () => HTMLIFrameElement | null
 

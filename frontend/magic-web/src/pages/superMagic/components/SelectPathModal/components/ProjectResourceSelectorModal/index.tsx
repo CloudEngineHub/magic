@@ -75,6 +75,7 @@ import magicToast from "@/components/base/MagicToaster/utils"
 import { loadProjectAttachments } from "@/pages/superMagic/services"
 import { useSingleDocumentStaticDependencies } from "@/pages/superMagic/hooks/useSingleDocumentStaticDependencies"
 import { MentionDesktopPicker } from "./MentionDesktopPicker"
+import { AgentResourceScopeSwitch } from "./AgentResourceScopeSwitch"
 import { useResourceProjects, RESOURCE_WORKSPACE_IDS } from "./useResourceProjects"
 import type { ResourceProject } from "../../resourceProjectTypes"
 import type { FileManagerCheckChange } from "../../../TopicFilesButton/components/FileManager/types"
@@ -179,6 +180,8 @@ function ProjectResourceSelectorModal({
 	const allowProjectSelection = isMentionMode
 	const {
 		availableProjects,
+		agentScope,
+		changeAgentScope,
 		setAvailableProjects,
 		loadingMoreResources,
 		hasMoreResourceProjects,
@@ -1475,6 +1478,9 @@ function ProjectResourceSelectorModal({
 
 		return (
 			<>
+				{currentWorkspace?.id === MY_AGENTS_WORKSPACE_ID && (
+					<AgentResourceScopeSwitch value={agentScope} onChange={changeAgentScope} />
+				)}
 				{canEdit && createProjectHook.createProjectShown && (
 					<div className={textFolderItemClass}>
 						<div className={folderIconClass}>
@@ -1825,6 +1831,11 @@ function ProjectResourceSelectorModal({
 				workspace={currentWorkspace}
 				project={currentProject}
 				projects={availableProjects}
+				resourceFilter={
+					currentWorkspace?.id === MY_AGENTS_WORKSPACE_ID ? (
+						<AgentResourceScopeSwitch value={agentScope} onChange={changeAgentScope} />
+					) : undefined
+				}
 				selectionMode={selectionMode === "import" ? "import" : "mention"}
 				allowProjectSelection={allowProjectSelection}
 				attachments={attachments}

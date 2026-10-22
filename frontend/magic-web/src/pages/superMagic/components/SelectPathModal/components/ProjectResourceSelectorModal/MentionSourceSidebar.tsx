@@ -11,7 +11,6 @@ import {
 	MY_SKILLS_WORKSPACE_ID,
 	SHARE_WORKSPACE_ID,
 } from "../../../../constants"
-import { useSelectionListViewport } from "./useSelectionListViewport"
 
 export function MentionSourceSidebar({
 	workspaces,
@@ -31,10 +30,6 @@ export function MentionSourceSidebar({
 	onSelect: (workspace: Workspace) => void
 }) {
 	const { t } = useTranslation("super")
-	const viewport = useSelectionListViewport(
-		'[data-testid^="picker-source-"]',
-		workspaces.length + 1,
-	)
 	const row = (workspace: Workspace) => {
 		const Icon =
 			workspace.workspace_type === "micro-app"
@@ -53,7 +48,7 @@ export function MentionSourceSidebar({
 				key={workspace.id}
 				label={workspace.name || t("workspace.unnamedWorkspace")}
 				labelVariant="navigation"
-				labelClassName="text-xs"
+				labelClassName="flex-1 text-xs [&>span]:block [&>span]:truncate"
 				leading={<Icon size={16} />}
 				hideChevron
 				testId={`picker-source-${workspace.id}`}
@@ -70,7 +65,7 @@ export function MentionSourceSidebar({
 	return (
 		<nav
 			aria-label={t("selectPathModal.workspace")}
-			className="flex min-h-0 w-40 shrink-0 flex-col border-r bg-muted/20 p-2"
+			className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-muted/20 p-2"
 		>
 			<SidebarRow
 				label={t("projectNavigation.recent")}
@@ -85,14 +80,10 @@ export function MentionSourceSidebar({
 			<div className="shrink-0 px-2 py-2 text-xs font-medium text-muted-foreground">
 				{t("selectPathModal.workspace")}
 			</div>
-			<div ref={viewport.containerRef} className="min-h-0 flex-1">
-				<ScrollArea
-					className="h-full"
-					style={viewport.height ? { height: viewport.height } : undefined}
-					viewportRef={viewport.viewportRef}
-					viewportClassName="[&>div]:!block"
-				>
-					<div>
+			{/* 滚动区铺满剩余高度；半行提示只适用于项目列表，不能在固定入口上方制造空白。 */}
+			<div className="min-h-0 min-w-0 flex-1">
+				<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
+					<div className="pb-2">
 						{workspaces.map(row)}
 						{footer}
 					</div>

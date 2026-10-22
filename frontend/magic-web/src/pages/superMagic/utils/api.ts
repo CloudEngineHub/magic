@@ -425,11 +425,57 @@ export const getFileContentById = async (
 	return content
 }
 
+export interface DownloadProgress {
+	loaded: number
+	/** Only set when the byte count is trustworthy (see readBodyWithProgress). */
+	total?: number
+}
+
 interface DownloadFileContentOptions {
 	responseType?: "text" | "arrayBuffer" | "blob"
 	/** 浏览器请求缓存策略 */
 	cache?: RequestCache
 	signal?: AbortSignal
+	/** Streams the body to report received bytes; omitted keeps the plain single-read path. */
+	onProgress?: (progress: DownloadProgress) => void
+}
+
+/**
+ * Reads the body chunk by chunk so callers can show progress. Content-Length counts
+ * encoded bytes while the reader yields decoded ones, and cross-origin responses may
+ * hide the header, so the total is only reported for unencoded, visible lengths.
+ */
+async function readBodyWithProgress(
+	response: Response,
+	onProgress: (progress: DownloadProgress) => void,
+): Promise<Uint8Array<ArrayBuffer>> {
+	const declared = Number(response.headers.get("content-length"))
+	const total =
+		!response.headers.get("content-encoding") && Number.isFinite(declared) && declared > 0
+			? declared
+			: undefined
+	const reader = response.body?.getReader()
+	if (!reader) {
+		const bytes = new Uint8Array(await response.arrayBuffer())
+		onProgress({ loaded: bytes.length, total: bytes.length })
+		return bytes
+	}
+	const chunks: Uint8Array[] = []
+	let loaded = 0
+	for (;;) {
+		const { done, value } = await reader.read()
+		if (done) break
+		chunks.push(value)
+		loaded += value.length
+		onProgress({ loaded, total: total && loaded <= total ? total : undefined })
+	}
+	const bytes = new Uint8Array(loaded)
+	let offset = 0
+	for (const chunk of chunks) {
+		bytes.set(chunk, offset)
+		offset += chunk.length
+	}
+	return bytes
 }
 
 // 从URL下载文件内容并返回指定格式的数据
@@ -438,7 +484,7 @@ export const downloadFileContent = async (
 	options: DownloadFileContentOptions = {},
 ): Promise<string | ArrayBuffer | Blob> => {
 	try {
-		const { responseType = "text", cache } = options
+		const { responseType = "text", cache, onProgress } = options
 
 		const response = await fetch(url, {
 			method: "GET",
@@ -448,6 +494,19 @@ export const downloadFileContent = async (
 
 		if (!response.ok) {
 			throw new Error(`下载失败: ${response.status} ${response.statusText}`)
+		}
+
+		if (onProgress) {
+			const bytes = await readBodyWithProgress(response, onProgress)
+			switch (responseType) {
+				case "arrayBuffer":
+					return bytes.buffer
+				case "blob":
+					return new Blob([bytes], { type: response.headers.get("content-type") || "" })
+				case "text":
+				default:
+					return new TextDecoder().decode(bytes)
+			}
 		}
 
 		switch (responseType) {

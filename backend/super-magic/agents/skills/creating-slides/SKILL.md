@@ -58,6 +58,18 @@ When user has no explicit requirements, follow these defaults:
 
 ---
 
+## In-slide builds
+
+When the user requests click-controlled reveals, read
+[in-page-builds.md](references/in-page-builds.md). Builds are optional and never required:
+the default is no builds. Only when several substantial content blocks on a page are best
+presented one at a time may you consider adding them yourself, or offer them to the user,
+following the "Proactive use" section there (which also covers remembering the user's habit). Use only its declarative element
+attributes; keep HTML static and preserve the existing slide creation/editing workflow.
+Proactive builds must follow its "Proactive use" rules: original element animations take
+priority, attributes must be exactly as documented, and the user is told what was added.
+Never promise native PowerPoint animations.
+
 ## Slide transitions
 
 When the user requests page transitions, read [slide-transitions.md](references/slide-transitions.md)
@@ -109,7 +121,7 @@ Generate concise, presentation-ready notes from the page purpose, visible conten
 - **File generation**: Only generate static HTML files
 - **Responsive design prohibited**: Strictly no media queries, pages don't change with screen size
 - **Content overload prohibited**: Avoid excessively long text, too many list items, oversized images; split into multiple pages when single page has too much content
-- **Dynamic effects prohibited**: Page switching controlled by outer system, single pages focus on static display; disable in-page transitions, keyframes, dynamic data display animations; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
+- **Dynamic effects prohibited**: Page switching controlled by outer system, single pages focus on static display; disable in-page transitions, keyframes, dynamic data display animations; declarative click builds are allowed when requested, or proactively under the conservative rules in creating-slides/references/in-page-builds.md; disable sound effects, only keep static visuals (CSS hover, shadows, gradients, borders and other style effects can be used normally)
 - **Don't use server-side code, local file resources, complex interactive features**
 - **Unless user requests, don't use unverified external images**
 - **JavaScript code inline at `<body>` bottom, CSS inline in `<head>`, SVG graphics inline directly**

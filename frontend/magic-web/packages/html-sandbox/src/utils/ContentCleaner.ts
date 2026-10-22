@@ -5,6 +5,7 @@
 
 import { normalizeSafeHref } from "./safeUrl"
 import { removeRuntimeNodes, SOURCE_NODE_ATTRIBUTE } from "./sourceNodes"
+import { PPT_BUILD_MARKERS_ATTRIBUTE } from "../features/PPTBuildMarkers"
 
 export class ContentCleaner {
 	/**
@@ -32,6 +33,9 @@ export class ContentCleaner {
 	 * Remove injected elements
 	 */
 	private static removeInjectedElements(doc: Document): void {
+		doc.querySelectorAll(`[${PPT_BUILD_MARKERS_ATTRIBUTE}]`).forEach((element) =>
+			element.remove(),
+		)
 		// Remove all elements with data-injected attribute
 		const injected = doc.querySelectorAll("[data-injected]")
 		injected.forEach((el) => {
@@ -52,6 +56,7 @@ export class ContentCleaner {
 		const editingClasses = ["__editor-selected", "__editor-hover"]
 		const editingAttributes = [
 			"data-magic-editor-node-id",
+			"data-magic-ppt-build-hidden",
 			SOURCE_NODE_ATTRIBUTE,
 			"contenteditable",
 			"data-text-editing",

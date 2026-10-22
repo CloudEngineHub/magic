@@ -84,6 +84,7 @@ function createIframeRef() {
 
 interface TestHarnessProps {
 	isEditMode: boolean
+	isPPTBuildMode?: boolean
 	iframeLoaded?: boolean
 	contentInjected?: boolean
 	renderSiteUrl?: string
@@ -94,6 +95,7 @@ interface TestHarnessProps {
 
 function TestHarness({
 	isEditMode,
+	isPPTBuildMode,
 	iframeLoaded = true,
 	contentInjected = true,
 	renderSiteUrl,
@@ -104,10 +106,11 @@ function TestHarness({
 	const iframeRef = useRef(createIframeRef().current)
 	const localEditorRef = useRef<HTMLEditorV2Ref>(null)
 
-	useHTMLEditorV2({
+	const { isEditorReady } = useHTMLEditorV2({
 		iframeRef,
 		editorRef: editorRef ?? localEditorRef,
 		isEditMode,
+		isPPTBuildMode,
 		sandboxType: "iframe",
 		iframeLoaded,
 		contentInjected,
@@ -119,15 +122,73 @@ function TestHarness({
 		prepareSaveContent,
 	})
 
-	return null
+	return <span data-testid="editor-ready">{String(isEditorReady)}</span>
 }
 
 describe("useHTMLEditorV2 edit lifecycle", () => {
+	it("activates animation selection without enabling full editing and cleans up on close", async () => {
+		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref>
+		const view = render(<TestHarness isEditMode={false} isPPTBuildMode editorRef={editorRef} />)
+		const bridge = bridgeState.instances[0]
+		act(() => bridge.emit("EDITOR_READY"))
+		await waitFor(() => expect(view.getByTestId("editor-ready")).toHaveTextContent("true"))
+		expect(bridge.request).toHaveBeenCalledWith(EditorMessageType.SET_PPT_BUILD_MODE, {
+			enabled: true,
+		})
+		expect(bridge.request).not.toHaveBeenCalledWith(EditorMessageType.ENTER_EDIT_MODE)
+		await editorRef.current!.updatePPTBuilds([])
+		expect(bridge.sendCommand).toHaveBeenCalledWith(
+			EditorMessageType.UPDATE_PPT_BUILDS,
+			expect.anything(),
+			expect.anything(),
+		)
+		view.rerender(
+			<TestHarness isEditMode={false} isPPTBuildMode={false} editorRef={editorRef} />,
+		)
+		await waitFor(() =>
+			expect(bridge.request).toHaveBeenCalledWith(EditorMessageType.EXIT_SELECTION_MODE),
+		)
+		expect(bridge.request).toHaveBeenLastCalledWith(EditorMessageType.EXIT_SELECTION_MODE)
+		expect(view.getByTestId("editor-ready")).toHaveTextContent("false")
+	})
 	beforeEach(() => {
 		toastInfo.mockClear()
 		bridgeState.instances.length = 0
 		bridgeState.requests.length = 0
 		bridgeState.activationMessages.length = 0
+	})
+
+	it("exposes build APIs only after editor activation and resets readiness on document replacement", async () => {
+		const editorRef = { current: null } as RefObject<HTMLEditorV2Ref>
+		const view = render(<TestHarness isEditMode editorRef={editorRef} />)
+		const bridge = bridgeState.instances[0]
+		let finishSelection: (() => void) | undefined
+		bridge.request.mockImplementation(async (type: string) => {
+			bridgeState.requests.push(type)
+			if (type === EditorMessageType.ENTER_SELECTION_MODE)
+				await new Promise<void>((resolve) => {
+					finishSelection = resolve
+				})
+			if (type === EditorMessageType.GET_PPT_BUILDS) return []
+			return {}
+		})
+		await expect(editorRef.current!.setPPTBuildMarkers(true)).rejects.toThrow(
+			"PPT_BUILD_EDITOR_NOT_READY",
+		)
+		act(() => bridge.emit("EDITOR_READY"))
+		await waitFor(() => expect(finishSelection).toBeDefined())
+		expect(view.getByTestId("editor-ready").textContent).toBe("false")
+		await act(async () => finishSelection?.())
+		expect(view.getByTestId("editor-ready").textContent).toBe("true")
+		await expect(editorRef.current!.getPPTBuilds()).resolves.toEqual([])
+		await editorRef.current!.updatePPTBuilds([])
+		expect(bridge.sendCommand).toHaveBeenCalledWith(
+			EditorMessageType.UPDATE_PPT_BUILDS,
+			{ updates: [] },
+			expect.objectContaining({ canUndo: true }),
+		)
+		view.rerender(<TestHarness isEditMode editorRef={editorRef} contentInjected={false} />)
+		expect(view.getByTestId("editor-ready").textContent).toBe("false")
 	})
 
 	it("explains why a JavaScript-created element cannot be edited", async () => {
@@ -247,6 +308,7 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
 			])
@@ -256,8 +318,10 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.EXIT_EDIT_MODE,
 				EditorMessageType.EXIT_SELECTION_MODE,
 			])
@@ -267,10 +331,13 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.EXIT_EDIT_MODE,
 				EditorMessageType.EXIT_SELECTION_MODE,
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
 			])
@@ -287,6 +354,7 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
 			])
@@ -302,8 +370,10 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.EXIT_EDIT_MODE,
 				EditorMessageType.EXIT_SELECTION_MODE,
 			])
@@ -318,10 +388,13 @@ describe("useHTMLEditorV2 edit lifecycle", () => {
 
 		await waitFor(() => {
 			expect(bridgeState.requests).toEqual([
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.EXIT_EDIT_MODE,
 				EditorMessageType.EXIT_SELECTION_MODE,
+				EditorMessageType.SET_PPT_BUILD_MODE,
 				EditorMessageType.ENTER_EDIT_MODE,
 				EditorMessageType.ENTER_SELECTION_MODE,
 			])

@@ -195,6 +195,7 @@ vi.mock("../hooks/useHTMLEditorV2", () => ({
 	useHTMLEditorV2: vi.fn((options: Parameters<typeof useHTMLEditorV2>[0]) => {
 		hookState.editorOptions = options
 		hookState.editorContentInjectedValues.push(options.contentInjected)
+		return { isEditorReady: false }
 	}),
 }))
 
