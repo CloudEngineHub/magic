@@ -9,6 +9,7 @@ namespace HyperfTest\Cases\Application\Design\Event\Subscribe;
 
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
 use App\Application\Design\Event\Subscribe\DesignVideoSubmitConsumer;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Entity\DesignGenerationTaskEntity;
 use App\Domain\Design\Entity\Dto\DesignVideoCreateDTO;
@@ -18,18 +19,23 @@ use App\Domain\Design\Factory\DesignGenerationTaskFactory;
 use App\Domain\Design\Repository\Facade\DesignGenerationTaskRepositoryInterface;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
+use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use Hyperf\Amqp\Producer;
+use HyperfTest\Cases\Unit\DataIsolation\ContextTestCase;
 use PhpAmqpLib\Message\AMQPMessage;
-use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Assert;
 use Psr\Log\LoggerInterface;
 
 /**
  * @internal
  */
-class DesignVideoSubmitConsumerTest extends TestCase
+class DesignVideoSubmitConsumerTest extends ContextTestCase
 {
     public function testCanvasCompositionIsSubmittedAndThenDispatchedForPolling(): void
     {
+        $authorization = $this->createMock(AgentDomainService::class);
+        $authorization->expects(self::once())->method('getAuthorizationByUserId')->with('user-1')->willReturn('mock-token');
+        $this->services[AgentDomainService::class] = $authorization;
         $entity = $this->createPendingCanvasCompositionEntity();
         $repository = new SubmitConsumerInMemoryRepository($entity);
         $producer = $this->createMock(Producer::class);
@@ -91,8 +97,10 @@ readonly class SubmitConsumerSubmissionDomainService extends DesignVideoSubmissi
     {
     }
 
-    public function submit(DesignGenerationTaskEntity $entity): array
+    /** 验证消费者为提交链注册授权，避免依赖沙箱初始化的隐式副作用。 */
+    public function submitCanvasComposition(DesignGenerationTaskEntity $entity, DataIsolation $contactIsolation): array
     {
+        Assert::assertSame('mock-token', $contactIsolation->getUserAuthorizationToken());
         return [
             'provider' => 'super_magic',
             'submit_endpoint' => 'api/sandbox/tasks',

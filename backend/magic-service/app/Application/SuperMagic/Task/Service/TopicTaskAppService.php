@@ -178,7 +178,7 @@ class TopicTaskAppService extends AbstractAppService
                 // 2. 在应用层完成DTO到实体的转换
                 // Get message ID (prefer message ID from payload, generate new one if none)
                 $messageId = $messageDTO->getPayload()?->getMessageId() ?: IdGenerator::getSnowId();
-                $dataIsolation = DataIsolation::simpleMake($topicEntity->getUserOrganizationCode(), $topicEntity->getUserId());
+                $dataIsolation = $this->createContactDataIsolationByUser($topicEntity->getUserOrganizationCode(), $topicEntity->getUserId());
                 $aiUserEntity = $this->userDomainService->getByAiCode($dataIsolation, AgentConstant::SUPER_MAGIC_CODE);
                 $messageEntity = $messageDTO->toTaskMessageEntity($topicId, $aiUserEntity->getUserId(), $topicEntity->getUserId());
 
@@ -870,7 +870,7 @@ class TopicTaskAppService extends AbstractAppService
         SuperMagicExecutionSource $executionSource = SuperMagicExecutionSource::HumanChat
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -894,7 +894,7 @@ class TopicTaskAppService extends AbstractAppService
         SuperMagicExecutionSource $executionSource = SuperMagicExecutionSource::OpenApi
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -938,7 +938,7 @@ class TopicTaskAppService extends AbstractAppService
     public function cancelTask(RequestContext $requestContext, string $taskId): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -989,7 +989,7 @@ class TopicTaskAppService extends AbstractAppService
     public function getTaskStatusById(RequestContext $requestContext, int $taskId): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );

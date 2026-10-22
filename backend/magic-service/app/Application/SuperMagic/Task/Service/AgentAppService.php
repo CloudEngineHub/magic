@@ -273,6 +273,7 @@ readonly class AgentAppService
      */
     public function sendChatMessage(DataIsolation $dataIsolation, TaskContext $taskContext): void
     {
+        $dataIsolation->initDataIsolationEnv();
         // 在 Application 层完成 mentions 规范化，Domain 层不再跨域聚合
         di(TaskContextMentionsResolver::class)->resolve($taskContext, $dataIsolation);
         $this->agentDomainService->sendChatMessage(
@@ -297,6 +298,7 @@ readonly class AgentAppService
         string $taskId,
         string $reason,
     ): AgentResponse {
+        $dataIsolation->initDataIsolationEnv();
         return $this->agentDomainService->sendInterruptMessage($dataIsolation, $sandboxId, $taskId, $reason);
     }
 
@@ -308,6 +310,7 @@ readonly class AgentAppService
      */
     public function getWorkspaceStatus(DataIsolation $dataIsolation, string $sandboxId): AgentResponse
     {
+        $dataIsolation->initDataIsolationEnv();
         return $this->agentDomainService->getWorkspaceStatus($dataIsolation, $sandboxId);
     }
 
@@ -329,6 +332,7 @@ readonly class AgentAppService
         bool $skipInitMessages = false,
         ?SandboxImageTarget $images = null,
     ): string {
+        $dataIsolation->initDataIsolationEnv();
         $this->logger->info('[Sandbox][App] Ensuring sandbox is initialized', [
             'topic_id' => $topicId,
             'skip_init_messages' => $skipInitMessages,
@@ -392,6 +396,7 @@ readonly class AgentAppService
      */
     public function rollbackCheckpoint(DataIsolation $dataIsolation, int $topicId, string $sandboxId, string $targetMessageId): AgentResponse
     {
+        $dataIsolation->initDataIsolationEnv();
         $this->logger->info('[Sandbox][App] Rollback checkpoint requested', [
             'sandbox_id' => $sandboxId,
             'target_message_id' => $targetMessageId,
@@ -468,6 +473,7 @@ readonly class AgentAppService
      */
     public function rollbackCheckpointStart(DataIsolation $dataIsolation, int $topicId, string $targetMessageId): string
     {
+        $dataIsolation->initDataIsolationEnv();
         $this->logger->info('[Sandbox][App] Rollback checkpoint start requested', [
             'topic_id' => $topicId,
             'target_message_id' => $targetMessageId,
@@ -540,6 +546,7 @@ readonly class AgentAppService
      */
     public function rollbackCheckpointCommit(DataIsolation $dataIsolation, int $topicId): string
     {
+        $dataIsolation->initDataIsolationEnv();
         $this->logger->info('[Sandbox][App] Rollback checkpoint commit requested', [
             'topic_id' => $topicId,
         ]);
@@ -601,6 +608,7 @@ readonly class AgentAppService
      */
     public function rollbackCheckpointUndo(DataIsolation $dataIsolation, int $topicId): string
     {
+        $dataIsolation->initDataIsolationEnv();
         $this->logger->info('[Sandbox][App] Rollback checkpoint undo requested', [
             'topic_id' => $topicId,
             'user_id' => $dataIsolation->getCurrentUserId(),
@@ -681,6 +689,7 @@ readonly class AgentAppService
      */
     public function rollbackCheckpointCheck(DataIsolation $dataIsolation, int $topicId, string $targetMessageId): AgentResponse
     {
+        $dataIsolation->initDataIsolationEnv();
         $this->logger->info('[Sandbox][App] Rollback checkpoint check requested', [
             'topic_id' => $topicId,
             'target_message_id' => $targetMessageId,
@@ -807,7 +816,7 @@ readonly class AgentAppService
     {
         try {
             $userId = $dataIsolation->getCurrentUserId();
-            if (! is_string($userId) || $userId === '') {
+            if ($userId === '') {
                 return true;
             }
 

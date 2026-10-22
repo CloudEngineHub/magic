@@ -77,6 +77,7 @@ class HandleApiMessageAppService extends AbstractAppService
 
     public function handleApiMessage(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO)
     {
+        $dataIsolation->initDataIsolationEnv();
         $topicId = 0;
         $taskId = '';
         try {
@@ -191,6 +192,7 @@ class HandleApiMessageAppService extends AbstractAppService
 
     public function handleAgentTask(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO): array
     {
+        $dataIsolation->initDataIsolationEnv();
         $topicId = 0;
         $taskId = '';
         try {

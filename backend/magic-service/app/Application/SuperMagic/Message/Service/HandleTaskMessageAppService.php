@@ -90,6 +90,7 @@ class HandleTaskMessageAppService extends AbstractAppService
 
     public function initSandbox(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO): array
     {
+        $dataIsolation->initDataIsolationEnv();
         $topicId = 0;
         $taskId = '';
         try {
@@ -261,6 +262,7 @@ class HandleTaskMessageAppService extends AbstractAppService
 
     public function sendChatMessage(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO): TaskEntity
     {
+        $dataIsolation->initDataIsolationEnv();
         $topicEntity = $this->topicDomainService->getTopicByChatTopicId($dataIsolation, $userMessageDTO->getChatTopicId());
         if (is_null($topicEntity)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
@@ -373,6 +375,7 @@ class HandleTaskMessageAppService extends AbstractAppService
 
     public function executeScriptTask(DataIsolation $dataIsolation, CreateScriptTaskRequestDTO $requestDTO): void
     {
+        $dataIsolation->initDataIsolationEnv();
         $scriptTaskEntity = new ScriptTaskEntity();
         $scriptTaskEntity->setSandboxId($requestDTO->getSandboxId());
         $scriptTaskEntity->setTaskId($requestDTO->getTaskId());

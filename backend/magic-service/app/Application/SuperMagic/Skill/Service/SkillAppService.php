@@ -15,7 +15,6 @@ use App\Application\SuperMagic\Skill\DTO\PublishSkillResultDTO;
 use App\Application\SuperMagic\Skill\Import\SkillPackageParser;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\ModelGateway\Entity\ValueObject\SourceId;
@@ -470,7 +469,8 @@ class SkillAppService extends AbstractSkillAppService
                 SkillProjectConfigUtil::SKILLS_ROOT_PATH . '/' . $dir,
                 $dir,
                 $code . '_' . $token . '.zip',
-                $record['task_key']
+                $record['task_key'],
+                contactDataIsolation: $this->createContactDataIsolationByBase($isolation)
             );
             if (($result['status'] ?? '') === 'FAILED' || ! in_array($result['code'] ?? 1000, [1000, 4000], true)) {
                 throw new RuntimeException('Skill export could not be started');
@@ -1107,7 +1107,8 @@ class SkillAppService extends AbstractSkillAppService
                 $skillDirPath,
                 $skillDirName,
                 $code . '_' . $taskId . '.zip',
-                $taskKey
+                $taskKey,
+                contactDataIsolation: $this->createContactDataIsolationByBase($dataIsolation)
             );
             $this->publishAsyncStatusManager->update($taskId, ['sandbox_id' => $sandboxId]);
             if (($result['status'] ?? '') === 'FAILED' || (($result['code'] ?? 1000) !== 1000 && ($result['code'] ?? -1) !== 4000)) {
@@ -1152,7 +1153,7 @@ class SkillAppService extends AbstractSkillAppService
             return $status;
         }
         try {
-            $result = $this->skillDomainService->checkSkillWorkspaceExportAsync($dataIsolation, (string) ($status['sandbox_id'] ?? ''), (string) ($status['task_key'] ?? ('publish:skill:' . $taskId)));
+            $result = $this->skillDomainService->checkSkillWorkspaceExportAsync($dataIsolation, (string) ($status['sandbox_id'] ?? ''), (string) ($status['task_key'] ?? ('publish:skill:' . $taskId)), contactDataIsolation: $this->createContactDataIsolationByBase($dataIsolation));
             $sandboxStatus = strtoupper((string) ($result['status'] ?? ''));
             if (($result['code'] ?? 1000) === 4004 || $sandboxStatus === 'FAILED') {
                 $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => (string) ($result['message'] ?? 'sandbox export failed')]);
@@ -1653,7 +1654,7 @@ class SkillAppService extends AbstractSkillAppService
             return $record;
         }
         $isolation = $this->createSkillDataIsolation($context->getUserAuthorization());
-        $result = $this->skillDomainService->checkSkillWorkspaceExportAsync($isolation, $record['sandbox_id'], $record['task_key']);
+        $result = $this->skillDomainService->checkSkillWorkspaceExportAsync($isolation, $record['sandbox_id'], $record['task_key'], contactDataIsolation: $this->createContactDataIsolationByBase($isolation));
         $status = strtoupper((string) ($result['status'] ?? ''));
         if ($status === 'FAILED' || ($result['code'] ?? 1000) === 4004) {
             $record['status'] = 'failed';
@@ -2140,13 +2141,15 @@ class SkillAppService extends AbstractSkillAppService
         }
 
         $sandboxId = $this->initializeSkillPublishSandbox($dataIsolation, $code, $project);
+        $contactDataIsolation = $this->createContactDataIsolationByBase($dataIsolation);
         $fileMetadata = $this->skillDomainService->exportSkillFromSandbox(
             $dataIsolation,
             $code,
             $sandboxId,
             $skillDirPath,
             $skillDirName,
-            $skillDirName . '.zip'
+            $skillDirName . '.zip',
+            $contactDataIsolation
         );
 
         $metadata = $fileMetadata['metadata'] ?? [];
@@ -2182,10 +2185,7 @@ class SkillAppService extends AbstractSkillAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
         }
 
-        $contactDataIsolation = ContactDataIsolation::simpleMake(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
+        $contactDataIsolation = $this->createContactDataIsolationByBase($dataIsolation);
 
         $sandboxId = $topicEntity->getSandboxId();
         if ($sandboxId === (string) $topicEntity->getId()) {

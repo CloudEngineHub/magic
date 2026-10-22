@@ -14,7 +14,6 @@ use App\Application\SuperMagic\Publish\PublishAsyncStatusManager;
 use App\Domain\Contact\Entity\MagicDepartmentEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
 use App\Domain\Contact\Entity\MagicUserSettingEntity;
-use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
 use App\Domain\Mode\Entity\ModeEntity;
@@ -1044,6 +1043,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
                 $sourcePath ?? '',
                 $code . '_' . $taskId . '.zip',
                 $taskKey,
+                $this->createContactDataIsolationByBase($dataIsolation),
                 $excludePaths,
                 $skillsMdHash
             );
@@ -1093,7 +1093,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             return $status;
         }
         try {
-            $result = $this->superMagicAgentDomainService->checkAgentWorkspaceExportAsync($dataIsolation, $sandboxId, $taskKey);
+            $result = $this->superMagicAgentDomainService->checkAgentWorkspaceExportAsync($dataIsolation, $sandboxId, $taskKey, contactDataIsolation: $this->createContactDataIsolationByBase($dataIsolation));
             $sandboxStatus = strtoupper((string) ($result['status'] ?? ''));
             if (($result['code'] ?? 1000) === 4004 || $sandboxStatus === 'FAILED') {
                 $this->publishAsyncStatusManager->update($taskId, ['status' => 'failed', 'error' => (string) ($result['message'] ?? 'sandbox export failed')]);
@@ -1451,13 +1451,16 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $fullWorkdir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $project->getWorkDir());
 
         $sandboxId = $this->initializeAgentPublishSandbox($dataIsolation, $code, $project);
+        $contactDataIsolation = $this->createContactDataIsolationByBase($dataIsolation);
 
         return $this->superMagicAgentDomainService->exportAgentFromSandbox(
             $dataIsolation,
             $code,
             $projectId,
             $fullWorkdir,
-            $sandboxId
+            $sandboxId,
+            $contactDataIsolation,
+            null
         );
     }
 
@@ -2493,6 +2496,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
         $fullWorkdir = WorkDirectoryUtil::getFullWorkdir($fullPrefix, $project->getWorkDir());
 
         $sandboxId = $this->initializeAgentPublishSandbox($dataIsolation, $code, $project);
+        $contactDataIsolation = $this->createContactDataIsolationByBase($dataIsolation);
 
         $exportResult = $this->superMagicAgentDomainService->exportAgentFromSandbox(
             $dataIsolation,
@@ -2500,6 +2504,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             $projectId,
             $fullWorkdir,
             $sandboxId,
+            $contactDataIsolation,
             $sourcePath,
             $excludePaths,
             $skillsMdHash
@@ -2524,10 +2529,7 @@ class SuperMagicAgentAppService extends AbstractSuperMagicAppService
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
         }
 
-        $contactDataIsolation = ContactDataIsolation::simpleMake(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
+        $contactDataIsolation = $this->createContactDataIsolationByBase($dataIsolation);
 
         if ($topicEntity->getAgentCode() !== $agentCode) {
             $this->topicDomainService->updateTopicAgentCode($contactDataIsolation, $topicEntity->getId(), $agentCode);
