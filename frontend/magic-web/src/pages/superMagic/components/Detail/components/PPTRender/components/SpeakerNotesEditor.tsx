@@ -53,6 +53,14 @@ export default function SpeakerNotesEditor({
 	const [draft, setDraft] = useState(initialDraft ?? notes)
 	const [isEditing, setIsEditing] = useState(initialDraft !== undefined && initialDraft !== notes)
 	const [saveState, setSaveState] = useState<SaveState>("idle")
+	const [hasInitializedMarkdown, setHasInitializedMarkdown] = useState(
+		visible || initialDraft !== undefined,
+	)
+	// 未打开且无草稿时不创建富文本；打开或恢复草稿后，关闭面板不销毁已有编辑状态。
+	const shouldRenderMarkdown = visible || initialDraft !== undefined || hasInitializedMarkdown
+	useEffect(() => {
+		if (visible || initialDraft !== undefined) setHasInitializedMarkdown(true)
+	}, [visible, initialDraft])
 	const dirty = draft !== notes
 	const ai = usePPTNotesAI({
 		fileId,
@@ -215,32 +223,34 @@ export default function SpeakerNotesEditor({
 						: t("ppt.speakerNotes.generationFailed")}
 				</p>
 			)}
-			<PPTNotesMarkdown
-				ref={markdownRef}
-				active={visible && allowEdit}
-				onPatchPending={setPatchPending}
-				onPatchApplied={(value) => {
-					setIsEditing(true)
-					setDraft(value)
-					onDraftChange(value === notes ? undefined : value)
-					void saveNotes(value)
-				}}
-				fontSize={fontSize}
-				generating={ai.busy}
-				overview={overview}
-				value={isEditing ? draft : notes}
-				readOnly={saveState === "saving" || !allowEdit}
-				onChange={(value) => {
-					// Tiptap emits update when setEditable changes, even without a text edit.
-					// Saving temporarily makes it read-only; that callback must not reset save status.
-					if (savingRef.current || !allowEdit || value === draft) return
-					setIsEditing(true)
-					setDraft(value)
-					onDraftChange(value === notes ? undefined : value)
-					setSaveState("idle")
-				}}
-				onSave={() => void saveNotes()}
-			/>
+			{shouldRenderMarkdown && (
+				<PPTNotesMarkdown
+					ref={markdownRef}
+					active={visible && allowEdit}
+					onPatchPending={setPatchPending}
+					onPatchApplied={(value) => {
+						setIsEditing(true)
+						setDraft(value)
+						onDraftChange(value === notes ? undefined : value)
+						void saveNotes(value)
+					}}
+					fontSize={fontSize}
+					generating={ai.busy}
+					overview={overview}
+					value={isEditing ? draft : notes}
+					readOnly={saveState === "saving" || !allowEdit}
+					onChange={(value) => {
+						// Tiptap emits update when setEditable changes, even without a text edit.
+						// Saving temporarily makes it read-only; that callback must not reset save status.
+						if (savingRef.current || !allowEdit || value === draft) return
+						setIsEditing(true)
+						setDraft(value)
+						onDraftChange(value === notes ? undefined : value)
+						setSaveState("idle")
+					}}
+					onSave={() => void saveNotes()}
+				/>
+			)}
 		</section>
 	)
 }
