@@ -5231,6 +5231,10 @@
 			"stepLabel": "步骤 {{step}}",
 			"stopPreview": "退出预览",
 			"title": "页内动画",
+			"trigger": "触发",
+			"triggerAuto": "自动，上一步结束后 {{seconds}} 秒",
+			"triggerAutoNow": "自动，上一步结束后立即",
+			"triggerClick": "单击时出现",
 			"undo": "撤销",
 			"updating": "正在更新动画…"
 		},

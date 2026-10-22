@@ -75,6 +75,42 @@ describe("PPT build bridge", () => {
 		expect(hidden()).toEqual([])
 		window.dispatchEvent(new Event("pagehide"))
 	})
+	it("reports per-step automatic delays to the host", () => {
+		vi.useRealTimers()
+		const html = `<html><head></head><body><p data-ppt-step="1">A</p><p data-ppt-step="2" data-ppt-after="400">B</p><p data-ppt-step="2" data-ppt-after="900">C</p></body></html>`
+		const result = injectPPTBuildBridge(html, window.location.origin, "auto", true)
+		const parsed = new DOMParser().parseFromString(result, "text/html")
+		document.body.innerHTML = parsed.body.innerHTML
+		new Function(parsed.querySelector("script")!.textContent!)()
+		const applied: unknown[] = []
+		const onMessage = (event: MessageEvent) => {
+			if (event.data?.type === "ppt-build:applied") applied.push(event.data)
+		}
+		window.addEventListener("message", onMessage)
+		window.dispatchEvent(
+			new MessageEvent("message", {
+				source: window.parent,
+				origin: window.location.origin,
+				data: {
+					type: "ppt-build:set",
+					documentKey: "auto",
+					requestId: "r",
+					enabled: true,
+					step: 0,
+				},
+			}),
+		)
+		return new Promise<void>((resolve) =>
+			setTimeout(() => {
+				window.removeEventListener("message", onMessage)
+				window.dispatchEvent(new Event("pagehide"))
+				expect(applied).toContainEqual(
+					expect.objectContaining({ delays: [null, 900], total: 2, documentKey: "auto" }),
+				)
+				resolve()
+			}, 20),
+		)
+	})
 	it("fails open if the host does not acknowledge initialization", () => {
 		vi.useFakeTimers()
 		const html = `<p data-ppt-step="1" data-ppt-effect="appear">First</p>`

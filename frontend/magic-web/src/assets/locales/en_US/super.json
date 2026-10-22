@@ -5233,6 +5233,10 @@
 			"stepLabel": "Step {{step}}",
 			"stopPreview": "Exit preview",
 			"title": "In-slide animation",
+			"trigger": "Trigger",
+			"triggerAuto": "Automatic, {{seconds}}s after the previous step",
+			"triggerAutoNow": "Automatic, right after the previous step",
+			"triggerClick": "On click",
 			"undo": "Undo",
 			"updating": "Updating animations…"
 		},

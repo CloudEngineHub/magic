@@ -15,6 +15,14 @@ export function pptBuildRuntime(
 	const entries = collect(document, read, allowed, attribute)
 	const ignored = document.querySelectorAll(`[${attribute}]`).length - entries.length
 	const steps = [...new Set(entries.map(({ build }) => build.step))].sort((a, b) => a - b)
+	// Per step (in order): ms to wait after the previous step before it plays by itself, or null
+	// when it waits for a click. Any element in the step may carry the delay; the longest wins.
+	const delays = steps.map((value) => {
+		const afters = entries
+			.filter(({ build }) => build.step === value && typeof build.after === "number")
+			.map(({ build }) => build.after as number)
+		return afters.length ? Math.max(...afters) : null
+	})
 	const animations = new Map<HTMLElement, Animation>()
 	const marker = "data-magic-ppt-build-hidden"
 	const style = document.createElement("style")
@@ -79,6 +87,7 @@ export function pptBuildRuntime(
 			step: current,
 			total: steps.length,
 			ignored,
+			delays,
 		})
 	}
 	function interactive(target: EventTarget | null) {

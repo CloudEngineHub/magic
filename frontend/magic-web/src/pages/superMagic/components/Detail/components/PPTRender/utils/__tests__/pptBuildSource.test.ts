@@ -3,7 +3,7 @@ import { stripPPTBuildMetadata } from "../pptBuildSource"
 
 describe("stripPPTBuildMetadata", () => {
 	it("removes step and effect attributes only", () => {
-		const html = `<div class="a" data-ppt-step="1">x</div><p data-ppt-step="2" data-ppt-effect="appear" id="b">y</p><i data-ppt-step>z</i>`
+		const html = `<div class="a" data-ppt-step="1">x</div><p data-ppt-step="2" data-ppt-effect="appear" data-ppt-after="500" id="b">y</p><i data-ppt-step>z</i>`
 		expect(stripPPTBuildMetadata(html)).toBe(`<div class="a">x</div><p id="b">y</p><i>z</i>`)
 	})
 

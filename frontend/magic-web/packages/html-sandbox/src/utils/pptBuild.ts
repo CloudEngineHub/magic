@@ -1,12 +1,18 @@
 /**
  * Authored metadata only. Presentation visibility must never be written into slide HTML.
- * A build is two plain attributes: `data-ppt-step="2"` and optional `data-ppt-effect="appear"`.
+ * A build is plain attributes: `data-ppt-step="2"`, optional `data-ppt-effect="appear"`, and an
+ * optional `data-ppt-after="500"` that makes the step play by itself that many milliseconds
+ * after the previous step has finished (instead of waiting for a click).
  */
 export const PPT_BUILD_ATTRIBUTE = "data-ppt-step"
 export const PPT_BUILD_EFFECT_ATTRIBUTE = "data-ppt-effect"
+export const PPT_BUILD_AFTER_ATTRIBUTE = "data-ppt-after"
+export const PPT_BUILD_MAX_AFTER_MS = 60000
 export interface PPTBuild {
 	step: number
 	effect: "appear" | "fade"
+	/** Milliseconds after the previous step; absent means the step waits for a click. */
+	after?: number
 }
 
 /**
@@ -21,6 +27,10 @@ export function readPPTBuild(element: Element): PPTBuild | null {
 	const rawEffect = element.getAttribute("data-ppt-effect")
 	const effect = rawEffect === null ? "fade" : rawEffect.trim()
 	if (effect !== "appear" && effect !== "fade") return null
+	// A malformed delay never invalidates the build: it just falls back to click-to-advance.
+	const rawAfter = element.getAttribute("data-ppt-after")
+	if (rawAfter !== null && /^[0-9]+$/.test(rawAfter.trim()) && Number(rawAfter) <= 60000)
+		return { step: step, effect: effect, after: Number(rawAfter) }
 	return { step: step, effect: effect }
 }
 
@@ -29,9 +39,12 @@ export function writePPTBuild(element: Element, build: PPTBuild | null): void {
 	if (!build) {
 		element.removeAttribute(PPT_BUILD_ATTRIBUTE)
 		element.removeAttribute(PPT_BUILD_EFFECT_ATTRIBUTE)
+		element.removeAttribute(PPT_BUILD_AFTER_ATTRIBUTE)
 		return
 	}
 	element.setAttribute(PPT_BUILD_ATTRIBUTE, String(build.step))
+	if (build.after === undefined) element.removeAttribute(PPT_BUILD_AFTER_ATTRIBUTE)
+	else element.setAttribute(PPT_BUILD_AFTER_ATTRIBUTE, String(build.after))
 	if (build.effect === "fade") element.removeAttribute(PPT_BUILD_EFFECT_ATTRIBUTE)
 	else element.setAttribute(PPT_BUILD_EFFECT_ATTRIBUTE, build.effect)
 }
@@ -39,10 +52,18 @@ export function writePPTBuild(element: Element, build: PPTBuild | null): void {
 /** Validates untrusted build input (e.g. bridge payloads). */
 export function normalizePPTBuild(value: unknown): PPTBuild | null {
 	if (!value || typeof value !== "object") return null
-	const { step, effect } = value as Record<string, unknown>
+	const { step, effect, after } = value as Record<string, unknown>
 	if (typeof step !== "number" || !Number.isInteger(step) || step < 1 || step > 1000) return null
 	if (effect !== "appear" && effect !== "fade") return null
-	return { step, effect }
+	if (after === undefined) return { step, effect }
+	if (
+		typeof after !== "number" ||
+		!Number.isInteger(after) ||
+		after < 0 ||
+		after > PPT_BUILD_MAX_AFTER_MS
+	)
+		return null
+	return { step, effect, after }
 }
 
 export function isPPTBuildElement(element: Element): boolean {

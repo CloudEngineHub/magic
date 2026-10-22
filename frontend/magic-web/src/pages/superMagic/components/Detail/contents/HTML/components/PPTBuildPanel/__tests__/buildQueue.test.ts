@@ -5,7 +5,9 @@ import {
 	groupBuildQueue,
 	NEW_STEP_DROP_ID,
 	reorderBuildQueue,
+	groupAutoDelay,
 	resolveItemDrop,
+	setGroupAutoDelay,
 } from "../buildQueue"
 
 const entry = (selector: string, step: number): PPTBuildEntry => ({
@@ -70,6 +72,28 @@ describe("build queue", () => {
 		const entries = [entry("a", 1), entry("b", 1), entry("c", 2)]
 		expect(resolveItemDrop(entries, "a", NEW_STEP_DROP_ID)).toEqual([
 			{ selector: "a", build: { step: 3, effect: "fade" } },
+		])
+	})
+
+	it("treats a step as automatic when any element has a delay, using the longest", () => {
+		const items = [
+			entry("a", 1),
+			{ ...entry("b", 1), build: { step: 1, effect: "fade" as const, after: 500 } },
+			{ ...entry("c", 1), build: { step: 1, effect: "fade" as const, after: 1500 } },
+		]
+		expect(groupAutoDelay(items)).toBe(1500)
+		expect(groupAutoDelay([entry("a", 1)])).toBeNull()
+	})
+
+	it("sets or clears the delay on every element of a step", () => {
+		const items = [entry("a", 1), entry("b", 1)]
+		expect(setGroupAutoDelay(items, 1000)).toEqual([
+			{ selector: "a", build: { step: 1, effect: "fade", after: 1000 } },
+			{ selector: "b", build: { step: 1, effect: "fade", after: 1000 } },
+		])
+		const auto = [{ ...entry("a", 1), build: { step: 1, effect: "fade" as const, after: 0 } }]
+		expect(setGroupAutoDelay(auto, null)).toEqual([
+			{ selector: "a", build: { step: 1, effect: "fade" } },
 		])
 	})
 })

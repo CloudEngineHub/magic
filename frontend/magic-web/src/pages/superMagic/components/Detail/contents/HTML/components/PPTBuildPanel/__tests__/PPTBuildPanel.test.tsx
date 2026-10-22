@@ -137,7 +137,7 @@ describe("PPT build panel", () => {
 		state.selectedElement = { selector: "third" }
 		const { editor } = setup()
 		await screen.findByRole("button", { name: "first ppt.build.fade" })
-		expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+		expect(screen.queryByRole("combobox", { name: "ppt.build.effect" })).not.toBeInTheDocument()
 		fireEvent.click(screen.getByRole("button", { name: "ppt.build.addSelected" }))
 		await screen.findByRole("combobox", { name: "ppt.build.effect" })
 		expect(editor.updatePPTBuilds).toHaveBeenCalledWith([
@@ -201,5 +201,18 @@ describe("PPT build panel", () => {
 		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenLastCalledWith(2))
 		fireEvent.click(screen.getByRole("button", { name: "ppt.build.stopPreview" }))
 		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenLastCalledWith(null))
+	})
+
+	it("sets a whole step to play automatically", async () => {
+		const { editor } = setup([make("a", 1), make("b", 1), make("c", 2)])
+		await screen.findByText("a")
+		const triggers = screen.getAllByRole("combobox", { name: /ppt.build.trigger/ })
+		fireEvent.change(triggers[0], { target: { value: "1000" } })
+		await waitFor(() =>
+			expect(editor.updatePPTBuilds).toHaveBeenCalledWith([
+				{ selector: "a", build: { step: 1, effect: "fade", after: 1000 } },
+				{ selector: "b", build: { step: 1, effect: "fade", after: 1000 } },
+			]),
+		)
 	})
 })

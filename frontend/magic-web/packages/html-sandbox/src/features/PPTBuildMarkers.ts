@@ -90,6 +90,9 @@ export class PPTBuildMarkers {
 			),
 		)
 		const size = Math.round(24 * k)
+		const autoSteps = new Set(
+			builds.filter(({ build }) => build.after !== undefined).map(({ build }) => build.step),
+		)
 		for (const { element, build } of builds) {
 			const rect = element.getBoundingClientRect()
 			if (rect.width === 0 || rect.height === 0) continue
@@ -104,7 +107,9 @@ export class PPTBuildMarkers {
 			for (let node = element.parentElement; node; node = node.parentElement)
 				if (targets.has(node)) depth += 1
 			const marker = document.createElement("span")
-			marker.textContent = String(steps.indexOf(build.step) + 1)
+			// A clock marks steps that play by themselves instead of waiting for a click.
+			marker.textContent =
+				String(steps.indexOf(build.step) + 1) + (autoSteps.has(build.step) ? " ⏱" : "")
 			marker.style.cssText =
 				`position:absolute;left:${Math.round(-size / 2 + depth * size * 0.95)}px;top:${Math.round(-size / 2)}px;` +
 				`box-sizing:border-box;min-width:${size}px;height:${size}px;padding:0 ${Math.round(6 * k)}px;` +

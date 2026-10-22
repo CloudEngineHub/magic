@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { usePPTBuildNavigation } from "../usePPTBuildNavigation"
 import type { PPTBuildController } from "../usePPTBuildPlayback"
 
-function setup() {
+function setup(options: { total?: number; delays?: Array<number | null> } = {}) {
+	const total = options.total ?? 2
 	let page = "a"
 	let presenting = true
 	let allowed = true
@@ -22,12 +23,12 @@ function setup() {
 		}),
 	)
 	const setStep = vi.fn(async (step: number) => {
-		controller = { ...controller, state: { step, total: 2 } }
+		controller = { ...controller, state: { step, total, delays: options.delays } }
 		hook.result.current.register(page, controller)
 		return true
 	})
 	let controller: PPTBuildController = {
-		state: { step: 0, total: 2 },
+		state: { step: 0, total, delays: options.delays },
 		setStep,
 		acceptsMessage: () => true,
 	}
@@ -89,5 +90,70 @@ describe("PPT build navigation", () => {
 		h.setPresenting(false)
 		await act(() => h.result.current.changeSlide("next"))
 		expect(h.changePage).toHaveBeenCalledOnce()
+	})
+
+	describe("automatic steps", () => {
+		it("plays a step by itself after the settle time plus its delay", async () => {
+			vi.useFakeTimers()
+			try {
+				const h = setup({ total: 2, delays: [100, null] })
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(300)
+				})
+				expect(h.setStep).not.toHaveBeenCalled()
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(100)
+				})
+				expect(h.setStep).toHaveBeenCalledWith(1, true)
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(5000)
+				})
+				// The next step waits for a click.
+				expect(h.setStep).toHaveBeenCalledTimes(1)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it("stops the automatic chain when going back and resumes after a forward click", async () => {
+			vi.useFakeTimers()
+			try {
+				const h = setup({ total: 3, delays: [null, 0, null] })
+				await act(() => h.result.current.changeSlide("next"))
+				expect(h.setStep).toHaveBeenLastCalledWith(1, true)
+				await act(() => h.result.current.changeSlide("prev"))
+				expect(h.setStep).toHaveBeenLastCalledWith(0, false)
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(2000)
+				})
+				expect(h.setStep).toHaveBeenCalledTimes(2)
+				await act(() => h.result.current.changeSlide("next"))
+				await act(async () => {
+					await vi.advanceTimersByTimeAsync(300)
+				})
+				expect(h.setStep).toHaveBeenLastCalledWith(2, true)
+			} finally {
+				vi.useRealTimers()
+			}
+		})
+
+		it("does nothing outside of presenting", async () => {
+			vi.useFakeTimers()
+			try {
+				const h = setup({ total: 2, delays: [0, 0] })
+				h.setPresenting(false)
+				await act(async () => {
+					h.result.current.register("a", {
+						state: { step: 0, total: 2, delays: [0, 0] },
+						setStep: h.setStep,
+						acceptsMessage: () => true,
+					})
+					await vi.advanceTimersByTimeAsync(3000)
+				})
+				expect(h.setStep).not.toHaveBeenCalled()
+			} finally {
+				vi.useRealTimers()
+			}
+		})
 	})
 })

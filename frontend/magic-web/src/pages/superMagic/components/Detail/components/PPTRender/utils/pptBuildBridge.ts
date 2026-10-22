@@ -32,6 +32,8 @@ export interface PPTBuildFrameState {
 	step: number
 	total: number
 	ignored?: number
+	/** Per step: ms after the previous step it plays by itself, or null when it waits for a click. */
+	delays?: Array<number | null>
 }
 let requestSequence = 0
 
@@ -75,6 +77,7 @@ export function setPPTBuildFrame(
 				...(Number.isInteger(data.ignored) && data.ignored > 0
 					? { ignored: data.ignored }
 					: {}),
+				...(isDelayList(data.delays, data.total) ? { delays: data.delays } : {}),
 			})
 		}
 		const onAbort = () => finish(null)
@@ -90,4 +93,14 @@ export function setPPTBuildFrame(
 			finish(null)
 		}
 	})
+}
+
+function isDelayList(value: unknown, total: number): value is Array<number | null> {
+	return (
+		Array.isArray(value) &&
+		value.length === total &&
+		value.every(
+			(item) => item === null || (Number.isInteger(item) && item >= 0 && item <= 60000),
+		)
+	)
 }

@@ -42,10 +42,13 @@ import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelConte
 import { useSelectedElement } from "../StylePanel/hooks/useSelectedElement"
 import {
 	appendBuildStep,
+	AUTO_DELAY_OPTIONS_MS,
+	groupAutoDelay,
 	groupBuildQueue,
 	NEW_STEP_DROP_ID,
 	reorderBuildQueue,
 	resolveItemDrop,
+	setGroupAutoDelay,
 } from "./buildQueue"
 import { usePPTBuildQueue } from "./usePPTBuildQueue"
 import { PPTBuildQueueItem } from "./PPTBuildQueueItem"
@@ -259,6 +262,13 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 											onClick: () => move(index, index + 1),
 										}}
 									>
+										<StepTrigger
+											disabled={locked}
+											delay={groupAutoDelay(group.items)}
+											onChange={(delay) =>
+												void update(setGroupAutoDelay(group.items, delay))
+											}
+										/>
 										<ul className="space-y-1 p-1">
 											{group.items.map((entry) => (
 												<PPTBuildQueueItem
@@ -391,5 +401,44 @@ function NewStepDropZone({ label }: { label: string }) {
 		>
 			{label}
 		</div>
+	)
+}
+
+function StepTrigger({
+	delay,
+	disabled,
+	onChange,
+}: {
+	delay: number | null
+	disabled: boolean
+	onChange: (delay: number | null) => void
+}) {
+	const { t } = useTranslation("super")
+	// An agent or hand-edited delay outside the presets still has to display correctly.
+	const options =
+		delay === null || AUTO_DELAY_OPTIONS_MS.includes(delay)
+			? AUTO_DELAY_OPTIONS_MS
+			: [...AUTO_DELAY_OPTIONS_MS, delay].sort((a, b) => a - b)
+	return (
+		<label className="flex items-center gap-2 border-b border-border px-2 py-1 text-xs">
+			<span className="shrink-0 text-muted-foreground">{t("ppt.build.trigger")}</span>
+			<select
+				value={delay === null ? "click" : String(delay)}
+				disabled={disabled}
+				className="h-7 min-w-0 flex-1 rounded border border-input bg-background px-1"
+				onChange={(event) =>
+					onChange(event.target.value === "click" ? null : Number(event.target.value))
+				}
+			>
+				<option value="click">{t("ppt.build.triggerClick")}</option>
+				{options.map((ms) => (
+					<option key={ms} value={ms}>
+						{ms === 0
+							? t("ppt.build.triggerAutoNow")
+							: t("ppt.build.triggerAuto", { seconds: ms / 1000 })}
+					</option>
+				))}
+			</select>
+		</label>
 	)
 }

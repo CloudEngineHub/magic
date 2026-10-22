@@ -16,6 +16,11 @@ content container:
 
 - `data-ppt-step` must be an integer from 1 to 1000.
 - `data-ppt-effect` is `appear` or `fade` (250 ms, reduced motion uses appear); omit it for `fade`.
+- `data-ppt-after` (optional, integer milliseconds 0 to 60000) makes a step play by itself that
+  long after the previous step has finished (the first step: after the page appears) instead of
+  waiting for a click. Use it only when the user asks for automatic or timed steps, and put the
+  same value on every element of that step. Going back stops the automatic chain until the next
+  click.
 - Equal step numbers appear together. Numbers sort ascending; gaps do not create empty steps.
 - Elements without the attribute remain visible. Remove both attributes to remove the build.
 - A container and its descendants may both be configured. The container reveals its whole

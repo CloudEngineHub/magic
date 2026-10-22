@@ -79,3 +79,21 @@ export function resolveItemDrop(
 	if (typeof overId !== "number" || overId === entry.build.step) return []
 	return [{ selector, build: { ...entry.build, step: overId } }]
 }
+
+export const AUTO_DELAY_OPTIONS_MS = [0, 500, 1000, 2000, 3000]
+
+/** A step plays by itself when any of its elements carries a delay; the longest wins. */
+export function groupAutoDelay(items: PPTBuildEntry[]): number | null {
+	const delays = items.flatMap((item) =>
+		item.build.after === undefined ? [] : [item.build.after],
+	)
+	return delays.length ? Math.max(...delays) : null
+}
+
+/** Applies one trigger to every element of a step, so the group never disagrees with itself. */
+export function setGroupAutoDelay(items: PPTBuildEntry[], delay: number | null): PPTBuildUpdate[] {
+	return items.map((item) => {
+		const { after: _previous, ...rest } = item.build
+		return { selector: item.selector, build: delay === null ? rest : { ...rest, after: delay } }
+	})
+}
