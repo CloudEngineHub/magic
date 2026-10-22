@@ -29,26 +29,21 @@ export function PPTBuildQueueItem({
 }) {
 	const { t } = useTranslation("super")
 	const id = useId()
-	const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } =
-		useDraggable({
-			id: `item:${entry.selector}`,
-			disabled,
-			data: { type: "item", selector: entry.selector },
-		})
+	const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
+		id: `item:${entry.selector}`,
+		disabled,
+		data: { type: "item", selector: entry.selector },
+	})
 	const groups = selected ? groupBuildQueue(entries) : []
 	const grouped = (groups.find((group) => group.step === entry.build.step)?.items.length ?? 0) > 1
 	return (
 		<li
 			ref={setNodeRef}
-			style={
-				transform
-					? { transform: `translate(${transform.x}px, ${transform.y}px)` }
-					: undefined
-			}
 			className={cn(
 				"relative rounded bg-background p-2",
 				selected && "bg-accent",
-				isDragging && "z-20 opacity-80 shadow-md",
+				// The row stays put as a placeholder; a preview follows the pointer.
+				isDragging && "opacity-40 outline outline-dashed outline-1 outline-border",
 			)}
 		>
 			<div className="flex min-w-0 items-center gap-1">
@@ -56,7 +51,7 @@ export function PPTBuildQueueItem({
 					type="button"
 					ref={setActivatorNodeRef}
 					disabled={disabled}
-					className="flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+					className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
 					aria-label={t("ppt.build.dragItem")}
 					{...attributes}
 					{...listeners}

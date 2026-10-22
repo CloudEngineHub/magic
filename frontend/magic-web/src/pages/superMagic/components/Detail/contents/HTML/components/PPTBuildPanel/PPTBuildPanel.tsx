@@ -3,6 +3,8 @@ import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import {
 	DndContext,
+	DragOverlay,
+	MeasuringStrategy,
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
@@ -13,6 +15,8 @@ import {
 	useSensors,
 	type CollisionDetection,
 	type DragEndEvent,
+	type DragStartEvent,
+	type Modifier,
 } from "@dnd-kit/core"
 import {
 	SortableContext,
@@ -101,7 +105,16 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	)
 	const selected = entries.find((entry) => entry.selector === selectedElement?.selector)
 	const move = (from: number, to: number) => void update(reorderBuildQueue(entries, from, to))
-	const [draggingItem, setDraggingItem] = useState(false)
+	const [activeDrag, setActiveDrag] = useState<
+		{ type: "item"; selector: string } | { type: "group"; step: number } | null
+	>(null)
+	const draggingItem = activeDrag?.type === "item"
+	const onDragStart = ({ active }: DragStartEvent) => {
+		const data = active.data.current
+		if (data?.type === "item")
+			setActiveDrag({ type: "item", selector: data.selector as string })
+		else if (typeof active.id === "number") setActiveDrag({ type: "group", step: active.id })
+	}
 	// Moving an element is aimed with the pointer; reordering whole steps keeps sorting behavior.
 	const collisionDetection: CollisionDetection = (args) => {
 		if (args.active.data.current?.type !== "item") return closestCenter(args)
@@ -109,7 +122,7 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 		return hits.length ? hits : rectIntersection(args)
 	}
 	const onDragEnd = ({ active, over }: DragEndEvent) => {
-		setDraggingItem(false)
+		setActiveDrag(null)
 		if (!over || active.id === over.id || locked) return
 		const data = active.data.current
 		if (data?.type === "item") {
@@ -221,10 +234,9 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 					<DndContext
 						sensors={sensors}
 						collisionDetection={collisionDetection}
-						onDragStart={({ active }) =>
-							setDraggingItem(active.data.current?.type === "item")
-						}
-						onDragCancel={() => setDraggingItem(false)}
+						measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+						onDragStart={onDragStart}
+						onDragCancel={() => setActiveDrag(null)}
 						onDragEnd={onDragEnd}
 					>
 						<SortableContext
@@ -241,6 +253,7 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 										key={group.step}
 										id={group.step}
 										locked={locked}
+										itemDropActive={draggingItem}
 										label={t("ppt.build.stepLabel", { step: index + 1 })}
 										preview={{
 											label:
@@ -298,9 +311,30 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 								))}
 							</ol>
 						</SortableContext>
-						{draggingItem ? (
-							<NewStepDropZone label={t("ppt.build.dropNewStep")} />
-						) : null}
+						<NewStepDropZone active={draggingItem} label={t("ppt.build.dropNewStep")} />
+						<DragOverlay
+							dropAnimation={{ duration: 160 }}
+							modifiers={activeDrag?.type === "group" ? [lockHorizontal] : undefined}
+						>
+							{activeDrag?.type === "item" ? (
+								<DragPreview
+									title={
+										entries.find(
+											(entry) => entry.selector === activeDrag.selector,
+										)?.label ?? ""
+									}
+								/>
+							) : activeDrag?.type === "group" ? (
+								<DragPreview
+									title={t("ppt.build.stepLabel", {
+										step:
+											groups.findIndex(
+												(group) => group.step === activeDrag.step,
+											) + 1,
+									})}
+								/>
+							) : null}
+						</DragOverlay>
 					</DndContext>
 				)}
 			</ScrollArea>
@@ -320,6 +354,7 @@ interface StepAction {
 function SortableStep({
 	id,
 	locked,
+	itemDropActive,
 	label,
 	preview,
 	moveUp,
@@ -328,6 +363,8 @@ function SortableStep({
 }: {
 	id: number
 	locked: boolean
+	/** An element is being dragged: highlight the step it would land in. */
+	itemDropActive: boolean
 	label: string
 	preview: StepAction & { active: boolean }
 	moveUp: StepAction
@@ -342,14 +379,17 @@ function SortableStep({
 		transform,
 		transition,
 		isDragging,
+		isOver,
 	} = useSortable({ id, disabled: locked, data: { type: "group" } })
 	return (
 		<li
 			ref={setNodeRef}
 			style={{ transform: CSS.Transform.toString(transform), transition }}
 			className={cn(
-				"relative rounded-md border border-border bg-background",
-				isDragging && "z-10 opacity-70 shadow-md",
+				"relative rounded-md border border-border bg-background transition-shadow",
+				// The source stays in the list as the drop placeholder while a preview follows the pointer.
+				isDragging && "border-dashed bg-muted/40 [&>*]:opacity-30",
+				itemDropActive && isOver && "border-primary ring-2 ring-primary/40",
 			)}
 		>
 			<div className="flex items-center gap-1 border-b border-border bg-muted/40 px-2 py-1">
@@ -389,20 +429,35 @@ function SortableStep({
 	)
 }
 
-function NewStepDropZone({ label }: { label: string }) {
+function NewStepDropZone({ label, active }: { label: string; active: boolean }) {
 	const { setNodeRef, isOver } = useDroppable({ id: NEW_STEP_DROP_ID })
 	return (
+		// Space is always reserved so the list does not jump when a drag starts.
 		<div
 			ref={setNodeRef}
+			aria-hidden={!active}
 			className={cn(
-				"mt-3 rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground",
-				isOver && "border-primary bg-accent text-foreground",
+				"mt-3 flex h-12 items-center justify-center rounded-md border border-dashed text-xs transition-opacity",
+				active ? "opacity-100" : "pointer-events-none opacity-0",
+				isOver
+					? "border-primary bg-accent text-foreground"
+					: "border-border text-muted-foreground",
 			)}
 		>
 			{label}
 		</div>
 	)
 }
+
+function DragPreview({ title }: { title: string }) {
+	return (
+		<div className="max-w-64 truncate rounded-md border border-primary bg-background px-3 py-2 text-sm shadow-lg">
+			{title}
+		</div>
+	)
+}
+
+const lockHorizontal: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
 function StepTrigger({
 	delay,
