@@ -37,6 +37,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $service = new ShareNotificationAppService($publisher, $users, $departments);
 
         $share = $this->share('project-1', 12, 'Project 1', 'all');
+        $share->setShareCode('project-share-code');
         $service->publishRecipientsAdded(null, $share);
         $service->publishRecipientsAdded($share, $share);
 
@@ -50,6 +51,7 @@ final class ShareNotificationAppServiceTest extends TestCase
             'share:ORG:project:project-1:12:user-a',
             $published[0]->recipients[0]->sourceEventKey
         );
+        self::assertSame('project-share-code', $published[0]->payload['share_code']);
         self::assertSame(['user-a', 'user-b'], $share->getExtra()['notification_recipient_user_ids']);
     }
 
@@ -222,6 +224,35 @@ final class ShareNotificationAppServiceTest extends TestCase
         self::assertNotSame('', $published[0]->payload['sharer_name']);
     }
 
+    public function testFileSharePayloadUsesShareCodeRatherThanTheShareRowId(): void
+    {
+        $published = [];
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::once())->method('publish')->willReturnCallback(
+            function (EventEnvelope|array $envelope) use (&$published): array {
+                self::assertInstanceOf(EventEnvelope::class, $envelope);
+                $published[] = $envelope;
+                return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
+            }
+        );
+        $users = $this->createMock(MagicUserDomainService::class);
+        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
+        $users->method('getActiveUsersByIds')->willReturn([]);
+        $service = new ShareNotificationAppService(
+            $publisher,
+            $users,
+            new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
+        );
+
+        $share = $this->share('file-resource-id', 15, 'File 1', 'all');
+        $share->setShareCode('file-share-code');
+        $service->publishRecipientsAdded(null, $share);
+
+        self::assertSame('share.file.recipients_added', $published[0]->eventType);
+        self::assertSame('file-share-code', $published[0]->payload['share_code']);
+        self::assertSame('15', $published[0]->payload['share_id']);
+    }
+
     public function testAllTeamShareSplitsLargeRecipientSetsIntoBoundedEvents(): void
     {
         $published = [];
@@ -260,6 +291,7 @@ final class ShareNotificationAppServiceTest extends TestCase
             'resource_id' => $resourceId,
             'resource_type' => $resourceType,
             'resource_name' => $name,
+            'share_code' => $resourceId,
             'organization_code' => 'ORG',
             'created_uid' => 'owner',
             'share_type' => 2,
