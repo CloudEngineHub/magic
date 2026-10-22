@@ -871,6 +871,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				selectedProject={selectedProject}
 				selectedTopic={selectedTopic}
 				messages={messages as any}
+				selectedWorkspace={selectedWorkspace}
 				showLoading={showLoading}
 				isShowLoadingInit={isShowLoadingInit}
 				currentTopicStatus={currentTopicStatus}

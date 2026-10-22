@@ -40,6 +40,22 @@ export class MagicPlatformService implements PlatformServiceInterface {
 
 	constructor(context: AppServiceContext) {
 		this.context = context
+		this.preloadProjectPage()
+	}
+
+	private preloadProjectPage(): void {
+		const routeName = routesMatch(window.location.pathname)?.route.name
+		if (
+			interfaceStore.isMobile ||
+			(routeName !== RouteName.SuperWorkspaceProjectState &&
+				routeName !== RouteName.SuperWorkspaceProjectTopicState)
+		) {
+			return
+		}
+		// 页面代码与身份恢复并行加载；正式挂载和数据请求仍由原有认证、组织检查控制。
+		void preloadTopicPage().catch((error: unknown) => {
+			this.logger.warn("话题页代码预加载失败，沿用路由正常加载", error)
+		})
 	}
 
 	preloadGlobalData = async () => {
@@ -85,6 +101,7 @@ export class MagicPlatformService implements PlatformServiceInterface {
 			projectStore.reset()
 			topicStore.reset()
 			clearChatWorkspaceModuleCache()
+			this.preloadProjectPage()
 
 			const initialRoute = routesMatch(window.location.pathname)?.route
 			// 深链只预加载桌面页代码，与账户数据初始化重叠；组件仍由原路由在权限就绪后挂载。

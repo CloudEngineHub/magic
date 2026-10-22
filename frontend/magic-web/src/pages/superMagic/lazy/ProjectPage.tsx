@@ -18,7 +18,10 @@ import {
 	getCachedChatWorkspaceId,
 } from "@/pages/superMagic/hooks/useChatWorkspace"
 import { isChatWorkspaceProject } from "@/pages/superMagic/utils/isChatWorkspaceProject"
-import { wasProjectRemovedFromLoadedList } from "@/pages/superMagic/services/topicProjectConsistency"
+import {
+	isTopicBoundToProject,
+	wasProjectRemovedFromLoadedList,
+} from "@/pages/superMagic/services/topicProjectConsistency"
 import { useAiCanvasRouteRedirect } from "../hooks/useAiCanvasRouteRedirect"
 import { isAiCanvasProject } from "../utils/isAiCanvasProject"
 
@@ -200,24 +203,21 @@ const ProjectPage = observer(() => {
 	}
 
 	// Handle desktop redirect to topic page
-	if (projectId) {
-		const isReadOnly = isReadOnlyProject(projectStore.selectedProject?.user_role)
-		const hasSelectedTopic = !!topicStore.selectedTopic
-
-		if (hasSelectedTopic || !isReadOnly) {
-			const lastTopicId =
-				topicStore.selectedTopic?.id || projectStore.selectedProject?.current_topic_id
-
-			if (lastTopicId) {
-				return (
-					<Navigate
-						name={RouteName.SuperWorkspaceProjectTopicState}
-						params={{ projectId, topicId: lastTopicId }}
-						replace
-					/>
-				)
-			}
-		}
+	const selectedTopic = topicStore.selectedTopic
+	// current_topic_id 只标识目标，不代表话题已加载；项目和话题必须属于当前入口。
+	if (
+		projectId &&
+		selectedProject?.id === projectId &&
+		selectedTopic &&
+		isTopicBoundToProject(selectedTopic, projectId)
+	) {
+		return (
+			<Navigate
+				name={RouteName.SuperWorkspaceProjectTopicState}
+				params={{ projectId, topicId: selectedTopic.id }}
+				replace
+			/>
+		)
 	}
 
 	// Default desktop view

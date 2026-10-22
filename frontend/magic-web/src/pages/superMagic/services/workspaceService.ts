@@ -9,6 +9,7 @@ import { getInsertIndexByAnchors, isSameOrder } from "./orderUtils"
 import { createOrderRequestOptions, reportOrderApiError } from "./orderErrorReporter"
 import { invalidateWorkspaceSearchResults } from "./workspaceListSearchInvalidation"
 import { analyticsService } from "@/services/analytics"
+import type { ProjectInitializationScope } from "./projectStateInitialization"
 
 export interface FetchWorkspacesParams {
 	isAutoSelect?: boolean
@@ -32,18 +33,22 @@ export interface DeleteWorkspaceOptions {
 }
 
 class WorkspaceService {
-	fetchWorkspaces = async ({
-		isAutoSelect = true,
-		isSelectLast = true,
-		page,
-		pageSize = 20,
-		append = false,
-	}: FetchWorkspacesParams): Promise<Workspace[]> => {
-		runInAction(() => {
-			workspaceStore.beginWorkspaceListFetch()
-		})
+	fetchWorkspaces = async (
+		{
+			isAutoSelect = true,
+			isSelectLast = true,
+			page,
+			pageSize = 20,
+			append = false,
+		}: FetchWorkspacesParams,
+		_options?: Omit<RequestConfig, "url">,
+		scope?: ProjectInitializationScope,
+	): Promise<Workspace[]> => {
+		if (scope && !scope.isCurrent()) return []
+		const generation = workspaceStore.beginWorkspaceListFetch()
 		try {
 			const res = await SuperMagicApi.getWorkspaces({ page, page_size: pageSize })
+			if (scope && !scope.isCurrent()) return []
 			if (res) {
 				runInAction(() => {
 					const nextWorkspaces = append
@@ -81,7 +86,7 @@ class WorkspaceService {
 			return []
 		} finally {
 			runInAction(() => {
-				workspaceStore.endWorkspaceListFetch()
+				workspaceStore.endWorkspaceListFetch(generation)
 			})
 		}
 	}
