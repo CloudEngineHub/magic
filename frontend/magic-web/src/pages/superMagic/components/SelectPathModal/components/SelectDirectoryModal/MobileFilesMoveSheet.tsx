@@ -44,6 +44,7 @@ import { MAX_MENTION_PROJECT_COUNT, type ProjectResourceSelection } from "../../
 import { isMicroAppEnabled } from "@/services/microAppFeature"
 import { loadMicroAppProjectPage } from "../../utils/microAppProjects"
 import type { ResourceProject } from "../../resourceProjectTypes"
+import { loadSharedWorkspaceProjects } from "../../utils/sharedWorkspaceProjects"
 import { ProjectResourceInfo } from "../ProjectResourceSelectorModal/ProjectResourceInfo"
 
 interface MobileFilesMoveSheetProps {
@@ -640,11 +641,13 @@ function MobileFilesMoveSheet({
 	const chatWorkspaceRef = useRef<Workspace | null>(null)
 	const microAppWorkspaceRef = useRef<Workspace | null>(null)
 	const projectRequestRef = useRef<AbortController | null>(null)
+	const workspaceRequestRef = useRef<AbortController | null>(null)
 	const openStateResetRef = useRef(false)
 	const initialWorkspaceLoadRef = useRef(false)
 	useEffect(() => {
 		return () => {
 			projectRequestRef.current?.abort()
+			workspaceRequestRef.current?.abort()
 			microAppWorkspaceRef.current = null
 		}
 	}, [visible])
@@ -698,6 +701,9 @@ function MobileFilesMoveSheet({
 	}, [])
 
 	const loadWorkspaces = useCallback(async () => {
+		workspaceRequestRef.current?.abort()
+		const request = new AbortController()
+		workspaceRequestRef.current = request
 		setIsLoading(true)
 		try {
 			if (!includeSpecialWorkspaces) {
@@ -712,6 +718,7 @@ function MobileFilesMoveSheet({
 					[]
 
 				// Recording copy must start from normal workspaces only; fixed entries are handled elsewhere.
+				request.signal.throwIfAborted()
 				setWorkspaceItems(createRegularWorkspaceItems(regularWorkspaces))
 				return
 			}
@@ -722,21 +729,15 @@ function MobileFilesMoveSheet({
 						page: 1,
 						page_size: 999,
 					}),
-					SuperMagicApi.getCollaborationProjects({
-						page: 1,
-						page_size: 100,
-					}),
+					loadSharedWorkspaceProjects({ signal: request.signal }),
 					ensureChatWorkspace(),
 				])
 
 			const regularWorkspaces: Workspace[] =
 				workspaceResult.status === "fulfilled" ? workspaceResult.value?.list || [] : []
+			request.signal.throwIfAborted()
 			const sharedProjectsTotal =
-				collaborationResult.status === "fulfilled"
-					? (collaborationResult.value?.list?.length ??
-						collaborationResult.value?.total ??
-						0)
-					: 0
+				collaborationResult.status === "fulfilled" ? collaborationResult.value.length : 0
 			const chatWorkspace =
 				chatWorkspaceResult.status === "fulfilled" ? chatWorkspaceResult.value : null
 			let chatProjectsTotal = 0
@@ -756,6 +757,7 @@ function MobileFilesMoveSheet({
 				}
 			}
 
+			request.signal.throwIfAborted()
 			setWorkspaceItems([
 				{
 					id: SHARE_WORKSPACE_ID,
@@ -787,10 +789,12 @@ function MobileFilesMoveSheet({
 				})),
 			])
 		} catch (error) {
+			if (request.signal.aborted) return
 			console.error("Failed to fetch workspaces:", error)
 			setWorkspaceItems([])
 		} finally {
-			setIsLoading(false)
+			if (workspaceRequestRef.current === request && !request.signal.aborted)
+				setIsLoading(false)
 		}
 	}, [
 		ensureChatWorkspace,
@@ -834,13 +838,10 @@ function MobileFilesMoveSheet({
 					return
 				}
 				if (workspace.entryType === "shared") {
-					const response = await SuperMagicApi.getCollaborationProjects({
-						page: 1,
-						page_size: 100,
-					})
+					const projects = await loadSharedWorkspaceProjects({ signal: request.signal })
 					request.signal.throwIfAborted()
 					setProjectItems(
-						(response?.list || []).map((project) => ({
+						projects.map((project) => ({
 							...project,
 							tag: "collaboration" as const,
 						})),

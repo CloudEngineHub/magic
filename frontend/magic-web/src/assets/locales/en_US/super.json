@@ -6385,12 +6385,15 @@
 		"resultCount_other": "{{count}} results returned"
 	},
 	"selectPathModal": {
+		"agentSource": "Digital employee source",
 		"all": "All",
 		"cannotSelectCurrentFolder": "Cannot select the currently selected folder as move target",
 		"chatCount": "{{count}} chats",
+		"collaboratedAgents": "Shared with me (editable)",
 		"collaboratedMicroApps": "Collaborating",
 		"completeFolderCreation": "Complete Folder Creation",
 		"confirm": "Confirm",
+		"createdAgents": "Created by me",
 		"createdMicroApps": "Created by me",
 		"createdSuccessfully": "Created Successfully",
 		"defaultFolderName": "New Folder",
@@ -6442,6 +6445,7 @@
 		"preserveParentPathKeepDescription": "Selected files will be stored in the target project under their original folder paths.",
 		"preserveParentPathKeepTitle": "Keep folder path",
 		"projects": "projects",
+		"resizeSidebar": "Resize sidebar",
 		"returnSearch": "Exit Search",
 		"rootDirectory": "Root",
 		"searchDirectory": "Search Directory",

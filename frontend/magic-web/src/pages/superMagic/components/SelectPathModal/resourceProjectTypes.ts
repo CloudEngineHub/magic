@@ -35,3 +35,8 @@ export function getResourceProjectType(project: ProjectListItem): ResourceProjec
 			return undefined
 	}
 }
+
+/** 数字员工源码从专属来源进入，避免混入共享工作区。 */
+export function isSharedWorkspaceProject(project: ProjectListItem): boolean {
+	return getResourceProjectType(project) !== "agent"
+}

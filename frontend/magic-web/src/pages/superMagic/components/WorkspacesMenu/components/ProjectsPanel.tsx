@@ -19,6 +19,7 @@ import MagicIcon from "@/components/base/MagicIcon"
 import MagicSpin from "@/components/base/MagicSpin"
 import MagicEmpty from "@/components/base/MagicEmpty"
 import { cn } from "@/utils/cn"
+import { ProjectBrowserLayout } from "./ProjectBrowserLayout"
 import {
 	CollaborationProjectType,
 	type ProjectListItem,
@@ -182,8 +183,15 @@ export function ProjectsPanel({
 
 					{/* 高度从窗口逐层传到滚动区；缩放时标题、搜索和工具栏仍保持可见。 */}
 					<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-b-xl">
-						{sidebar}
-						<div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+						{sidebar ? (
+							<ProjectBrowserLayout sidebar={sidebar}>
+								<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+									{children}
+								</div>
+							</ProjectBrowserLayout>
+						) : (
+							<div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+						)}
 					</div>
 					{/* 说明留在窗口内，不接管焦点；角落热区与边缘拖拽仍由 Dialog 管理。 */}
 					<DialogWindowDecorations
