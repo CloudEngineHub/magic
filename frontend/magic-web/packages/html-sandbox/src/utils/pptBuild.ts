@@ -62,7 +62,11 @@ export function isPPTBuildElement(element: Element): boolean {
 	)
 }
 
-/** Keep only outermost valid builds; malformed metadata never hides authored content. */
+/**
+ * Every valid build in document order. A configured container and its configured descendants
+ * may coexist: a descendant shows only once its own step and every ancestor's step are reached.
+ * Malformed metadata never hides authored content.
+ */
 export function collectPPTBuilds(
 	root: Document,
 	read = readPPTBuild,
@@ -72,8 +76,7 @@ export function collectPPTBuilds(
 	const builds: Array<{ element: HTMLElement; build: PPTBuild }> = []
 	root.querySelectorAll(`[${attribute}]`).forEach((element) => {
 		const build = read(element)
-		if (!build || !allowed(element) || builds.some((entry) => entry.element.contains(element)))
-			return
+		if (!build || !allowed(element)) return
 		builds.push({ element: element as HTMLElement, build })
 	})
 	return builds

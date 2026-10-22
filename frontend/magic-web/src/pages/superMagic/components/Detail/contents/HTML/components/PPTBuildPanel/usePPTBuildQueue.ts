@@ -77,12 +77,7 @@ export function usePPTBuildQueue(
 					})
 					await reload()
 				}
-				if (alive.current)
-					magicToast.error(
-						String(error).includes("PPT_BUILD_NESTED")
-							? t("ppt.build.nested")
-							: t("ppt.build.saveFailed"),
-					)
+				if (alive.current) magicToast.error(t("ppt.build.saveFailed"))
 			} finally {
 				pending.current = false
 				if (alive.current) setBusy(false)

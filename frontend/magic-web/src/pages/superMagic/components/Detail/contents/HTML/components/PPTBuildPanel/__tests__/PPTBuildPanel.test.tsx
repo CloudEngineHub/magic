@@ -151,9 +151,9 @@ describe("PPT build panel", () => {
 	it("keeps the old queue after failed edits and refreshes it on undo/content revisions", async () => {
 		const { editor, rerender } = setup()
 		await screen.findByRole("button", { name: "first ppt.build.fade" })
-		editor.updatePPTBuilds.mockRejectedValueOnce(new Error("PPT_BUILD_NESTED"))
+		editor.updatePPTBuilds.mockRejectedValueOnce(new Error("PPT_BUILD_INVALID"))
 		fireEvent.click(screen.getAllByRole("button", { name: "ppt.build.remove" })[0])
-		await waitFor(() => expect(state.error).toHaveBeenCalledWith("ppt.build.nested"))
+		await waitFor(() => expect(state.error).toHaveBeenCalledWith("ppt.build.saveFailed"))
 		expect(screen.getByRole("button", { name: "first ppt.build.fade" })).toBeInTheDocument()
 		editor.getPPTBuilds.mockResolvedValueOnce([make("restored", 4)])
 		rerender(

@@ -170,6 +170,16 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 														entry.selector === selectedElement?.selector
 													}
 													disabled={locked}
+													delayedUntilStep={
+														entry.ancestorStep !== undefined &&
+														entry.ancestorStep > entry.build.step
+															? groups.findIndex(
+																	(item) =>
+																		item.step ===
+																		entry.ancestorStep,
+																) + 1 || undefined
+															: undefined
+													}
 													onSelect={select}
 													onUpdate={update}
 												/>

@@ -45,6 +45,36 @@ describe("PPT build bridge", () => {
 		expect(document.querySelectorAll("[data-magic-ppt-build-hidden]")).toHaveLength(0)
 		window.dispatchEvent(new Event("pagehide"))
 	})
+	it("reveals a nested child only after both its own and its parent's step", () => {
+		const html = `<html><head></head><body><section id="parent" data-ppt-step="2"><p id="child" data-ppt-step="1">C</p><p id="plain">P</p></section></body></html>`
+		const result = injectPPTBuildBridge(html, window.location.origin, "nested", true)
+		const parsed = new DOMParser().parseFromString(result, "text/html")
+		document.body.innerHTML = parsed.body.innerHTML
+		new Function(parsed.querySelector("script")!.textContent!)()
+		const hidden = () =>
+			[...document.querySelectorAll("[data-magic-ppt-build-hidden]")].map((e) => e.id)
+		const go = (step: number) =>
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					source: window.parent,
+					origin: window.location.origin,
+					data: {
+						type: "ppt-build:set",
+						documentKey: "nested",
+						requestId: `r${step}`,
+						enabled: true,
+						step,
+					},
+				}),
+			)
+		expect(hidden().sort()).toEqual(["child", "parent"])
+		go(1)
+		// The child's own step is reached, but its hidden parent still covers it.
+		expect(hidden().sort()).toEqual(["parent"])
+		go(2)
+		expect(hidden()).toEqual([])
+		window.dispatchEvent(new Event("pagehide"))
+	})
 	it("fails open if the host does not acknowledge initialization", () => {
 		vi.useFakeTimers()
 		const html = `<p data-ppt-step="1" data-ppt-effect="appear">First</p>`

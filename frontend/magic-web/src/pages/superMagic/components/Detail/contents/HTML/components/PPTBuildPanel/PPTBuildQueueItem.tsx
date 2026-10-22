@@ -13,6 +13,7 @@ export function PPTBuildQueueItem({
 	entries,
 	selected,
 	disabled,
+	delayedUntilStep,
 	onSelect,
 	onUpdate,
 }: {
@@ -20,6 +21,8 @@ export function PPTBuildQueueItem({
 	entries: PPTBuildEntry[]
 	selected: boolean
 	disabled?: boolean
+	/** Display number of the step at which a later-appearing ancestor reveals this item. */
+	delayedUntilStep?: number
 	onSelect: (selector: string) => void
 	onUpdate: (updates: PPTBuildUpdate[]) => Promise<void>
 }) {
@@ -43,6 +46,11 @@ export function PPTBuildQueueItem({
 							? t("ppt.build.fade")
 							: t("ppt.build.appear")}
 					</span>
+					{delayedUntilStep ? (
+						<span className="block text-xs text-amber-600">
+							{t("ppt.build.afterParent", { step: delayedUntilStep })}
+						</span>
+					) : null}
 				</button>
 				<MagicTooltip title={t("ppt.build.remove")}>
 					<Button

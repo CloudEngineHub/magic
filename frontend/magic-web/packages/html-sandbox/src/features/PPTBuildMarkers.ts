@@ -99,10 +99,14 @@ export class PPTBuildMarkers {
 				`width:${rect.width}px;height:${rect.height}px;box-sizing:border-box;` +
 				`border:${Math.round(2 * k)}px solid #2563eb;border-radius:${Math.round(4 * k)}px;` +
 				"background:rgba(37,99,235,.10);"
+			// Nested builds share a corner with their ancestors, so shift each level aside.
+			let depth = 0
+			for (let node = element.parentElement; node; node = node.parentElement)
+				if (targets.has(node)) depth += 1
 			const marker = document.createElement("span")
 			marker.textContent = String(steps.indexOf(build.step) + 1)
 			marker.style.cssText =
-				`position:absolute;left:${Math.round(-size / 2)}px;top:${Math.round(-size / 2)}px;` +
+				`position:absolute;left:${Math.round(-size / 2 + depth * size * 0.95)}px;top:${Math.round(-size / 2)}px;` +
 				`box-sizing:border-box;min-width:${size}px;height:${size}px;padding:0 ${Math.round(6 * k)}px;` +
 				`border:${Math.round(2 * k)}px solid white;border-radius:${size}px;background:#2563eb;color:white;` +
 				`font:700 ${Math.round(14 * k)}px/${size - Math.round(4 * k)}px system-ui;text-align:center;` +

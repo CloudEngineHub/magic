@@ -39,12 +39,13 @@ describe("PPT authored builds", () => {
 		for (const value of [null, {}, { step: "2", effect: "fade" }, { step: 0, effect: "fade" }])
 			expect(normalizePPTBuild(value)).toBeNull()
 	})
-	it("uses outermost valid HTML elements, ignoring runtime and SVG internals", () => {
+	it("collects nested valid HTML elements, ignoring runtime and SVG internals", () => {
 		document.body.innerHTML = `<section ${attrs(3)}><p ${attrs(1)}>nested</p></section><div data-injected><p ${attrs(2)}>runtime</p></div><svg><text ${attrs(1)}>svg</text></svg><p ${attrs(3)}>same group</p>`
 		expect(
 			collectPPTBuilds(document).map(({ element, build }) => [element.tagName, build.step]),
 		).toEqual([
 			["SECTION", 3],
+			["P", 1],
 			["P", 3],
 		])
 	})

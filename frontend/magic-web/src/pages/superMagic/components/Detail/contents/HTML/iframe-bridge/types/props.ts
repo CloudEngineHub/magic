@@ -6,6 +6,8 @@ export interface PPTBuildEntry {
 	selector: string
 	label: string
 	build: PPTBuild
+	/** Latest step among configured ancestors; the element cannot show before it. */
+	ancestorStep?: number
 }
 
 export interface PPTBuildUpdate {

@@ -41,7 +41,7 @@ describe("PPTBuildManager", () => {
 		expect(document.querySelector("#a")!.getAttribute("title")).toBe("Keep me")
 	})
 
-	it("rejects invalid or nested batches without changing any document attributes or history", () => {
+	it("rejects invalid batches without changing any document attributes or history", () => {
 		const original = document.body.innerHTML
 		expect(() =>
 			manager.updateBuilds([
@@ -49,30 +49,26 @@ describe("PPTBuildManager", () => {
 				{ selector: "#b", build: build(0) },
 			]),
 		).toThrow("PPT_BUILD_INVALID")
-		expect(() =>
-			manager.updateBuilds([
-				{ selector: "#a", build: build(1) },
-				{ selector: "#child", build: build(2) },
-			]),
-		).toThrow("PPT_BUILD_NESTED")
 		expect(document.body.innerHTML).toBe(original)
 		expect(history.canUndo()).toBe(false)
 	})
 
-	it("validates the final state when transferring a build from parent to child", async () => {
-		writePPTBuild(document.querySelector("#a")!, build(1))
+	it("allows a container and its descendant to be configured together and undone as one command", async () => {
 		manager.updateBuilds([
+			{ selector: "#a", build: build(2) },
 			{ selector: "#child", build: build(1) },
-			{ selector: "#a", build: null },
 		])
-		expect(manager.getBuilds()[0].label).toBe("Child")
-		expect(document.querySelector("#a")!.hasAttribute(PPT_BUILD_ATTRIBUTE)).toBe(false)
+		expect(history.getUndoStackSize()).toBe(1)
+		const entries = manager.getBuilds()
+		expect(entries.map((entry) => entry.label)).toEqual(["Child", "Child"])
+		expect(entries.find((entry) => entry.build.step === 1)?.ancestorStep).toBe(2)
+		expect(entries.find((entry) => entry.build.step === 2)?.ancestorStep).toBeUndefined()
 		await style.undo()
+		expect(document.querySelector("#a")!.hasAttribute(PPT_BUILD_ATTRIBUTE)).toBe(false)
 		expect(document.querySelector("#child")!.hasAttribute(PPT_BUILD_ATTRIBUTE)).toBe(false)
-		expect(document.querySelector("#a")!.hasAttribute(PPT_BUILD_ATTRIBUTE)).toBe(true)
 	})
 
-	it("returns only valid outermost authored builds using the canvas selection selectors", () => {
+	it("returns valid authored builds, including nested ones, using the canvas selection selectors", () => {
 		for (const selector of ["#a", "#child", "#b"])
 			writePPTBuild(document.querySelector(selector)!, build(3))
 		markSourceNodes(document)
@@ -80,7 +76,7 @@ describe("PPTBuildManager", () => {
 		writePPTBuild(runtime, build(1))
 		document.body.append(runtime)
 		const entries = manager.getBuilds()
-		expect(entries).toHaveLength(2)
+		expect(entries).toHaveLength(3)
 		const first = document.querySelector(entries[0].selector)!
 		expect(entries[0].selector).toBe(getElementSelector(first as HTMLElement))
 		expect(first.hasAttribute("data-magic-editor-node-id")).toBe(false)

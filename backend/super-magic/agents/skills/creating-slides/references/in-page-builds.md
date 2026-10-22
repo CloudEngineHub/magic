@@ -18,7 +18,10 @@ content container:
 - `data-ppt-effect` is `appear` or `fade` (250 ms, reduced motion uses appear); omit it for `fade`.
 - Equal step numbers appear together. Numbers sort ascending; gaps do not create empty steps.
 - Elements without the attribute remain visible. Remove both attributes to remove the build.
-- Do not configure both a container and its descendants. A container reveals all its contents.
+- A container and its descendants may both be configured. The container reveals its whole
+  content at its step; a configured descendant stays hidden until its own step and the
+  container's step have both been reached. Give a descendant a step later than its container's
+  to stage content inside it; an earlier or equal step just shows with the container.
 - Do not configure html/body, document metadata, scripts, styles, SVG internals or generated DOM.
 - Preserve attributes on surviving elements during edits. Whole-page regeneration may replace
   those elements: explicitly report any build settings that cannot be preserved.
@@ -53,7 +56,8 @@ speak to separately).
   animations to reveal its content, leave that page without builds.
 - Keep the page title and its context visible; reveal only the content blocks. Use 2 to 6
   steps per page, numbered consecutively from 1, and group blocks that belong together under
-  the same step. Never configure both a container and its descendants.
+  the same step. Only nest builds when you want to stage content inside a revealed container,
+  and give nested items later steps than their container.
 - Attributes must be exactly `data-ppt-step` (integer 1 to 1000) and optionally
   `data-ppt-effect` (`appear` or `fade`) on elements that exist in the source HTML. Do not
   invent other attributes, values, versions, classes or wrapper elements, and do not edit the

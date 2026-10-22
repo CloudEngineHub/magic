@@ -5,7 +5,6 @@ import {
 	collectPPTBuilds,
 	isPPTBuildElement,
 	normalizePPTBuild,
-	PPT_BUILD_ATTRIBUTE,
 	readPPTBuild,
 	writePPTBuild,
 	type PPTBuild,
@@ -17,6 +16,8 @@ export interface PPTBuildEntry {
 	selector: string
 	label: string
 	build: PPTBuild
+	/** Latest step among configured ancestors. Past this step the element cannot show earlier. */
+	ancestorStep?: number
 }
 
 export interface PPTBuildUpdate {
@@ -41,18 +42,29 @@ export class PPTBuildManager {
 	) {}
 
 	getBuilds(): PPTBuildEntry[] {
-		return collectPPTBuilds(document)
-			.map(({ element, build }) => ({
-				// Match canvas selection payloads; history separately uses stable session IDs.
-				selector: getElementSelector(element),
-				label:
-					element.getAttribute("aria-label")?.trim() ||
-					element.getAttribute("alt")?.trim() ||
-					getInspectableTextContent(element).slice(0, 80) ||
-					element.id ||
-					element.tagName.toLowerCase(),
-				build,
-			}))
+		const collected = collectPPTBuilds(document)
+		const byElement = new Map(collected.map(({ element, build }) => [element, build]))
+		return collected
+			.map(({ element, build }) => {
+				let ancestorStep: number | undefined
+				for (let node = element.parentElement; node; node = node.parentElement) {
+					const parent = byElement.get(node)
+					if (parent && (ancestorStep === undefined || parent.step > ancestorStep))
+						ancestorStep = parent.step
+				}
+				return {
+					// Match canvas selection payloads; history separately uses stable session IDs.
+					selector: getElementSelector(element),
+					label:
+						element.getAttribute("aria-label")?.trim() ||
+						element.getAttribute("alt")?.trim() ||
+						getInspectableTextContent(element).slice(0, 80) ||
+						element.id ||
+						element.tagName.toLowerCase(),
+					build,
+					...(ancestorStep !== undefined ? { ancestorStep } : {}),
+				}
+			})
 			.sort((a, b) => a.build.step - b.build.step)
 	}
 
@@ -67,24 +79,6 @@ export class PPTBuildManager {
 			const build = update.build === null ? null : normalizePPTBuild(update.build)
 			if (update.build !== null && !build) throw new Error("PPT_BUILD_INVALID")
 			changes.set(element, { selector: update.selector, value: build })
-		}
-
-		// Validate the final batch, so removing a parent and adding its child is atomic.
-		// Runtime nodes never block an authored build or enter its persisted history.
-		const finalBuilds = new Set<HTMLElement>()
-		document.querySelectorAll<HTMLElement>(`[${PPT_BUILD_ATTRIBUTE}]`).forEach((element) => {
-			if (isPPTBuildElement(element) && readPPTBuild(element)) finalBuilds.add(element)
-		})
-		for (const [element, change] of changes) {
-			if (change.value === null) finalBuilds.delete(element)
-			else finalBuilds.add(element)
-		}
-		for (const [element, change] of changes) {
-			if (change.value === null) continue
-			for (const other of finalBuilds) {
-				if (other !== element && (other.contains(element) || element.contains(other)))
-					throw new Error("PPT_BUILD_NESTED")
-			}
 		}
 
 		const previous: BuildState[] = []
