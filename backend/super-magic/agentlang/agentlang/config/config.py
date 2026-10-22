@@ -357,7 +357,7 @@ class Config(Generic[T]):
         1. ${ENV_VAR} - 从环境变量获取值，无默认值
         2. ${ENV_VAR:-default} - 从环境变量获取值，如果不存在则使用默认值
 
-        同时会进行数据类型转换:
+        仅对完整环境变量占位符的解析结果进行数据类型转换，普通 YAML 字符串保持原样:
         - 如果值为 "true" 或 "false"，会转换为对应的布尔值
         - 如果值看起来像数字，会转换为对应的数字类型
 
@@ -388,7 +388,7 @@ class Config(Generic[T]):
         return result
 
     def _process_string_placeholder(self, value: str) -> Any:
-        """处理字符串中的环境变量占位符并转换类型"""
+        """仅转换完整环境变量占位符的结果，保留 YAML 已确定的字符串类型。"""
         pattern = r"\${([A-Za-z0-9_]+)(?::-([^}]*))?\}"
         match = re.fullmatch(pattern, value)
         if match:
@@ -402,8 +402,9 @@ class Config(Generic[T]):
             else:
                 return self._convert_value_type(default_value)
         else:
-            # 如果字符串不是 ${ENV_VAR:-default} 格式，仍然尝试类型转换
-            return self._convert_value_type(value)
+            # 例：YAML 的 "4.10"、"00123"、"false"、"" 都是文本，不能再次猜成数值、开关或 None。
+            # 原生数值／布尔由 YAML 解析；环境变量结果仍在上面的分支转换。
+            return value
 
     def _convert_value_type(self, value: Any) -> Any:
         """转换值的数据类型
