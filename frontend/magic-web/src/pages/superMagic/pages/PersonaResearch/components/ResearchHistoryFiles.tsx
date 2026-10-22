@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from "react"
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { X } from "lucide-react"
@@ -11,6 +11,11 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "@/components/shadcn-ui/sheet"
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@/components/shadcn-ui/resizable"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import TopicFilesButton from "@/pages/superMagic/components/TopicFilesButton"
 import PreviewDetailPopup, {
@@ -27,6 +32,8 @@ import PersonaDetailSheet from "./PersonaDetailSheet"
 import ResearchStateView from "./ResearchStateView"
 
 interface ResearchHistoryFilesProps {
+	/** The page the sidebar docks beside. It stays mounted when the sidebar opens or closes. */
+	children: ReactNode
 	open: boolean
 	onOpenChange: (open: boolean) => void
 }
@@ -41,7 +48,7 @@ interface ResearchHistoryFilesProps {
  * research store's own files store and attachment index, so it lists the whole project even
  * when no study is selected; nothing here walks or copies the attachments.
  */
-function ResearchHistoryFiles({ open, onOpenChange }: ResearchHistoryFilesProps) {
+function ResearchHistoryFiles({ children, open, onOpenChange }: ResearchHistoryFilesProps) {
 	const { t } = useTranslation("personaResearch")
 	const isMobile = useIsMobile()
 	const store = usePersonaResearchStore()
@@ -97,8 +104,61 @@ function ResearchHistoryFiles({ open, onOpenChange }: ResearchHistoryFilesProps)
 		if (event.key === "Escape" && !event.defaultPrevented) onOpenChange(false)
 	})
 
+	const sidebar = (
+		<aside
+			aria-label={t("historyFiles.title")}
+			data-testid="persona-research-history-files"
+			className="flex h-full min-w-0 flex-col bg-background"
+			onKeyDown={handleKeyDown}
+		>
+			<div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
+				<div className="flex min-w-0 flex-col gap-0.5">
+					<h2 className="text-sm font-semibold text-foreground">
+						{t("historyFiles.title")}
+					</h2>
+					<p className="truncate text-xs text-muted-foreground">
+						{t("historyFiles.description")}
+					</p>
+				</div>
+				<CloseButton onClick={() => onOpenChange(false)} />
+			</div>
+			<div className="min-h-0 flex-1">{content}</div>
+		</aside>
+	)
+
 	return (
 		<>
+			{isMobile ? (
+				<div className="h-full min-h-0">{children}</div>
+			) : (
+				// Always a panel group so the page (and the composer draft in it) is never remounted;
+				// only the sidebar panel comes and goes. The width is remembered per browser.
+				<ResizablePanelGroup
+					direction="horizontal"
+					autoSaveId="persona-research:history-files"
+				>
+					<ResizablePanel id="page" order={1} minSize={40}>
+						{children}
+					</ResizablePanel>
+					{open ? (
+						<>
+							<ResizableHandle
+								aria-label={t("historyFiles.resize")}
+								className="w-1.5 bg-transparent after:w-px after:bg-border hover:after:bg-primary/40 focus-visible:after:bg-primary data-[resize-handle-state=drag]:after:bg-primary"
+							/>
+							<ResizablePanel
+								id="history-files"
+								order={2}
+								defaultSize={28}
+								minSize={20}
+								maxSize={50}
+							>
+								{sidebar}
+							</ResizablePanel>
+						</>
+					) : null}
+				</ResizablePanelGroup>
+			)}
 			{isMobile ? (
 				// Radix Sheet traps focus, restores it to the entry button and closes on Esc.
 				<Sheet open={open} onOpenChange={onOpenChange}>
@@ -122,27 +182,6 @@ function ResearchHistoryFiles({ open, onOpenChange }: ResearchHistoryFilesProps)
 						<div className="min-h-0 flex-1">{content}</div>
 					</SheetContent>
 				</Sheet>
-			) : open ? (
-				<aside
-					aria-label={t("historyFiles.title")}
-					data-testid="persona-research-history-files"
-					// Docked beside the page; the page's own scroll area keeps its place.
-					className="flex h-full w-[360px] shrink-0 flex-col border-l border-border bg-background"
-					onKeyDown={handleKeyDown}
-				>
-					<div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
-						<div className="flex min-w-0 flex-col gap-0.5">
-							<h2 className="text-sm font-semibold text-foreground">
-								{t("historyFiles.title")}
-							</h2>
-							<p className="truncate text-xs text-muted-foreground">
-								{t("historyFiles.description")}
-							</p>
-						</div>
-						<CloseButton onClick={() => onOpenChange(false)} />
-					</div>
-					<div className="min-h-0 flex-1">{content}</div>
-				</aside>
 			) : null}
 			{/* Outside the sheet so its overlay stacks above the drawer on phones. */}
 			<PreviewDetailPopup

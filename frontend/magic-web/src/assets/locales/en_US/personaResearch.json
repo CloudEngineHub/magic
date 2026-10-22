@@ -262,6 +262,7 @@
 	"historyFiles": {
 		"close": "Close history files",
 		"description": "All files of your research project. Click one to preview it.",
+		"resize": "Resize history files",
 		"title": "History files"
 	},
 	"home": {

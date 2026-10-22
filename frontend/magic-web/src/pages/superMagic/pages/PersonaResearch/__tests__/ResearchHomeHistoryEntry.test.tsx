@@ -41,14 +41,26 @@ vi.mock("../onboarding/ResearchOnboarding", () => ({ default: () => null }))
 vi.mock("../onboarding/ResearchHelp", () => ({ default: () => null }))
 // The sidebar itself is covered by ResearchHistoryFiles.test; here only its open state matters.
 vi.mock("../components/ResearchHistoryFiles", () => ({
-	default: ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) =>
-		open ? (
-			<aside data-testid="history-sidebar">
-				<button type="button" onClick={() => onOpenChange(false)}>
-					sidebar-close
-				</button>
-			</aside>
-		) : null,
+	default: ({
+		open,
+		onOpenChange,
+		children,
+	}: {
+		open: boolean
+		onOpenChange: (open: boolean) => void
+		children: React.ReactNode
+	}) => (
+		<>
+			{children}
+			{open ? (
+				<aside data-testid="history-sidebar">
+					<button type="button" onClick={() => onOpenChange(false)}>
+						sidebar-close
+					</button>
+				</aside>
+			) : null}
+		</>
+	),
 }))
 
 const { default: ResearchHomePage } = await import("../pages/ResearchHomePage")

@@ -259,6 +259,7 @@
 	"historyFiles": {
 		"close": "关闭历史产物",
 		"description": "研究项目里的全部文件，点击即可预览",
+		"resize": "拖动调整宽度",
 		"title": "历史产物"
 	},
 	"home": {

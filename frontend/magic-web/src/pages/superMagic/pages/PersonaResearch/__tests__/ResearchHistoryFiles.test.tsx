@@ -60,12 +60,37 @@ afterEach(cleanup)
 
 describe("ResearchHistoryFiles", () => {
 	it("renders nothing while closed", () => {
-		render(<ResearchHistoryFiles open={false} onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open={false} onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		expect(screen.queryByTestId("persona-research-history-files")).toBeNull()
+		expect(screen.getByTestId("page")).toBeTruthy()
+	})
+
+	it("keeps the page mounted and offers a resize handle while open", () => {
+		const { rerender } = render(
+			<ResearchHistoryFiles open={false} onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
+		const page = screen.getByTestId("page")
+		rerender(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
+		expect(screen.getByTestId("page")).toBe(page)
+		expect(screen.getByRole("separator", { name: "historyFiles.resize" })).toBeTruthy()
 	})
 
 	it("lists the whole research project from the research store's own file data", () => {
-		render(<ResearchHistoryFiles open onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		expect(screen.getByTestId("persona-research-history-files")).toBeTruthy()
 		expect(filesButtonProps.current).toMatchObject({
 			projectId: "project-1",
@@ -79,13 +104,21 @@ describe("ResearchHistoryFiles", () => {
 
 	it("shows a loading state until the project is known", () => {
 		store.selectedProject = null
-		render(<ResearchHistoryFiles open onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		expect(screen.getByTestId("loading")).toBeTruthy()
 		expect(screen.queryByTestId("files-tree")).toBeNull()
 	})
 
 	it("previews a clicked file in the floating layer with the store's attachments", () => {
-		render(<ResearchHistoryFiles open onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		clickFile({
 			file_id: "f1",
 			file_name: "report.html",
@@ -101,14 +134,22 @@ describe("ResearchHistoryFiles", () => {
 	})
 
 	it("ignores folders", () => {
-		render(<ResearchHistoryFiles open onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		clickFile({ file_id: "d1", file_name: "studies", is_directory: true })
 		expect(previewOpen).not.toHaveBeenCalled()
 	})
 
 	it("opens a library persona in its own dialog instead of raw JSON", () => {
 		store.personaById.mockReturnValue({ name: "Chen" })
-		render(<ResearchHistoryFiles open onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		clickFile({
 			file_id: "p1",
 			file_name: "p_chen.json",
@@ -121,7 +162,11 @@ describe("ResearchHistoryFiles", () => {
 	})
 
 	it("closes from the close button and with Escape", () => {
-		render(<ResearchHistoryFiles open onOpenChange={onOpenChange} />)
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main data-testid="page" />
+			</ResearchHistoryFiles>,
+		)
 		fireEvent.click(screen.getByRole("button", { name: "historyFiles.close" }))
 		expect(onOpenChange).toHaveBeenLastCalledWith(false)
 		onOpenChange.mockClear()

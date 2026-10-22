@@ -156,11 +156,8 @@ function ResearchHomePage() {
 
 	return (
 		// The sidebar docks beside the page, so the page keeps its own scroll area.
-		<div className="flex h-full min-h-0">
-			<ScrollArea
-				className="h-full min-w-0 flex-1 bg-background"
-				data-testid="persona-research-home"
-			>
+		<ResearchHistoryFiles open={historyOpen} onOpenChange={changeHistoryOpen}>
+			<ScrollArea className="h-full bg-background" data-testid="persona-research-home">
 				<div
 					className={cn(
 						"mx-auto flex w-full max-w-6xl flex-col",
@@ -447,8 +444,7 @@ function ResearchHomePage() {
 				{/* The page is fully rendered once the shell shows it (the store loads before). */}
 				<ResearchOnboarding page="home" ready onFinish={focusComposer} />
 			</ScrollArea>
-			<ResearchHistoryFiles open={historyOpen} onOpenChange={changeHistoryOpen} />
-		</div>
+		</ResearchHistoryFiles>
 	)
 }
 
