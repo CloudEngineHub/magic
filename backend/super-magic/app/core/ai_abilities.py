@@ -35,6 +35,7 @@ class AIAbility(str, Enum):
     AGENT_RERANK = "agent_rerank"
     JSON_REPAIR_VALIDATION = "json_repair_validation"
     FOLLOW_UP_QUESTIONS = "follow_up_questions"
+    PERSONA_CHAT = "persona_chat"
 
 
 # Default configurations for each AI ability
@@ -145,6 +146,12 @@ AI_ABILITY_DEFAULTS: Dict[str, Dict[str, Any]] = {
         "temperature": 0.3,
         "max_tokens": 512,
         "enabled": True,
+    },
+
+    # 人设访谈能力：persona_chat 工具让 AI 人设回答访谈问题。
+    # 未配置专属模型时跟随当前对话的文本模型（auto 等模型可能不在用户套餐内）。
+    AIAbility.PERSONA_CHAT: {
+        "model_id": "",
     },
 }
 

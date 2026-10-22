@@ -112,6 +112,22 @@ class AssetDomainService
     }
 
     /**
+     * 创建只落本地的公开资产：不向第三方注册、不做合规审核。
+     *
+     * | 方法                    | 本地落库 | 第三方素材注册与合规 |
+     * | createPublic            | 是       | 是                   |
+     * | createPublicLocalOnly   | 是       | 否                   |
+     *
+     * 用于平台自行生成、自行管理的素材（如人设头像库），它们没有第三方审核的需要。
+     */
+    public function createPublicLocalOnly(AssetDataIsolation $dataIsolation, AssetEntity $asset): AssetEntity
+    {
+        $asset->setUserId(null);
+        $this->assertParentGroupExists($dataIsolation, $asset);
+        return $this->saveLocal($dataIsolation, $asset);
+    }
+
+    /**
      * 删除本人创建的资产。
      *
      * 团队分享等他人创建的素材不归本人处置，直接拒绝；不可见/不存在的资产按不存在返回，

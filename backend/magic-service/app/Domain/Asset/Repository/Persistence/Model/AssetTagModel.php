@@ -19,6 +19,7 @@ class AssetTagModel extends AbstractModel
     protected array $fillable = [
         'id',
         'organization_code',
+        'business_type',
         'parent_id',
         'node_type',
         'name_i18n',
@@ -31,6 +32,7 @@ class AssetTagModel extends AbstractModel
 
     protected array $casts = [
         'id' => 'integer',
+        'business_type' => 'string',
         'parent_id' => 'integer',
         'name_i18n' => 'array',
         'status' => 'integer',

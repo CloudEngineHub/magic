@@ -26,7 +26,21 @@ export async function searchBuiltinMentionItems(params: {
 		)
 	).flat()
 
-	return sortSearchResults(results, normalizedQuery)
+	return sortSearchResults(dedupeSearchResults(results), normalizedQuery)
+}
+
+/**
+ * Keeps the first result per type + id. A scene catalog lists files the project search also
+ * finds, e.g. this study's report.html; the scene's copy (with its label) comes first and wins.
+ */
+function dedupeSearchResults(results: MentionItem[]): MentionItem[] {
+	const seen = new Set<string>()
+	return results.filter((item) => {
+		const key = `${item.type}:${item.id}`
+		if (seen.has(key)) return false
+		seen.add(key)
+		return true
+	})
 }
 
 export function sortSearchResults(results: MentionItem[], normalizedQuery: string): MentionItem[] {

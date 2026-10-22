@@ -35,6 +35,7 @@ import builtinListTree3586ffIcon from "@/pages/superMagic/assets/tool_icon/built
 import builtinLogs6b84ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-logs-6b84ff.svg"
 import builtinMessageCircleQuestion4b4efcIcon from "@/pages/superMagic/assets/tool_icon/builtin-message-circle-question-4b4efc.svg"
 import builtinMessageSquare16a269Icon from "@/pages/superMagic/assets/tool_icon/builtin-message-square-16a269.svg"
+import builtinMessagesSquare16a269Icon from "@/pages/superMagic/assets/tool_icon/builtin-messages-square-16a269.svg"
 import builtinMouse6b84ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-mouse-6b84ff.svg"
 import builtinNetwork16a269Icon from "@/pages/superMagic/assets/tool_icon/builtin-network-16a269.svg"
 import builtinNetwork6b84ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-network-6b84ff.svg"
@@ -47,6 +48,7 @@ import builtinPresentationFf7c35Icon from "@/pages/superMagic/assets/tool_icon/b
 import builtinRadio667085Icon from "@/pages/superMagic/assets/tool_icon/builtin-radio-667085.svg"
 import builtinRepeat23586ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-repeat2-3586ff.svg"
 import builtinRotateCcw667085Icon from "@/pages/superMagic/assets/tool_icon/builtin-rotate-ccw-667085.svg"
+import builtinRoute3586ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-route-3586ff.svg"
 import builtinScanEye3586ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-scan-eye-3586ff.svg"
 import builtinScanText3586ffIcon from "@/pages/superMagic/assets/tool_icon/builtin-scan-text-3586ff.svg"
 import builtinScreenshotIcon from "@/pages/superMagic/assets/tool_icon/builtin-screenshot.svg"
@@ -188,6 +190,7 @@ export const builtinToolIconGroups = [
 	[builtinLogs6b84ffIcon, ["browser_read_console"]],
 	[builtinMessageCircleQuestion4b4efcIcon, ["ask_user"]],
 	[builtinMessageSquare16a269Icon, ["add_approval_comment"]],
+	[builtinMessagesSquare16a269Icon, ["persona_chat"]],
 	[builtinMouse6b84ffIcon, ["browser_scroll"]],
 	[builtinNetwork16a269Icon, ["list_organization_departments"]],
 	[builtinNetwork6b84ffIcon, ["browser_read_network"]],
@@ -215,6 +218,7 @@ export const builtinToolIconGroups = [
 	[builtinRadio667085Icon, ["get_im_channel_status"]],
 	[builtinRepeat23586ffIcon, ["convert_document_format"]],
 	[builtinRotateCcw667085Icon, ["restart_sandbox"]],
+	[builtinRoute3586ffIcon, ["update_study"]],
 	[builtinScanEye3586ffIcon, ["understand_document_images"]],
 	[builtinScanText3586ffIcon, ["extract_document_content"]],
 	[
@@ -247,7 +251,7 @@ export const builtinToolIconGroups = [
 	[builtinUndo216a269Icon, ["recall_approval_instance"]],
 	[builtinUpload6b84ffIcon, ["browser_upload_file"]],
 	[builtinUserRound667085Icon, ["get_user_info", "get_user_language"]],
-	[builtinUsers16a269Icon, ["list_organization_users"]],
+	[builtinUsers16a269Icon, ["list_organization_users", "save_personas"]],
 	[builtinWebIcon, ["search_knowledge"]],
 	[builtinWrench667085Icon, ["dummy_tool"]],
 ] as const

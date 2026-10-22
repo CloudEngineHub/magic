@@ -9,6 +9,7 @@ import { flowsCatalogPlugin } from "./domains/flows"
 import { historyCatalogPlugin } from "./domains/history"
 import { mcpCatalogPlugin, mcpSearchPlugin, mcpValidationPlugin } from "./domains/mcp"
 import { skillsCatalogPlugin, skillsSearchPlugin, skillsValidationPlugin } from "./domains/skills"
+import { sceneCatalogCatalogPlugin, sceneCatalogSearchPlugin } from "./domains/scene-catalog"
 import { tabsCatalogPlugin } from "./domains/tabs"
 import { isMicroAppEnabled } from "@/services/microAppFeature"
 import { toolsCatalogPlugin, toolsSearchPlugin, toolsValidationPlugin } from "./domains/tools"
@@ -41,9 +42,12 @@ const catalogPlugins = [
 	toolsCatalogPlugin,
 	historyCatalogPlugin,
 	tabsCatalogPlugin,
+	sceneCatalogCatalogPlugin,
 ]
 
 const searchPlugins = [
+	// First, so its items win over builtin results for the same file (see searchBuiltinMentionItems).
+	sceneCatalogSearchPlugin,
 	workspaceFilesSearchPlugin,
 	uploadFilesSearchPlugin,
 	mcpSearchPlugin,

@@ -31,6 +31,15 @@ function GlobalVersionStatus() {
 		}
 	}, [])
 
+	// 版本号每 10 分钟轮询一次，部署后到下次轮询之间，旧页面按需加载的模块文件已被替换，
+	// Vite 会派发 vite:preloadError。此时直接复用下面的「有新版本」提示，不等下次轮询；
+	// 不 preventDefault，原有错误边界照常兜底。只提示、由用户点「更新」才刷新，不打断正在进行的任务。
+	useEffect(() => {
+		const handlePreloadError = () => setNewVersion(true)
+		window.addEventListener("vite:preloadError", handlePreloadError)
+		return () => window.removeEventListener("vite:preloadError", handlePreloadError)
+	}, [])
+
 	useEffect(() => {
 		if (!hasNewVersion) return
 		toast.info(t("globalServiceStatus.newVersion"), {

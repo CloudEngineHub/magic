@@ -221,6 +221,8 @@ function shouldIncludeVirtualMessage(
  */
 export function buildVirtualMessageProjection(
 	messages: Array<SuperMagicMessageItem>,
+	/** Messages folded into an earlier card (see folded-tool-runs); they get no row. */
+	hiddenSourceIndices?: ReadonlySet<number>,
 ): VirtualMessageProjection {
 	const { messageKeys, messageTurnGroups } = buildMessageKeysAndTurnGroups(messages)
 	const userIndices: Array<number> = []
@@ -237,7 +239,10 @@ export function buildVirtualMessageProjection(
 		}
 		// AttachmentSection reads file-path mentions from the message before this one, and the
 		// renderer resolves that neighbour the same way (`messages[sourceIndex - 1]`).
-		if (!shouldIncludeVirtualMessage(node, messages[sourceIndex - 1])) {
+		if (
+			hiddenSourceIndices?.has(sourceIndex) ||
+			!shouldIncludeVirtualMessage(node, messages[sourceIndex - 1])
+		) {
 			return
 		}
 

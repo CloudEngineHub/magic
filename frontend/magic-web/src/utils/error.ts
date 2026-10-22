@@ -27,3 +27,18 @@ export function stringifyUnknownError(error: unknown): string {
 
 	return '{"error":"Unable to serialize thrown value"}'
 }
+
+/**
+ * Whether a thrown value is a lazy-chunk load failure, which in practice means this page runs an
+ * older build whose hashed asset files were replaced by a newer deploy.
+ *
+ * Browsers word it differently, so match all three:
+ * - Chrome / Edge: "Failed to fetch dynamically imported module: .../Foo-1a2b3c.js"
+ * - Firefox: "error loading dynamically imported module"
+ * - Safari: "Importing a module script failed"
+ */
+export function isChunkLoadError(error: unknown): boolean {
+	if (!(error instanceof Error)) return false
+	if (error.name === "ChunkLoadError") return true
+	return /dynamically imported module|Importing a module script failed/i.test(error.message)
+}

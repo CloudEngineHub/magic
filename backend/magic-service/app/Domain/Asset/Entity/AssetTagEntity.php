@@ -16,9 +16,14 @@ class AssetTagEntity extends AbstractEntity
 {
     use ResolvesI18nText;
 
+    /** 未指定业务类型的标签属于通用素材，与素材默认的 GENERAL 对应。 */
+    public const DEFAULT_BUSINESS_TYPE = 'GENERAL';
+
     protected ?int $id = null;
 
     protected string $organizationCode = '';
+
+    protected string $businessType = self::DEFAULT_BUSINESS_TYPE;
 
     protected int $parentId = 0;
 
@@ -58,6 +63,18 @@ class AssetTagEntity extends AbstractEntity
     public function setOrganizationCode(string $value): self
     {
         $this->organizationCode = $value;
+        return $this;
+    }
+
+    public function getBusinessType(): string
+    {
+        return $this->businessType;
+    }
+
+    public function setBusinessType(?string $value): self
+    {
+        $value = trim((string) $value);
+        $this->businessType = $value === '' ? self::DEFAULT_BUSINESS_TYPE : $value;
         return $this;
     }
 
@@ -182,6 +199,7 @@ class AssetTagEntity extends AbstractEntity
         return array_filter([
             'id' => $this->id,
             'organization_code' => $this->organizationCode,
+            'business_type' => $this->businessType,
             'parent_id' => $this->parentId,
             'node_type' => $this->nodeType->value,
             'name_i18n' => $this->nameI18n,
