@@ -404,6 +404,32 @@ function rerenderSlide(
 }
 
 describe("PPTSlide", () => {
+	it("opens the build sidebar without entering the visual editor", async () => {
+		mockState.initialEditMode = false
+		renderPPTSlide({ buildPanelOpen: true })
+		await waitFor(() =>
+			expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+				expect.objectContaining({ isEditMode: false, buildPanelOpen: true }),
+			),
+		)
+	})
+	it("saves animation metadata through the existing slide boundary while browsing", async () => {
+		mockState.initialEditMode = false
+		renderPPTSlide({ buildPanelOpen: true })
+		const props = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0]
+		await act(async () => {
+			expect(await props.onBuildSave()).toBe(true)
+		})
+		expect(mockState.triggerSave).toHaveBeenCalledOnce()
+		expect(mockState.onManualSave).toHaveBeenCalledWith(
+			expect.objectContaining({ success: true }),
+			0,
+		)
+		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
+			expect.objectContaining({ isEditMode: false }),
+		)
+	})
+
 	it("removes preview spacing from fullscreen on every device", () => {
 		renderPPTSlide({ isFullscreen: true })
 		expect(mockState.renderedIsolatedProps).toHaveBeenLastCalledWith(
@@ -684,6 +710,33 @@ describe("PPTSlide", () => {
 		})
 		expect(screen.getByTestId("isolated-html-renderer")).toBe(renderer)
 		expect(screen.getByTestId("ppt-slide-render-content").querySelector(".z-10")).toBeNull()
+	})
+
+	it("leaves the preview alone while the animation panel is open and syncs once it closes", async () => {
+		const processSource = vi.fn(async (source: string) => `processed:${source}`)
+		const withStep = '<p data-ppt-step="1">a</p>'
+		const view = renderPPTSlide({
+			content: "<p>a</p>",
+			rawContent: "<p>a</p>",
+			buildPanelOpen: true,
+			processSource,
+		})
+		rerenderSlide(view, {
+			content: "<p>a</p>",
+			rawContent: withStep,
+			buildPanelOpen: true,
+			processSource,
+		})
+		await act(async () => undefined)
+		expect(processSource).not.toHaveBeenCalled()
+
+		rerenderSlide(view, {
+			content: "<p>a</p>",
+			rawContent: withStep,
+			buildPanelOpen: false,
+			processSource,
+		})
+		await waitFor(() => expect(processSource).toHaveBeenCalledWith(withStep))
 	})
 
 	it("renders the saved source after saving its own edit", async () => {
@@ -1407,6 +1460,27 @@ describe("PPTSlide", () => {
 
 		expect(screen.getByTestId("ppt-save-button")).toBeInTheDocument()
 		expect(screen.queryByTestId("ppt-edit-button")).not.toBeInTheDocument()
+	})
+
+	it("asks before saving animation steps over a newer server version", async () => {
+		mockState.initialEditMode = false
+		renderPPTSlide({
+			buildPanelOpen: true,
+			serverUpdatedContent: "<div>server-update</div>",
+		})
+		const props = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0]
+		let saved: boolean | undefined
+		await act(async () => {
+			void props.onBuildSave().then((result: boolean) => {
+				saved = result
+			})
+		})
+		expect(screen.getByTestId("ppt-slide-save-with-update-dialog")).toBeInTheDocument()
+		expect(mockState.triggerSave).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByText("ppt.saveChanges"))
+		await waitFor(() => expect(saved).toBe(true))
+		expect(mockState.triggerSave).toHaveBeenCalledTimes(1)
 	})
 
 	it("切换幻灯片时在代码模式保存并继续切换", async () => {

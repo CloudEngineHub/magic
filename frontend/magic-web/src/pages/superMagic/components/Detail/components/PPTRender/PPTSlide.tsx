@@ -7,6 +7,7 @@ import {
 	useRef,
 	type CSSProperties,
 } from "react"
+import { PPT_BUILD_ATTRIBUTE } from "@dtyq/html-sandbox/utils/pptBuild"
 import { flushSync } from "react-dom"
 import { useTranslation } from "react-i18next"
 import { FileX, Loader2 } from "lucide-react"
@@ -49,13 +50,19 @@ import { flushFileSaves } from "../../services/fileSaveQueue"
 import { cn } from "@/utils/cn"
 import { AttachmentItem } from "../../../TopicFilesButton/hooks"
 import MagicSpin from "@/components/base/MagicSpin"
+import { stripPPTBuildMetadata } from "./utils/pptBuildSource"
 import { stripSlideNotes } from "./utils/slideNotes"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { injectPPTSwipeBridge } from "./utils/pptSwipeBridge"
 import { injectPPTAnimationHoldBridge } from "./utils/pptAnimationHold"
 import { canReplaySlideInPlace } from "./utils/slideReplayPolicy"
 import { usePPTSlideReplay } from "./hooks/usePPTSlideReplay"
+import { injectPPTBuildBridge } from "./utils/pptBuildBridge"
+import { usePPTBuildPlayback, type PPTBuildController } from "./hooks/usePPTBuildPlayback"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { usePPTSwipeNavigation, type PPTSwipeDirection } from "./hooks/usePPTSwipeNavigation"
+
+let buildDocumentSequence = 0
 
 export interface PPTSlideToolbarModel {
 	token: object
@@ -63,6 +70,11 @@ export interface PPTSlideToolbarModel {
 }
 
 interface PPTSlideProps {
+	buildPanelOpen?: boolean
+	onBuildPanelOpenChange?: (open: boolean) => void
+	buildStartAtEnd?: boolean
+	onBuildControllerChange?: (controller: PPTBuildController | null) => void
+	onBuildAction?: () => void
 	allowDownload?: boolean
 	showRefresh?: boolean
 	index: number
@@ -96,6 +108,8 @@ interface PPTSlideProps {
 	htmlRelativeFolderPath?: string
 	selectedProject?: any
 	attachmentList?: any[]
+	/** Deck-level HTML resource processing; keeps every render path consistent. */
+	processSource?: (rawContent: string) => Promise<string>
 	updateSlideContents: (newContents: Map<number, string>) => void
 	loadingState?: SlideLoadingState
 	loadingError?: Error
@@ -151,6 +165,8 @@ interface PerformSaveOptions {
 }
 
 const PPTSlide = observer(function PPTSlide({
+	buildPanelOpen = false,
+	onBuildPanelOpenChange,
 	index,
 	isActive,
 	isPresented,
@@ -170,6 +186,7 @@ const PPTSlide = observer(function PPTSlide({
 	htmlRelativeFolderPath,
 	selectedProject,
 	attachmentList,
+	processSource,
 	updateSlideContents,
 	loadingState = "idle",
 	loadingError,
@@ -197,6 +214,9 @@ const PPTSlide = observer(function PPTSlide({
 	toolbarOwnerKey,
 	onToolbarModelChange,
 	onSwipe,
+	buildStartAtEnd,
+	onBuildControllerChange,
+	onBuildAction,
 }: PPTSlideProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -298,6 +318,17 @@ const PPTSlide = observer(function PPTSlide({
 		}
 	}, [fileId, rawContent, fetchFileVersions])
 
+	// While the animation panel is open the editor mutates the live preview, so build metadata
+	// is ignored when deciding to reload it. Once the panel closes (or the slide is presented)
+	// the preview syncs with the saved source, so reopening the panel or playing never sees a
+	// stale document.
+	const isEditingBuilds = Boolean(
+		buildPanelOpen && allowEdit && isActive && !isFullscreen && !isPlaybackMode && !fileVersion,
+	)
+	const comparableSource = useCallback(
+		(html: string) => stripSlideNotes(isEditingBuilds ? stripPPTBuildMetadata(html) : html),
+		[isEditingBuilds],
+	)
 	const [displayContent, setDisplayContent] = useState<{
 		content: string
 		rawContent: string
@@ -307,18 +338,52 @@ const PPTSlide = observer(function PPTSlide({
 		rawContent: rawContent,
 		sourceVersion: undefined,
 	})
-	// Keep runtime gesture code out of raw source and saved slide content.
+	// Bind only preview HTML to the frame runtime; saved/raw HTML remains authored content.
 	const hasSwipeNavigation = Boolean(onSwipe)
+	// Key the runtime by actual preview content, not unrelated metadata/reorder revisions.
+	const buildDocumentKey = useMemo(() => {
+		const source = `${fileId ?? "slide"}:${displayContent.sourceVersion ?? "latest"}`
+		return displayContent.content ? `${source}:${++buildDocumentSequence}` : `${source}:empty`
+	}, [displayContent.content, displayContent.sourceVersion, fileId])
+	const registerBuild = useMemoizedFn((controller: PPTBuildController | null) =>
+		onBuildControllerChange?.(controller),
+	)
+	const buildPlayback = usePPTBuildPlayback({
+		documentKey: buildDocumentKey,
+		hasBuilds: displayContent.content.includes(PPT_BUILD_ATTRIBUTE),
+		enabled: Boolean(isFullscreen || isPlaybackMode) && !isEditMode,
+		active: isActive,
+		startAtEnd: buildStartAtEnd,
+		getIframe: () => rendererRef.current?.getIframeElement() ?? null,
+		onController: registerBuild,
+		onAction: onBuildAction,
+		onFailure: () => magicToast.info(t("ppt.build.fallback")),
+		onIgnored: () => magicToast.info(t("ppt.build.ignored")),
+	})
 	const previewRuntimeContent = useMemo(() => {
 		const origin = window.location.origin
-		const content = injectPPTAnimationHoldBridge(displayContent.content, origin)
+		let content = injectPPTAnimationHoldBridge(displayContent.content, origin)
+		content = injectPPTBuildBridge(
+			content,
+			origin,
+			buildDocumentKey,
+			Boolean(isFullscreen || isPlaybackMode) && !isEditMode && !buildPlayback.failed,
+		)
 		return hasSwipeNavigation ? injectPPTSwipeBridge(content, origin) : content
-	}, [displayContent.content, hasSwipeNavigation])
+	}, [
+		displayContent.content,
+		hasSwipeNavigation,
+		buildDocumentKey,
+		isFullscreen,
+		isPlaybackMode,
+		isEditMode,
+		buildPlayback.failed,
+	])
 
 	const isDisplayContentCurrent =
 		fileVersion === undefined
 			? displayContent.sourceVersion === undefined &&
-				stripSlideNotes(displayContent.rawContent) === stripSlideNotes(rawContent)
+				comparableSource(displayContent.rawContent) === comparableSource(rawContent)
 			: typeof versionContent === "string" &&
 				displayContent.sourceVersion === fileVersion &&
 				displayContent.rawContent === versionContent
@@ -382,6 +447,7 @@ const PPTSlide = observer(function PPTSlide({
 	// 处理历史版本内容 - 进行路径替换
 	const processHistoricalContent = useMemoizedFn(async (rawContent: string) => {
 		try {
+			if (processSource) return await processSource(rawContent)
 			const input: ProcessHtmlContentInput = {
 				content: rawContent,
 				attachments: attachmentList,
@@ -435,9 +501,13 @@ const PPTSlide = observer(function PPTSlide({
 		}
 		if (
 			displayContent.sourceVersion === undefined &&
-			stripSlideNotes(rawContent) === stripSlideNotes(displayContent.rawContent)
+			comparableSource(rawContent) === comparableSource(displayContent.rawContent)
 		) {
-			setDisplayContent((current) => ({ ...current, rawContent }))
+			// Only notes can be tracked in place. Build metadata edited through the animation
+			// panel keeps the source this preview was rendered from, so closing the panel still
+			// sees the difference and syncs the processed content.
+			if (stripSlideNotes(rawContent) === stripSlideNotes(displayContent.rawContent))
+				setDisplayContent((current) => ({ ...current, rawContent }))
 			return
 		}
 
@@ -457,6 +527,7 @@ const PPTSlide = observer(function PPTSlide({
 	}, [
 		displayContent.rawContent,
 		displayContent.sourceVersion,
+		comparableSource,
 		fileVersion,
 		processHistoricalContent,
 		rawContent,
@@ -562,7 +633,13 @@ const PPTSlide = observer(function PPTSlide({
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
+	// Step edits persist the whole slide, so they must honor the same "server has a newer
+	// version" confirmation as a normal save instead of silently overwriting someone else.
+	const saveBuildConfiguration = useMemoizedFn(() => runSaveAttempt("save"))
 	const rendererStaticProps = {
+		buildPanelOpen: isEditingBuilds,
+		onBuildPanelOpenChange,
+		onBuildSave: saveBuildConfiguration,
 		// Metadata saves must reach the save boundary immediately, even while the
 		// processed preview is retained. Historical previews keep their own source.
 		rawSourceCode: fileVersion === undefined ? rawContent : displayContent.rawContent,
@@ -608,11 +685,17 @@ const PPTSlide = observer(function PPTSlide({
 	})
 
 	const handleSlideRenderReady = useMemoizedFn(() => {
-		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent) {
-			return
+		if (loadingState !== "loaded" || !displayContent.content || !isDisplayContentCurrent)
+			return false
+		const finish = () => {
+			paintedRendererKeyRef.current = rendererKey
+			onReplayRenderReady()
+			return true
 		}
-		paintedRendererKeyRef.current = rendererKey
-		onReplayRenderReady()
+		// Static pages retain synchronous readiness. Only configured previews await a frame ack.
+		if (displayContent.content.includes(PPT_BUILD_ATTRIBUTE))
+			return buildPlayback.initialize(true).then((ready) => ready && finish())
+		return finish()
 	})
 
 	useEffect(() => {
@@ -693,9 +776,17 @@ const PPTSlide = observer(function PPTSlide({
 		}
 		setIsEditMode(true)
 	}, [setIsEditMode, fileVersion, changeFileVersion])
+	const prepareBuildPanel = useMemoizedFn(() => {
+		// Animation metadata always belongs to the latest slide, without opening a body draft.
+		if (fileVersion !== undefined) changeFileVersion(undefined)
+	})
+	useEffect(() => {
+		if (buildPanelOpen) prepareBuildPanel()
+	}, [buildPanelOpen, prepareBuildPanel])
 
 	// 版本切换处理 - 强制退出编辑模式
 	const handleVersionChange = useMemoizedFn((version: number | undefined) => {
+		onBuildPanelOpenChange?.(false)
 		if (isEditMode) {
 			setIsEditMode(false)
 		}
@@ -1329,7 +1420,7 @@ const PPTSlide = observer(function PPTSlide({
 					<div
 						key={`${rendererKey}-${frame.id}`}
 						className={
-							frame.isVisible
+							frame.isVisible && !buildPlayback.preparing
 								? "contents"
 								: "pointer-events-none invisible absolute inset-0"
 						}
@@ -1341,8 +1432,12 @@ const PPTSlide = observer(function PPTSlide({
 								content={frame.content}
 								onSaveReady={handleSaveReady}
 								onRenderReady={() => {
-									handleSlideRenderReady()
-									previewFrameSwap.markReady(frame.id)
+									const ready = handleSlideRenderReady()
+									if (ready instanceof Promise) {
+										void ready.then((allowed) => {
+											if (allowed) previewFrameSwap.markReady(frame.id)
+										})
+									} else previewFrameSwap.markReady(frame.id)
 								}}
 								onAppendPickingChange={setIsAppendPicking}
 								onQuickSelectionChange={setIsQuickSelecting}
@@ -1351,6 +1446,8 @@ const PPTSlide = observer(function PPTSlide({
 							frame.frozenProps && (
 								<IsolatedHTMLRenderer
 									{...frame.frozenProps}
+									// Frozen preview frames cannot retain editor-only sidebars or markers.
+									buildPanelOpen={false}
 									// A saved frame can outlive its captured props while the deck starts a transition.
 									isPlaybackPaused={Boolean(transitionRole) || isPreparingReplay}
 									content={frame.content}
@@ -1367,13 +1464,14 @@ const PPTSlide = observer(function PPTSlide({
 					previewStatusEnabled={false}
 					onRetry={() => undefined}
 				/>
-				{!isSlideRenderReady &&
-					!previewFrameSwap.holdsPreviousFrame &&
-					paintedRendererKeyRef.current !== rendererKey && (
-						<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
-							<MagicSpin spinning />
-						</div>
-					)}
+				{(buildPlayback.preparing ||
+					(!isSlideRenderReady &&
+						!previewFrameSwap.holdsPreviousFrame &&
+						paintedRendererKeyRef.current !== rendererKey)) && (
+					<div className="absolute inset-0 z-10 flex items-center justify-center bg-white dark:bg-[#1c1c1c]">
+						<MagicSpin spinning />
+					</div>
+				)}
 			</div>
 		)
 	}
