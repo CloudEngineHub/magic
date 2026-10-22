@@ -155,7 +155,7 @@ class FileBatchAppService extends AbstractAppService
             'target_name' => $targetName,
         ]);
 
-        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
         $this->prepareAndSubmitSandboxPackTask(
             $dataIsolation,
             $batchKey,
@@ -300,7 +300,7 @@ class FileBatchAppService extends AbstractAppService
             'target_name' => $targetName,
         ]);
 
-        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
         $this->prepareAndSubmitSandboxPackTask(
             $dataIsolation,
             $batchKey,
@@ -373,7 +373,7 @@ class FileBatchAppService extends AbstractAppService
         }
 
         $organizationCode = (string) ($taskStatus['organization_code'] ?? $userAuthorization->getOrganizationCode());
-        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
         $this->syncTaskStatusFromSandbox($dataIsolation, $batchKey, $taskStatus);
         $taskStatus = $this->statusManager->getTaskStatus($batchKey) ?? $taskStatus;
 
@@ -623,7 +623,7 @@ class FileBatchAppService extends AbstractAppService
         string $organizationCode,
         ProjectEntity $projectEntity
     ): string {
-        $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
         $topicEntity = $this->resolveBatchPackTopic($requestContext, $projectEntity);
         $sandboxId = $this->resolveReusableBatchPackSandboxId($topicEntity);
         $topicEntity->setSandboxId($sandboxId);

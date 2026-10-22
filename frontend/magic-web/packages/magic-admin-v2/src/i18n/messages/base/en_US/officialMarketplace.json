@@ -2,6 +2,7 @@
 	"action.copy": "Copy",
 	"action.copyEmployeeCode": "Copy employee code",
 	"action.copyPackageName": "Copy package name",
+	"action.copySkillCode": "Copy Skill code",
 	"action.reset": "Reset",
 	"category.action.create": "New Category",
 	"category.action.deleteAria": "Delete category: {{name}}",

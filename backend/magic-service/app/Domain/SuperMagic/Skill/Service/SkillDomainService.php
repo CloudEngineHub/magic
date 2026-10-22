@@ -89,6 +89,23 @@ class SkillDomainService
         return $this->skillRepository->findByCode($dataIsolation, $code);
     }
 
+    public function lockSkill(SkillDataIsolation $dataIsolation, string $code): void
+    {
+        $this->skillRepository->lockByCode($dataIsolation, $code);
+    }
+
+    public function findSkillByProjectId(SkillDataIsolation $dataIsolation, int $projectId): SkillEntity
+    {
+        $skills = $this->skillRepository->findByProjectId($dataIsolation, $projectId);
+        if (count($skills) > 1) {
+            ExceptionBuilder::throw(SkillErrorCode::PROJECT_BINDING_CONFLICT);
+        }
+        if ($skills === []) {
+            ExceptionBuilder::throw(SkillErrorCode::SKILL_NOT_FOUND, 'skill.skill_not_found');
+        }
+        return $skills[0];
+    }
+
     /**
      * 根据 code 列表批量查询技能.
      *
@@ -177,7 +194,8 @@ class SkillDomainService
         string $sandboxId,
         string $sourcePath,
         string $archiveRoot,
-        string $fileName
+        string $fileName,
+        DataIsolation $contactDataIsolation
     ): array {
         $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
             $dataIsolation->getCurrentOrganizationCode(),
@@ -193,14 +211,6 @@ class SkillDomainService
             $sourcePath,
             $archiveRoot,
             $fileName
-        );
-        // SkillDataIsolation is a BaseDataIsolation derivative and does NOT
-        // implement the Contact-side DataIsolation contract used by the
-        // sandbox gateway. Adapt it to a Contact\DataIsolation here so the
-        // export path can stamp & forward the per-user token uniformly.
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
         );
         $response = $this->workspaceExporter->export($contactDataIsolation, $sandboxId, $request);
 
@@ -219,7 +229,8 @@ class SkillDomainService
         string $sourcePath,
         string $archiveRoot,
         string $fileName,
-        string $taskKey
+        string $taskKey,
+        DataIsolation $contactDataIsolation
     ): array {
         $uploadConfig = $this->cloudFileRepository->getStsTemporaryCredential(
             $dataIsolation->getCurrentOrganizationCode(),
@@ -235,10 +246,6 @@ class SkillDomainService
             $archiveRoot,
             $fileName,
         );
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
         return $this->workspaceExporter->createAsync($contactDataIsolation, $sandboxId, $request, $taskKey)->toArray();
     }
 
@@ -246,12 +253,9 @@ class SkillDomainService
     public function checkSkillWorkspaceExportAsync(
         SkillDataIsolation $dataIsolation,
         string $sandboxId,
-        string $taskKey
+        string $taskKey,
+        DataIsolation $contactDataIsolation
     ): array {
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
         return $this->workspaceExporter->checkAsync($contactDataIsolation, $sandboxId, $taskKey)->toArray();
     }
 
@@ -265,26 +269,9 @@ class SkillDomainService
         SkillDataIsolation $dataIsolation,
         string $sandboxId,
         string $fileUrl,
+        DataIsolation $contactDataIsolation,
         string $targetDir = ''
     ): array {
-        // Per-call user identity flows through DataIsolation. Previously
-        // this called setUserContext() on the sandbox-gateway instance
-        // owned by THIS service, but the actual downstream gateway call
-        // happens inside WorkspaceImporterService which has a SEPARATE
-        // gateway instance, so the prior call was a no-op (real bug).
-        // We now plumb DataIsolation all the way through.
-        //
-        // SkillDataIsolation is the Skill-domain isolation VO (a
-        // BaseDataIsolation derivative) and does NOT implement the
-        // Contact-side DataIsolation contract used by the sandbox
-        // gateway. Adapt it to a Contact\DataIsolation here, preserving
-        // the previous wire format: no User-Authorization on the import
-        // path (token stays null).
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
-
         $request = new ImportWorkspaceRequest($fileUrl, $targetDir);
         $response = $this->workspaceImporter->import($contactDataIsolation, $sandboxId, $request);
 

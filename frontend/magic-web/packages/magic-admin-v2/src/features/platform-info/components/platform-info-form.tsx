@@ -53,7 +53,7 @@ export function PlatformInfoForm({
 	value: PlatformInfoFormState
 }) {
 	const { t } = useTranslation()
-	const contentCompletion = getContentLocaleCompletion(value)
+	const contentCompletion = getContentLocaleCompletion(value, activeSection)
 	const errors = form.formState.errors
 	const setValue = form.setValue
 	const showContentLocale = showsPlatformInfoContentLocale(activeSection)
@@ -73,7 +73,7 @@ export function PlatformInfoForm({
 						/>
 					) : null}
 
-					{activeSection === "basic" ? (
+                    {activeSection === "basic" ? (
 						<div className="space-y-8">
 							<div className="grid gap-4 sm:grid-cols-2">
 								<ImageUploadField
@@ -127,12 +127,19 @@ export function PlatformInfoForm({
 												)
 											}
 										>
-											<SelectTrigger className="w-full" data-testid="platform-info-select-trigger">
+											<SelectTrigger
+												className="w-full"
+												data-testid="platform-info-select-trigger"
+											>
 												<SelectValue />
 											</SelectTrigger>
 											<SelectContent data-testid="platform-info-select-content">
 												{platformLocales.map((locale) => (
-													<SelectItem key={locale} value={locale} data-testid="platform-info-option">
+													<SelectItem
+														data-testid="platform-info-option"
+														key={locale}
+														value={locale}
+													>
 														{localeLabels[locale]}
 													</SelectItem>
 												))}
@@ -146,6 +153,7 @@ export function PlatformInfoForm({
 											error={errors.name_i18n?.zh_CN?.message}
 										>
 											<Input
+												data-testid="platform-info-input"
 												placeholder={t(
 													"platformInfo.placeholder.platformNameZh",
 												)}
@@ -157,7 +165,7 @@ export function PlatformInfoForm({
 														formSetValueOptions,
 													)
 												}
-											 data-testid="platform-info-input"/>
+											/>
 										</PlatformInfoFieldControl>,
 										t("platformInfo.fieldDesc.platformNameZh"),
 									],
@@ -167,6 +175,7 @@ export function PlatformInfoForm({
 											error={errors.name_i18n?.en_US?.message}
 										>
 											<Input
+												data-testid="platform-info-input"
 												placeholder={t(
 													"platformInfo.placeholder.platformNameEn",
 												)}
@@ -178,7 +187,7 @@ export function PlatformInfoForm({
 														formSetValueOptions,
 													)
 												}
-											 data-testid="platform-info-input"/>
+											/>
 										</PlatformInfoFieldControl>,
 										t("platformInfo.fieldDesc.platformNameEn"),
 									],
@@ -193,6 +202,7 @@ export function PlatformInfoForm({
 								[
 									"Title",
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.seoTitle")}
 										value={value.title_i18n[contentLocale]}
 										onChange={(event) =>
@@ -202,12 +212,13 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									 data-testid="platform-info-textarea-input"/>,
+									/>,
 									t("platformInfo.fieldDesc.seoTitle"),
 								],
 								[
 									"Keywords",
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.seoKeywords")}
 										value={value.keywords_i18n[contentLocale]}
 										onChange={(event) =>
@@ -217,12 +228,13 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									 data-testid="platform-info-textarea-input"/>,
+									/>,
 									t("platformInfo.fieldDesc.seoKeywords"),
 								],
 								[
 									"Description",
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.seoDescription")}
 										value={value.description_i18n[contentLocale]}
 										onChange={(event) =>
@@ -232,7 +244,7 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									 data-testid="platform-info-textarea-input"/>,
+									/>,
 									t("platformInfo.fieldDesc.seoDescription"),
 								],
 							]}
@@ -250,6 +262,7 @@ export function PlatformInfoForm({
 										}
 									>
 										<Input
+											data-testid="platform-info-input"
 											placeholder={t(
 												"platformInfo.placeholder.agentRoleName",
 											)}
@@ -261,7 +274,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										 data-testid="platform-info-input"/>
+										/>
 									</PlatformInfoFieldControl>,
 									t("platformInfo.fieldDesc.agentRoleName"),
 								],
@@ -274,6 +287,7 @@ export function PlatformInfoForm({
 										}
 									>
 										<Textarea
+											data-testid="platform-info-textarea-input"
 											placeholder={t(
 												"platformInfo.placeholder.agentRoleDescription",
 											)}
@@ -285,7 +299,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										 data-testid="platform-info-textarea-input"/>
+										/>
 									</PlatformInfoFieldControl>,
 									t("platformInfo.fieldDesc.agentRoleDescription"),
 								],
@@ -296,6 +310,7 @@ export function PlatformInfoForm({
 						<div className="rounded-md border bg-background p-4">
 							<PlatformInfoFieldControl error={errors.global_system_prompt?.message}>
 								<Textarea
+									data-testid="platform-info-textarea-input"
 									aria-label={t("platformInfo.field.globalSystemPrompt")}
 									className="min-h-48 resize-y"
 									maxLength={GLOBAL_SYSTEM_PROMPT_MAX_LENGTH}
@@ -308,7 +323,7 @@ export function PlatformInfoForm({
 											formSetValueOptions,
 										)
 									}
-								 data-testid="platform-info-textarea-input"/>
+								/>
 								<div className="flex justify-end text-xs text-muted-foreground">
 									{t("platformInfo.characterCount", {
 										count: value.global_system_prompt.length,
@@ -325,6 +340,7 @@ export function PlatformInfoForm({
 								[
 									t("platformInfo.field.copyright"),
 									<Textarea
+										data-testid="platform-info-textarea-input"
 										placeholder={t("platformInfo.placeholder.copyright")}
 										value={value.footer.copyright_i18n[contentLocale]}
 										onChange={(event) =>
@@ -334,13 +350,14 @@ export function PlatformInfoForm({
 												formSetValueOptions,
 											)
 										}
-									 data-testid="platform-info-textarea-input"/>,
+									/>,
 									t("platformInfo.fieldDesc.copyright"),
 								],
 								[
 									t("platformInfo.field.filingEnabled"),
 									<div className="flex h-9 items-center gap-3">
 										<Switch
+											data-testid="platform-info-switch"
 											checked={value.footer.filing.enabled}
 											onCheckedChange={(checked) =>
 												setValue(
@@ -349,7 +366,7 @@ export function PlatformInfoForm({
 													formSetValueOptions,
 												)
 											}
-										 data-testid="platform-info-switch"/>
+										/>
 										<span className="text-sm text-muted-foreground">
 											{value.footer.filing.enabled
 												? t("common.enabled")
@@ -366,6 +383,7 @@ export function PlatformInfoForm({
 													error={errors.footer?.filing?.number?.message}
 												>
 													<Input
+														data-testid="platform-info-input"
 														placeholder={t(
 															"platformInfo.placeholder.filingNumber",
 														)}
@@ -377,7 +395,7 @@ export function PlatformInfoForm({
 																formSetValueOptions,
 															)
 														}
-													 data-testid="platform-info-input"/>
+													/>
 												</PlatformInfoFieldControl>,
 												t("platformInfo.fieldDesc.filingNumber"),
 											],
@@ -398,7 +416,7 @@ export function PlatformInfoForm({
 																formSetValueOptions,
 															)
 														}
-													 data-testid="platform-info-input"/>
+													/>
 												</PlatformInfoFieldControl>,
 												t("platformInfo.fieldDesc.filingLink"),
 											],

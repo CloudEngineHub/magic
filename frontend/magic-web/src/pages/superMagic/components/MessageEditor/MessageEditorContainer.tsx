@@ -91,7 +91,16 @@ import {
 	hasCanvasClipboardMimeType,
 	CanvasDesignClipboard,
 	type CanvasClipboardAsset,
+	type CanvasClipboardTextSnapshot,
 } from "@/components/CanvasDesign/public/clipboard"
+
+function isClipboardMediaFile(file: File): boolean {
+	const mimeType = file.type.trim().toLowerCase()
+	if (/^(image|video|audio)\//.test(mimeType)) return true
+	return /\.(png|jpe?g|gif|webp|bmp|avif|heic|heif|svg|mp4|mov|webm|avi|mkv|m4v|mp3|wav|ogg|m4a|aac|flac)$/i.test(
+		file.name,
+	)
+}
 
 export type MessageEditorRef = MessageEditorRefType & {
 	/**
@@ -816,20 +825,31 @@ export const MessageEditorContainer = observer(
 					const nativeEvent = e.nativeEvent
 					const hasCanvasMime = hasCanvasClipboardMimeType(nativeEvent)
 					const nativeFiles = CanvasDesignClipboard.readAllEventFilesSnapshot(nativeEvent)
+					const targetProjectId = selectedProject?.id ?? selectedTopic?.project_id
+					const hasClipboardTextOrHtml = Array.from(clipboardData.types ?? []).some(
+						(type) => {
+							const normalized = type.trim().toLowerCase()
+							return normalized === "text/plain" || normalized === "text/html"
+						},
+					)
 					if (hasCanvasMime && !uploadEnabled) {
 						if (!claimCanvasClipboardPasteEvent(nativeEvent)) return
 						e.preventDefault()
 						e.stopPropagation()
 						return
 					}
+					const shouldPreferCanvasBundle =
+						!hasCanvasMime &&
+						uploadEnabled &&
+						shouldEnableMention &&
+						Boolean(targetProjectId) &&
+						nativeFiles.length > 0 &&
+						nativeFiles.every(isClipboardMediaFile)
 
 					if (
 						hasCanvasMime ||
-						(nativeFiles.length === 0 &&
-							!Array.from(clipboardData.types).some((type) => {
-								const normalized = type.trim().toLowerCase()
-								return normalized === "text/plain" || normalized === "text/html"
-							}))
+						shouldPreferCanvasBundle ||
+						(nativeFiles.length === 0 && !hasClipboardTextOrHtml)
 					) {
 						const existingResourceKeys = collectMentionItemsFromEditor().flatMap(
 							(item) => {
@@ -850,8 +870,9 @@ export const MessageEditorContainer = observer(
 							{
 								control: "message-editor",
 								acceptedTypes: ["image", "video", "audio"],
-								projectId: selectedProject?.id ?? selectedTopic?.project_id,
+								projectId: targetProjectId,
 								hasProjectContext: isProjectContext,
+								preferPrivateBundleWithNativeFallback: shouldPreferCanvasBundle,
 								maxCount: Math.max(
 									0,
 									fileUploadStore.maxUploadCount - fileUploadStore.files.length,
@@ -860,6 +881,23 @@ export const MessageEditorContainer = observer(
 								sessionId: getCanvasClipboardSessionId(),
 							},
 							{
+								onExternalFile: async (
+									asset: CanvasClipboardAsset,
+									clipboard: CanvasClipboardTextSnapshot,
+								) => {
+									if (!asset.file) return
+									if (asset.file.size > fileUploadStore.maxUploadSize) {
+										throw new Error("file-size-limit")
+									}
+									if (!shouldPreferCanvasBundle) {
+										await _addFiles([asset.file], undefined, {
+											useTempDirectory: true,
+											isCanvasClipboard: true,
+										})
+										return
+									}
+									pasteFilesWithText(clipboardData, [asset.file], clipboard)
+								},
 								onAsset: async (asset: CanvasClipboardAsset) => {
 									if (
 										asset.reference?.kind === "project" &&

@@ -5,9 +5,14 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'magic_claw_reconciliation_stale' => 'The permission policy has changed. Refresh before retrying.',
+    'magic_claw_reconciliation_busy' => 'Permissions are being updated. Please try again shortly.',
+    'magic_claw_runtime_denied' => 'This claw has been disabled by an administrator. Start it manually after access is restored.',
     'resource' => [
+        'model_multiplier' => 'Model Multiplier',
         'admin' => 'Admin',
         'admin_ai' => 'AI Management',
+        'admin_setting' => 'System Settings',
         'admin_safe' => 'Security & Permission',
         'safe_function_permission' => 'Function Permission',
         'safe_admin' => 'Organization Admin',
@@ -20,6 +25,7 @@ return [
         'ai_ability' => 'Ability Management',
         'admin_ai_agent' => 'Agent',
         'admin_ai_skill' => 'Skill',
+        'admin_setting_identity_watermark' => 'Identity Watermark',
         'ai_mode' => 'AI Mode',
         'ai_agent' => 'Agent Management',
         'ai_skill' => 'Skill Management',
@@ -101,8 +107,8 @@ return [
                 'description' => 'Entry for publishing an agent to the team.',
             ],
             'magic_claw_access' => [
-                'name' => 'Magic Claw Access',
-                'description' => 'Entry for accessing the Magic Claw module.',
+                'name' => 'Magic Claw Usage Permission',
+                'description' => 'Revoking access stops affected claws and automatic activity. Saved data is retained; restart manually after access is restored.',
             ],
             'magic_claw_create' => [
                 'name' => 'Magic Claw Creation',

@@ -11,6 +11,8 @@ use App\Interfaces\Admin\Facade\AppMenu\AppMenuAdminApi;
 use App\Interfaces\Asset\Facade\AdminAssetApi;
 use App\Interfaces\Audit\Facade\AdminOperationLogApi;
 use App\Interfaces\Contact\Facade\Admin\PlatformUserApi;
+use App\Interfaces\Kernel\Facade\ModelBillingMultiplierApi;
+use App\Interfaces\Kernel\Facade\ModelBillingPreviewApi;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
 use App\Interfaces\Middleware\Auth\UserAuthMiddleware;
 use App\Interfaces\OrganizationEnvironment\Facade\Admin\OrganizationApi;
@@ -223,5 +225,8 @@ Router::addGroup('/api/v1/admin', static function () {
 // 平台设置（管理端）
 Router::addGroup('/api/v1/platform', static function () {
     Router::get('/setting', [PlatformSettingsApi::class, 'show']);
+    Router::get('/setting/model-billing-multiplier', [ModelBillingMultiplierApi::class, 'show']);
+    Router::put('/setting/model-billing-multiplier', [ModelBillingMultiplierApi::class, 'update']);
+    Router::get('/setting/model-billing-preview', [ModelBillingPreviewApi::class, 'show']);
     Router::put('/setting', [PlatformSettingsApi::class, 'update']);
 }, ['middleware' => [RequestContextMiddleware::class]]);

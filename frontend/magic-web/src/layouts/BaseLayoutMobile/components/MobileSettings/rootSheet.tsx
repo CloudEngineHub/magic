@@ -300,7 +300,8 @@ export const MobileSettingsRootSheet = observer(function MobileSettingsRootSheet
 				<MagicAvatar
 					src={userInfo?.avatar}
 					size={80}
-					style={{ borderRadius: 9999 }}
+					shape="circle"
+					imgClassName="!rounded-full"
 					className="shadow-sm"
 				>
 					{displayName}

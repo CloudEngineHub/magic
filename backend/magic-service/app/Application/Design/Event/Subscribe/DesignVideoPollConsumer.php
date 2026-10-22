@@ -131,12 +131,16 @@ class DesignVideoPollConsumer extends ConsumerMessage
         }
 
         try {
-            $result = $entity->isCanvasComposition()
-                ? $this->submissionDomainService->query($dataIsolation, $entity)
-                : $this->videoGatewayClient->queryVideo($operationId, [
+            if ($entity->isCanvasComposition()) {
+                $contactIsolation = ContactDataIsolation::create($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId());
+                $contactIsolation->initDataIsolationEnv();
+                $result = $this->submissionDomainService->queryCanvasComposition($dataIsolation, $entity, $contactIsolation);
+            } else {
+                $result = $this->videoGatewayClient->queryVideo($operationId, [
                     'organization_code' => $entity->getOrganizationCode(),
                     'user_id' => $entity->getUserId(),
                 ]);
+            }
         } catch (BusinessException $exception) {
             $this->handleQueryFailure($dataIsolation, $entity, $msg, $exception);
             return Result::ACK;

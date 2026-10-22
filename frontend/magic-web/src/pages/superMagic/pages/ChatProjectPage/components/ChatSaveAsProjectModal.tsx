@@ -47,7 +47,7 @@ function ChatSaveAsProjectModal({
 	useEffect(() => {
 		if (!open) return
 
-		setProjectName(defaultProjectName)
+		setProjectName(defaultProjectName.slice(0, 100))
 		void SuperMagicService.workspace.fetchWorkspaces({ page: 1 })
 	}, [defaultProjectName, open])
 
@@ -65,7 +65,7 @@ function ChatSaveAsProjectModal({
 
 	/** Submit save-as payload after validating required fields. */
 	const handleConfirm = useMemoizedFn(() => {
-		const trimmedName = projectName.trim()
+		const trimmedName = projectName.trim().slice(0, 100)
 		if (!trimmedName || !selectedWorkspaceId || isSubmitting) return
 
 		onConfirm({
@@ -167,7 +167,12 @@ function ChatSaveAsProjectModal({
 				</Button>
 				<Button
 					className="h-9 px-4"
-					disabled={!projectName.trim() || !selectedWorkspaceId || isSubmitting}
+					disabled={
+						!projectName.trim() ||
+						projectName.length > 100 ||
+						!selectedWorkspaceId ||
+						isSubmitting
+					}
 					onClick={handleConfirm}
 					data-testid="chat-save-as-project-confirm"
 				>

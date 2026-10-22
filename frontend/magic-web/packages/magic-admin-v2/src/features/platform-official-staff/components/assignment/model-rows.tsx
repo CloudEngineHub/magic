@@ -312,8 +312,7 @@ export function DynamicModelItemRow({
                   setEditOpen(true);
                 }}
                 size="icon"
-                variant="ghost"
-               data-testid="platform-official-staff-delete-button">
+                variant="ghost">
                 <Edit3 className="size-3.5" />
               </Button>
               <Button className="size-7" onClick={() => onDelete(model.id)} size="icon" variant="ghost" data-testid="platform-official-staff-delete-button">

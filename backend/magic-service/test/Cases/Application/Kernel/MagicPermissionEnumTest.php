@@ -67,6 +67,7 @@ class MagicPermissionEnumTest extends HttpTestCase
         $this->assertContains('platform.skill.market.edit', $permissionKeys);
         $this->assertContains('platform.setting.slides_template.query', $permissionKeys);
         $this->assertContains('platform.setting.slides_template.edit', $permissionKeys);
+        $this->assertContains('admin.setting.identity_watermark.edit', $permissionKeys);
         $this->assertNotContains('platform.agent.official.edit', $permissionKeys);
     }
 
@@ -85,6 +86,7 @@ class MagicPermissionEnumTest extends HttpTestCase
         $this->assertTrue($this->permission->isValidPermission('platform.skill.market.query'));
         $this->assertTrue($this->permission->isValidPermission('platform.setting.slides_template.query'));
         $this->assertTrue($this->permission->isValidPermission('platform.setting.slides_template.edit'));
+        $this->assertTrue($this->permission->isValidPermission('admin.setting.identity_watermark.edit'));
         $this->assertFalse($this->permission->isValidPermission('admin.ai.model_management.query'));
         $this->assertFalse($this->permission->isValidPermission('workspace.ai.model_management.manage'));
         $this->assertFalse($this->permission->isValidPermission('platform.agent.official.edit'));

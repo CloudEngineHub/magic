@@ -13,12 +13,12 @@ import { userStore } from "@/models/user"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
 import { ModelListContent } from "./components/ModelListContent"
+import { ModelInfoHoverProvider } from "./components/ModelInfoHoverCard"
 import { AddModelStoreProvider } from "./components/AddModel/context"
 import { AddModelStore } from "./components/AddModel/store"
 import { AddModelDialogLazy } from "./components/AddModel/add-model-dialog-lazy"
 import { ChevronsUpDownIcon, Sparkles } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 
 export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 	size = "default",
@@ -56,6 +56,10 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 	}, [selectedModelProp, internalSelectedModel?.model_id])
 
 	const selectedModel = internalSelectedModel
+	const handleModelChange = (model: ModelItem) => {
+		setInternalSelectedModel(model)
+		onModelChange?.(model)
+	}
 
 	const addModelStore = useMemo(() => new AddModelStore(), [])
 
@@ -72,10 +76,7 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 		handleOpenChange,
 		getModelDescription,
 	} = useModelSwitchLogic({
-		onModelClick: (model) => {
-			setInternalSelectedModel(model)
-			onModelChange?.(model)
-		},
+		onModelClick: handleModelChange,
 		shouldCloseOnSelect: true,
 	})
 
@@ -121,9 +122,11 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 			size={size}
 			canManageModels={canManageModels}
 			onModelClick={baseHandleModelClick}
+			onReasoningEffortChange={handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
 			modelKey="models"
+			showModelInfo={!isMobile}
 		/>
 	)
 
@@ -170,13 +173,13 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 									{t("messageEditor.modelSwitch.selectModel")}
 								</div>
 							</div>
-							<ScrollArea
-								viewportRef={mobileScrollContainerRef}
-								className="rounded-lg"
-								viewportClassName="max-h-[60vh] p-3 [&>div]:!flex [&>div]:flex-col"
+							<div
+								ref={mobileScrollContainerRef}
+								data-model-switch-scroll-container
+								className="scrollbar-y-thin flex max-h-[60vh] flex-col overflow-y-auto rounded-lg p-3"
 							>
 								{mainContent}
-							</ScrollArea>
+							</div>
 						</div>
 					</MagicPopup>
 				</>
@@ -206,14 +209,30 @@ export const ModelSwitch: React.FC<ModelSwitchProps> = ({
 						align="start"
 						className="z-dropdown w-80 overflow-visible pl-3 pr-2"
 						sideOffset={4}
+						onInteractOutside={(event) => {
+							const target = event.target
+							// Keep the parent menu open while a portaled detail or reasoning menu is active.
+							if (
+								target instanceof Element &&
+								target.closest("[data-model-switch-details-overlay]")
+							) {
+								event.preventDefault()
+							}
+						}}
 					>
 						<div className="flex flex-col">
-							<ScrollArea
-								viewportRef={desktopScrollContainerRef}
-								viewportClassName="max-h-[340px] [&>div]:!flex [&>div]:flex-col"
+							<div
+								ref={desktopScrollContainerRef}
+								data-model-switch-scroll-container
+								className="scrollbar-y-thin flex max-h-[340px] flex-col overflow-y-auto"
 							>
-								{mainContent}
-							</ScrollArea>
+								{/* 整个列表共用一张悬停信息卡，滚动时收起。 */}
+								<ModelInfoHoverProvider
+									scrollContainerRef={desktopScrollContainerRef}
+								>
+									{mainContent}
+								</ModelInfoHoverProvider>
+							</div>
 						</div>
 					</DropdownMenuContent>
 				</DropdownMenu>

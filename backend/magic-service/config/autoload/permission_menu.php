@@ -41,6 +41,14 @@ return [
             ],
             'tag' => '平台模型',
         ],
+        'platform.ai.model_multiplier' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
+                ['key' => 'model_management', 'label' => '模型管理', 'order' => 6],
+                ['key' => 'model_multiplier', 'label' => '模型倍率', 'order' => 3],
+            ],
+            'tag' => '模型管理',
+        ],
         'platform.ai.model_management' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
@@ -245,6 +253,14 @@ return [
             ],
             'tag' => '应用菜单',
         ],
+        'admin.setting.identity_watermark' => [
+            'path' => [
+                ['key' => 'enterprise_function', 'label' => '企业功能', 'order' => 3],
+                ['key' => 'organization_settings', 'label' => '组织设置', 'order' => 5],
+                ['key' => 'identity_watermark', 'label' => '页面身份水印', 'order' => 1],
+            ],
+            'tag' => '组织设置',
+        ],
         'workspace.model.text' => [
             'path' => [
                 ['key' => 'ai_management', 'label' => '企业 AI 管理', 'order' => 2],
@@ -375,6 +391,7 @@ return [
      */
     'official_organization_hidden_resource_keys' => [
         'admin.ai.application.menu',
+        'admin.setting.identity_watermark',
         'workspace.ai.model_management',
         'workspace.model.text',
         'workspace.model.image',

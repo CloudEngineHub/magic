@@ -9,6 +9,12 @@ import {
 	UNGROUPED_RECORDING_GROUP_ID,
 } from "@/services/audioRecordings/RecordingGroupsConstants"
 import { resolveRecordingGroupDisplayName } from "@/services/audioRecordings/resolveRecordingGroupDisplayName"
+import {
+	MAX_WORKSPACE_NAME_LENGTH,
+	clampProjectName,
+	isProjectNameAtLimit,
+	isProjectNameOverLimit,
+} from "@/pages/superMagicMobile/utils/mobileProjectNameLimit"
 
 export { ALL_RECORDING_GROUP_ID, UNGROUPED_RECORDING_GROUP_ID }
 
@@ -242,7 +248,7 @@ export function MobileRecordingGroupSheet({
 	)
 
 	const handleCreateConfirm = useCallback(async () => {
-		const name = draftName.trim()
+		const name = clampProjectName(draftName, MAX_WORKSPACE_NAME_LENGTH)
 		if (!name) return
 		await onCreateGroup(name)
 		setDraftName("")
@@ -250,7 +256,7 @@ export function MobileRecordingGroupSheet({
 	}, [draftName, onCreateGroup])
 
 	const handleRenameConfirm = useCallback(async () => {
-		const name = draftName.trim()
+		const name = clampProjectName(draftName, MAX_WORKSPACE_NAME_LENGTH)
 		if (!name || !activeGroup) return
 		await onRenameGroup(activeGroup.id, name)
 		setDraftName("")
@@ -273,7 +279,7 @@ export function MobileRecordingGroupSheet({
 
 	const startRenameGroup = useCallback(() => {
 		if (!activeGroup) return
-		setDraftName(activeGroup.name)
+		setDraftName(clampProjectName(activeGroup.name, MAX_WORKSPACE_NAME_LENGTH))
 		setView("rename")
 	}, [activeGroup])
 
@@ -311,7 +317,10 @@ export function MobileRecordingGroupSheet({
 					onClick: () => {
 						void (view === "create" ? handleCreateConfirm() : handleRenameConfirm())
 					},
-					disabled: !draftName.trim() || isSubmitting,
+					disabled:
+						!draftName.trim() ||
+						isProjectNameOverLimit(draftName, MAX_WORKSPACE_NAME_LENGTH) ||
+						isSubmitting,
 					tone: "primary" as const,
 					testId:
 						view === "create"
@@ -419,6 +428,7 @@ export function MobileRecordingGroupSheet({
 							<Input
 								type="text"
 								value={draftName}
+								maxLength={MAX_WORKSPACE_NAME_LENGTH}
 								onChange={(event) => setDraftName(event.target.value)}
 								placeholder={t(
 									"super:mobile.recordingEntry.groupSheet.groupNamePlaceholder",
@@ -433,6 +443,34 @@ export function MobileRecordingGroupSheet({
 								}}
 							/>
 						</div>
+						{/* Character counter and limit reminder */}
+						<div className="flex items-center justify-between px-[14px] text-xs text-muted-foreground">
+							{isProjectNameOverLimit(draftName, MAX_WORKSPACE_NAME_LENGTH) ? (
+								<span className="text-destructive">
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_WORKSPACE_NAME_LENGTH,
+									})}
+								</span>
+							) : isProjectNameAtLimit(draftName, MAX_WORKSPACE_NAME_LENGTH) ? (
+								<span>
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_WORKSPACE_NAME_LENGTH,
+									})}
+								</span>
+							) : (
+								<span />
+							)}
+							<span
+								className={
+									isProjectNameOverLimit(draftName, MAX_WORKSPACE_NAME_LENGTH)
+										? "text-destructive"
+										: ""
+								}
+								data-testid="mobile-recording-group-create-char-count"
+							>
+								{draftName.length}/{MAX_WORKSPACE_NAME_LENGTH}
+							</span>
+						</div>
 					</div>
 				) : null}
 
@@ -445,6 +483,7 @@ export function MobileRecordingGroupSheet({
 							<Input
 								type="text"
 								value={draftName}
+								maxLength={MAX_WORKSPACE_NAME_LENGTH}
 								onChange={(event) => setDraftName(event.target.value)}
 								placeholder={t(
 									"super:mobile.recordingEntry.groupSheet.renamePlaceholder",
@@ -458,6 +497,34 @@ export function MobileRecordingGroupSheet({
 									if (event.key === "Escape") setView("groupActions")
 								}}
 							/>
+						</div>
+						{/* Character counter and limit reminder */}
+						<div className="flex items-center justify-between px-[14px] text-xs text-muted-foreground">
+							{isProjectNameOverLimit(draftName, MAX_WORKSPACE_NAME_LENGTH) ? (
+								<span className="text-destructive">
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_WORKSPACE_NAME_LENGTH,
+									})}
+								</span>
+							) : isProjectNameAtLimit(draftName, MAX_WORKSPACE_NAME_LENGTH) ? (
+								<span>
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_WORKSPACE_NAME_LENGTH,
+									})}
+								</span>
+							) : (
+								<span />
+							)}
+							<span
+								className={
+									isProjectNameOverLimit(draftName, MAX_WORKSPACE_NAME_LENGTH)
+										? "text-destructive"
+										: ""
+								}
+								data-testid="mobile-recording-group-rename-char-count"
+							>
+								{draftName.length}/{MAX_WORKSPACE_NAME_LENGTH}
+							</span>
 						</div>
 					</div>
 				) : null}

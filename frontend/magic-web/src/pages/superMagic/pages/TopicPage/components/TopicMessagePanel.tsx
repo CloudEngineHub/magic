@@ -1,5 +1,8 @@
 import { isReadOnlyProject } from "@/pages/superMagic/utils/permission"
-import type { FileSidebarControl } from "../../../components/Detail/components/FilesViewer/types"
+import type {
+	ActiveDetailTabType,
+	FileSidebarControl,
+} from "../../../components/Detail/components/FilesViewer/types"
 import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
 import { useMemoizedFn } from "ahooks"
@@ -117,6 +120,8 @@ interface TopicMessagePanelProps {
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
 	detailPanelVisible?: boolean
+	activeFileId?: string | null
+	activeDetailTabType?: ActiveDetailTabType
 	isMessagesLoading?: boolean
 	isDraggingPanel?: boolean
 	historyTriggerMode?: "dropdown" | "layout"
@@ -166,6 +171,8 @@ function TopicMessagePanel({
 	onToggleConversationPanel,
 	onExpandConversationPanel,
 	detailPanelVisible = true,
+	activeFileId,
+	activeDetailTabType,
 	isMessagesLoading,
 	isDraggingPanel = false,
 	historyTriggerMode = "dropdown",
@@ -299,6 +306,9 @@ function TopicMessagePanel({
 			onOpenProjectFiles: fileSidebarControl?.isCollapsed
 				? fileSidebarControl.onToggle
 				: undefined,
+			activeFileId,
+			activeDetailTabType,
+			detailPanelVisible,
 			renderAssistantAvatar: topicModeConfig?.mode
 				? ({ className } = {}) => (
 						<ModeAvatar
@@ -311,6 +321,9 @@ function TopicMessagePanel({
 		}
 	}, [
 		allowTopicBranchActions,
+		activeDetailTabType,
+		activeFileId,
+		detailPanelVisible,
 		topicModeConfig,
 		setSelectedTopic,
 		handleRetryOptimisticMessage,

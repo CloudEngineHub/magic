@@ -5,9 +5,14 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'magic_claw_reconciliation_stale' => '权限策略已变更，请刷新后重试。',
+    'magic_claw_reconciliation_busy' => '权限正在更新，请稍后重试。',
+    'magic_claw_runtime_denied' => '龙虾已被管理员停用。恢复使用权限后，请手动启动。',
     'resource' => [
+        'model_multiplier' => '模型倍率',
         'admin' => '管理后台',
         'admin_ai' => 'AI管理',
+        'admin_setting' => '系统设置',
         'admin_safe' => '安全与权限',
         'safe_function_permission' => '功能权限',
         'safe_admin' => '组织管理员',
@@ -19,6 +24,7 @@ return [
         'admin_ai_image' => '智能绘图',
         'ai_ability' => '能力管理',
         'ai_application' => '组织应用菜单',
+        'admin_setting_identity_watermark' => '页面身份水印',
         'admin_ai_agent' => '数字员工',
         'admin_ai_skill' => 'Skill',
         'ai_mode' => '模式',
@@ -133,8 +139,8 @@ return [
                 'description' => '发布助理到团队入口。',
             ],
             'magic_claw_access' => [
-                'name' => '龙虾入口访问',
-                'description' => '访问 Magic Claw 模块入口。',
+                'name' => '龙虾使用权限',
+                'description' => '收回权限会停止相关成员的龙虾及自动运行；已保存的数据保留，重新授权后需手动启动。',
             ],
             'magic_claw_create' => [
                 'name' => '龙虾创建',

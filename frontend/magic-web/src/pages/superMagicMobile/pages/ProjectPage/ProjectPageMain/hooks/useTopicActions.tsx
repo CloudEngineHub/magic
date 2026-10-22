@@ -30,6 +30,12 @@ import {
 } from "@/pages/superMagicMobile/pages/shared/topicPageCapabilities"
 import { applySuperMobileDetailExitNavigation } from "@/pages/superMagicMobile/utils/navigateAfterProjectMove"
 import { shouldExitTopicDetailAfterDelete } from "@/pages/superMagicMobile/utils/resolveSuperMobileBackFallback"
+import {
+	MAX_PROJECT_NAME_LENGTH,
+	clampProjectName,
+	isProjectNameAtLimit,
+	isProjectNameOverLimit,
+} from "@/pages/superMagicMobile/utils/mobileProjectNameLimit"
 
 interface UseTopicListActionsOptions {
 	enableSimpleMode?: boolean
@@ -266,10 +272,19 @@ export function useTopicListActions({
 		}
 	})
 
+	const renameTopicName = currentActionItem?.topic?.topic_name || ""
+	const isTopicNameOverLimit = isProjectNameOverLimit(renameTopicName)
+	const isTopicNameAtLimit = isProjectNameAtLimit(renameTopicName)
+
 	const handleRename = useMemoizedFn(() => {
 		if (currentActionItem?.topic && currentActionItem.workspace && currentActionItem.project) {
+			const clampedName = clampProjectName(currentActionItem.topic.topic_name)
+			if (!clampedName) return
 			topicHandlers.handleRenameTopic(
-				currentActionItem.topic,
+				{
+					...currentActionItem.topic,
+					topic_name: clampedName,
+				},
 				currentActionItem.workspace,
 				currentActionItem.project,
 			)
@@ -322,7 +337,7 @@ export function useTopicListActions({
 					onClick: () => {
 						void handleRename()
 					},
-					disabled: !currentActionItem?.topic?.topic_name?.trim(),
+					disabled: !renameTopicName.trim() || isTopicNameOverLimit,
 					tone: "primary",
 					testId: "topic-rename-popup-confirm",
 				}}
@@ -337,6 +352,7 @@ export function useTopicListActions({
 						<Input
 							className={MOBILE_RENAME_POPUP_INPUT_CLASS}
 							placeholder={t("hierarchicalWorkspacePopup.inputTopicName")}
+							maxLength={MAX_PROJECT_NAME_LENGTH}
 							value={currentActionItem?.topic?.topic_name}
 							onChange={(e) => {
 								updateCurrentActionItem((pre) => ({
@@ -352,6 +368,30 @@ export function useTopicListActions({
 							autoFocus
 							data-testid="topic-rename-popup-input"
 						/>
+						{/* Character counter and limit reminder */}
+						<div className="flex items-center justify-between text-xs text-muted-foreground">
+							{isTopicNameOverLimit ? (
+								<span className="text-destructive">
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_PROJECT_NAME_LENGTH,
+									})}
+								</span>
+							) : isTopicNameAtLimit ? (
+								<span>
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_PROJECT_NAME_LENGTH,
+									})}
+								</span>
+							) : (
+								<span />
+							)}
+							<span
+								className={isTopicNameOverLimit ? "text-destructive" : ""}
+								data-testid="topic-rename-popup-char-count"
+							>
+								{renameTopicName.length}/{MAX_PROJECT_NAME_LENGTH}
+							</span>
+						</div>
 					</div>
 				</div>
 			</MagicPopup>

@@ -1,4 +1,3 @@
-import { useDebounce } from "ahooks"
 import { AlertCircle, Plus, RefreshCw } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -6,7 +5,8 @@ import { useTranslation } from "react-i18next"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
 import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
-import { TEXT_FILTER_DEBOUNCE_MS } from "@magic-admin-v2/constants/filters"
+import { PageHeaderFilterButton } from "@magic-admin-v2/components/page-header-filter-button"
+import { useAppliedProviderFilter } from "@magic-admin-v2/features/platform-provider-list/hooks/use-applied-provider-filter"
 import { ProviderAddDialog } from "@magic-admin-v2/features/platform-provider-list/components/provider-add-dialog"
 import { ProviderCategoryTabs } from "@magic-admin-v2/features/platform-provider-list/components/provider-category-controls"
 import { ProviderConfigDialog } from "@magic-admin-v2/features/platform-provider-list/components/provider-config-dialog"
@@ -42,11 +42,11 @@ import {
 import {
 	createDefaultProviderFilterDraft,
 	filterProviders,
+	getProviderFilterActiveCount,
 	getProviderStatusStats,
 	paginateProviders,
 	providerPageSize,
 	sortProviders,
-	type ProviderFilterDraft,
 } from "@magic-admin-v2/features/platform-provider-list/utils/provider-list"
 import type { ApiError } from "@magic-admin-v2/api/types"
 import { useRowPendingIds } from "@magic-admin-v2/hooks/use-row-pending-ids"
@@ -70,6 +70,7 @@ export default function PlatformProviderListPage() {
 		resolveProviderCategory(selectedCategory, accessibleCategories) ?? providerCategory.llm
 	const currentCategoryAccess = categoryAccess[activeCategory]
 	const [filterDraft, setFilterDraft] = useState(createDefaultProviderFilterDraft)
+	const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
 	const [page, setPage] = useState(1)
 	const [pageSize, setPageSize] = useState(providerPageSize)
 	const [isAddOpen, setIsAddOpen] = useState(false)
@@ -78,17 +79,8 @@ export default function PlatformProviderListPage() {
 	const [deletingDetailId, setDeletingDetailId] = useState<string | null>(null)
 	const { pendingIds: statusPendingIds, run: runStatusPending } = useRowPendingIds()
 	const canEditAddCategory = categoryAccess[addCategory]?.canEdit ?? false
-	const normalizedSearchValue = filterDraft[filterDraft.search_field].trim()
-	const debouncedSearchValue = useDebounce(normalizedSearchValue, {
-		wait: TEXT_FILTER_DEBOUNCE_MS,
-	})
-	const appliedFilter = useMemo<ProviderFilterDraft>(
-		() => ({
-			...filterDraft,
-			[filterDraft.search_field]: normalizedSearchValue ? debouncedSearchValue : "",
-		}),
-		[debouncedSearchValue, filterDraft, normalizedSearchValue],
-	)
+	const appliedFilter = useAppliedProviderFilter(filterDraft)
+	const activeFilterCount = getProviderFilterActiveCount(filterDraft)
 	const listQuery = useProviderListQuery(activeCategory, {
 		enabled: currentCategoryAccess.canView,
 	})
@@ -216,17 +208,18 @@ export default function PlatformProviderListPage() {
 				testId="provider-list-page"
 				title={t("providerList.title")}
 			>
-				<div className="space-y-6">
-					<ProviderCategoryTabs
-						activeCategory={activeCategory}
-						categories={accessibleCategories}
-						onChange={setSelectedCategory}
-					/>
+				<ProviderCategoryTabs
+					activeCategory={activeCategory}
+					categories={accessibleCategories}
+					onChange={setSelectedCategory}
+				/>
+				<div className="mt-5">
 					<EmptyState
 						icon={AlertCircle}
 						testId="provider-list-error"
 						title={t("providerList.error.loadTitle")}
-						description={queryError.message}/>
+						description={queryError.message}
+					/>
 				</div>
 			</ListShell>
 		)
@@ -237,6 +230,12 @@ export default function PlatformProviderListPage() {
 			<ListShell
 				actions={
 					<>
+						<PageHeaderFilterButton
+							data-testid="provider-advanced-trigger"
+							count={activeFilterCount}
+							label={t("providerList.filter.title")}
+							onClick={() => setMobileFilterOpen(true)}
+						/>
 						<PageHeaderActionButton
 							data-testid="provider-list-refresh-button"
 							disabled={listQuery.isFetching}
@@ -267,34 +266,34 @@ export default function PlatformProviderListPage() {
 				testId="provider-list-page"
 				title={t("providerList.title")}
 			>
-				<div className="flex flex-col gap-4">
-					<ProviderCategoryTabs
-						activeCategory={activeCategory}
-						categories={accessibleCategories}
-						onChange={setSelectedCategory}
-					/>
-					<ProviderListContent
-						categoryAccess={categoryAccess}
-						deleting={deleteMutation.isPending}
-						filter={filterDraft}
-						items={pageItems}
-						loading={listQuery.isFetching && !listQuery.data}
-						onDelete={handleDelete}
-						onFilterChange={setFilterDraft}
-						onOpenDetail={(provider) => setDetailId(provider.id)}
-						onPageChange={setPage}
-						onPageSizeChange={(nextPageSize) => {
-							setPageSize(nextPageSize)
-							setPage(1)
-						}}
-						onStatusChange={handleStatusChange}
-						page={currentPage}
-						pageSize={pageSize}
-						stats={statusStats}
-						statusPendingIds={statusPendingIds}
-						total={filteredProviders.length}
-					/>
-				</div>
+				<ProviderCategoryTabs
+					activeCategory={activeCategory}
+					categories={accessibleCategories}
+					onChange={setSelectedCategory}
+				/>
+				<ProviderListContent
+					categoryAccess={categoryAccess}
+					deleting={deleteMutation.isPending}
+					filter={filterDraft}
+					items={pageItems}
+					mobileFilterOpen={mobileFilterOpen}
+					loading={listQuery.isFetching && !listQuery.data}
+					onDelete={handleDelete}
+					onFilterChange={setFilterDraft}
+					onMobileFilterOpenChange={setMobileFilterOpen}
+					onOpenDetail={(provider) => setDetailId(provider.id)}
+					onPageChange={setPage}
+					onPageSizeChange={(nextPageSize) => {
+						setPageSize(nextPageSize)
+						setPage(1)
+					}}
+					onStatusChange={handleStatusChange}
+					page={currentPage}
+					pageSize={pageSize}
+					stats={statusStats}
+					statusPendingIds={statusPendingIds}
+					total={filteredProviders.length}
+				/>
 			</ListShell>
 
 			<ProviderAddDialog

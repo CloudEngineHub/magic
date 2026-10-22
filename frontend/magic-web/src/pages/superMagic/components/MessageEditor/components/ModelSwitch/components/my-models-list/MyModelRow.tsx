@@ -7,8 +7,10 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
 import { serviceProviderModelToModelItem } from "@/services/superMagic/SuperMagicCustomModelService"
-import { Ellipsis, Pencil, Trash2 } from "lucide-react"
+import { Check, Ellipsis, Pencil, Trash2 } from "lucide-react"
 import type { ModelItem } from "../../types"
+import { ModelInfoHoverCard } from "../ModelInfoHoverCard"
+import ModelIcon from "../ModelIcon"
 import { ProviderTypeIcon } from "../ProviderTypeIcon"
 import type { MyModelGroup, MyModelProviderEntry } from "./utils"
 import { userStore } from "@/models/user"
@@ -20,6 +22,11 @@ interface MyModelRowProps {
 	selectedItemRef?: React.RefObject<HTMLDivElement>
 	onEdit: (model: MyModelProviderEntry["model"]) => void
 	onDelete: (modelId: string) => void
+	/**
+	 * 桌面紧凑行：与平台模型行同一套尺寸、图标和勾选列，不缩进，描述收进悬停信息卡。
+	 * 移动端弹层不传，保留两行描述与复选框的原布局。
+	 */
+	compact?: boolean
 }
 
 export function MyModelRow({
@@ -29,6 +36,7 @@ export function MyModelRow({
 	selectedItemRef,
 	onEdit,
 	onDelete,
+	compact = false,
 }: MyModelRowProps) {
 	const { t } = useTranslation("super")
 	const isActionMenuOpenRef = useRef(false)
@@ -94,6 +102,123 @@ export function MyModelRow({
 				onDelete,
 			})
 
+	const renderActionMenu = (trigger: React.ReactNode) => (
+		<MagicDropdown
+			placement="bottomRight"
+			onOpenChange={handleActionMenuOpenChange}
+			overlayClassName={cn(
+				"min-w-[200px] rounded-lg shadow-md",
+				"[&_[data-slot=dropdown-menu-label]]:p-0",
+				"[&_[data-slot=dropdown-menu-item]]:rounded-md",
+				"[&_[data-slot=dropdown-menu-item]]:px-2",
+				"[&_[data-slot=dropdown-menu-item]]:py-1.5",
+				"[&_[data-slot=dropdown-menu-sub-trigger]]:rounded-md",
+				"[&_[data-slot=dropdown-menu-sub-trigger]]:px-2",
+				"[&_[data-slot=dropdown-menu-sub-trigger]]:py-1.5",
+				"[&_[data-slot=dropdown-menu-sub-content]]:min-w-[160px]",
+			)}
+			menu={{ items: actionMenuItems }}
+		>
+			<span
+				className="flex items-center justify-center"
+				data-stop-model-select="true"
+				onPointerDown={handleActionTriggerPointerDown}
+			>
+				{trigger}
+			</span>
+		</MagicDropdown>
+	)
+
+	if (compact) {
+		const modelItem = serviceProviderModelToModelItem(representativeModel)
+		const row = (
+			<div
+				ref={isSelected ? selectedItemRef : null}
+				className={cn(
+					"group flex h-8 items-center gap-2 rounded-lg px-2",
+					"cursor-pointer transition-colors duration-100",
+					// 与平台模型行一致：选中底色比悬停深一档。
+					isSelected
+						? "bg-muted"
+						: "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/60",
+					"outline-none focus-visible:ring-2 focus-visible:ring-ring",
+				)}
+				role="button"
+				tabIndex={0}
+				aria-pressed={isSelected}
+				aria-label={representativeModel.name}
+				data-testid={`my-model-item-${representativeModel.id}`}
+				data-model-id={representativeModel.model_id}
+				data-selected={isSelected}
+				data-provider-count={providerEntries.length}
+				onClick={handleItemClick}
+				onKeyDown={(event) => {
+					if (event.target !== event.currentTarget) return
+					if (event.key !== "Enter" && event.key !== " ") return
+					event.preventDefault()
+					handleSelect()
+				}}
+			>
+				{/* 与平台模型行一致，行首显示模型自己的图标。 */}
+				<ModelIcon model={modelItem} size={16} className="shrink-0 rounded" />
+				<span
+					className={cn(
+						"min-w-0 flex-1 truncate text-[13px] leading-5",
+						isSelected
+							? "font-semibold text-foreground"
+							: "font-normal text-foreground/80",
+					)}
+				>
+					{representativeModel.name}
+				</span>
+				{/* 自定义模型没有倍率，个人组织在倍率的位置显示服务商，多服务商只给数量。 */}
+				{canManageModels && primaryProviderName ? (
+					<span
+						className="max-w-[40%] shrink-0 truncate text-[11px] leading-4 text-muted-foreground"
+						data-testid={`my-model-provider-badge-${representativeModel.id}`}
+					>
+						{hasMultipleProviders
+							? `${primaryProviderName} +${moreProviderCount}`
+							: primaryProviderName}
+					</span>
+				) : null}
+				{/* 管理入口平时隐藏，悬停或键盘聚焦到行内时出现，不占用默认视觉。 */}
+				{canManageModels
+					? renderActionMenu(
+							<Button
+								variant="ghost"
+								size="sm"
+								className={cn(
+									"h-5 w-5 shrink-0 p-0 text-muted-foreground shadow-none",
+									"invisible group-focus-within:visible",
+									"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
+								)}
+								data-stop-model-select="true"
+								onPointerDown={handleActionTriggerPointerDown}
+								data-testid={`my-model-actions-${representativeModel.id}`}
+							>
+								<Ellipsis size={16} />
+							</Button>,
+						)
+					: null}
+				{/* 固定勾选列，与供应商分组的行保持同一条右侧基线。 */}
+				<span
+					className="flex size-5 shrink-0 items-center justify-center"
+					aria-hidden="true"
+				>
+					{isSelected ? (
+						<Check className="size-4 text-foreground" strokeWidth={2} />
+					) : null}
+				</span>
+			</div>
+		)
+		return (
+			<ModelInfoHoverCard model={modelItem} description={modelItem.model_description}>
+				{row}
+			</ModelInfoHoverCard>
+		)
+	}
+
 	return (
 		<div
 			ref={isSelected ? selectedItemRef : null}
@@ -109,7 +234,7 @@ export function MyModelRow({
 		>
 			<div className="min-w-0 flex-1">
 				<div>
-					<p className="text-sm font-medium leading-5 text-foreground">
+					<p className="text-sm font-normal leading-5 text-foreground">
 						{representativeModel.name}
 					</p>
 					<p
@@ -173,39 +298,18 @@ export function MyModelRow({
 								</div>
 							)}
 						</div>
-						<MagicDropdown
-							placement="bottomRight"
-							onOpenChange={handleActionMenuOpenChange}
-							overlayClassName={cn(
-								"min-w-[200px] rounded-lg shadow-md",
-								"[&_[data-slot=dropdown-menu-label]]:p-0",
-								"[&_[data-slot=dropdown-menu-item]]:rounded-md",
-								"[&_[data-slot=dropdown-menu-item]]:px-2",
-								"[&_[data-slot=dropdown-menu-item]]:py-1.5",
-								"[&_[data-slot=dropdown-menu-sub-trigger]]:rounded-md",
-								"[&_[data-slot=dropdown-menu-sub-trigger]]:px-2",
-								"[&_[data-slot=dropdown-menu-sub-trigger]]:py-1.5",
-								"[&_[data-slot=dropdown-menu-sub-content]]:min-w-[160px]",
-							)}
-							menu={{ items: actionMenuItems }}
-						>
-							<span
-								className="flex items-center justify-center"
+						{renderActionMenu(
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-5 w-5 shrink-0 border p-0 shadow-none"
 								data-stop-model-select="true"
 								onPointerDown={handleActionTriggerPointerDown}
+								data-testid={`my-model-actions-${representativeModel.id}`}
 							>
-								<Button
-									variant="outline"
-									size="sm"
-									className="h-5 w-5 shrink-0 border p-0 shadow-none"
-									data-stop-model-select="true"
-									onPointerDown={handleActionTriggerPointerDown}
-									data-testid={`my-model-actions-${representativeModel.id}`}
-								>
-									<Ellipsis size={16} />
-								</Button>
-							</span>
-						</MagicDropdown>
+								<Ellipsis size={16} />
+							</Button>,
+						)}
 					</div>
 				)}
 			</div>

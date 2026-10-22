@@ -14,7 +14,7 @@ const LINE: Scribble = {
 
 /** Absolute coordinates of every L command in an outline. */
 function linePoints(outline: string) {
-	return [...outline.matchAll(/L(-?[\d.]+) (-?[\d.]+)/g)].map(([, x, y]) => [
+	return Array.from(outline.matchAll(/L(-?[\d.]+) (-?[\d.]+)/g)).map(([, x, y]) => [
 		Number(x),
 		Number(y),
 	])

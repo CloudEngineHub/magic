@@ -340,7 +340,7 @@ export function getMenuItems({
 
 	const seedanceComplianceMenuItem: MenuItem = {
 		id: "seedance-compliance",
-		label: translate("menu.seedanceCompliance", "Seedance 2.0 合规校验"),
+		label: translate("menu.seedanceCompliance", "Seedance 合规校验"),
 		icon: ShieldCheck,
 		onClick: () => {
 			if (!currentElementId) return

@@ -1,4 +1,16 @@
 export namespace AiModel {
+	/** 思考档位统一按网关协议顺序展示。 */
+	export const reasoningEffortLevels = [
+		"none",
+		"minimal",
+		"low",
+		"medium",
+		"high",
+		"xhigh",
+		"max",
+	] as const
+	export type ReasoningEffort = (typeof reasoningEffortLevels)[number]
+
 	/** 业务类型 */
 	export enum BusinessType {
 		/** 服务商 */

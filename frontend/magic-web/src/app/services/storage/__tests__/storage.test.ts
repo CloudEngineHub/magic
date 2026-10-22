@@ -193,6 +193,16 @@ describe("countIndexedDBRecords", () => {
 		])
 	})
 
+	it("excludes the known stream-record database from diagnostic counts", async () => {
+		stubIndexedDB([
+			{ name: "MAGIC:stream-record-db", stores: { topic: 10_000 } },
+			{ name: "db-alpha", stores: { records: 4 } },
+		])
+		await expect(countIndexedDBRecords()).resolves.toEqual([
+			{ dbName: "db-alpha", stores: [{ storeName: "records", count: 4 }] },
+		])
+	})
+
 	it("skips a database when open fails or is blocked", async () => {
 		stubIndexedDB([{ name: "db-blocked", stores: { "store-records": 3 } }], {
 			openMode: "blocked",

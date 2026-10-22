@@ -12,6 +12,17 @@ type ListPagination = {
 	resetKey: string
 }
 
+export type ListQueryParamsState<TDraft, TParams extends { page: number }> = {
+	filterDraft: TDraft
+	page: number
+	params: TParams
+	pageSize: number
+	setDebouncedField: (field: StringKey<TDraft>, value: string) => void
+	setFilterDraft: Dispatch<SetStateAction<TDraft>>
+	setPage: (page: number) => void
+	setPageSize: (pageSize: number) => void
+}
+
 const emptyDebounceFields: ReadonlyArray<never> = []
 
 function appliedText(raw: string, debounced: string) {
@@ -40,8 +51,8 @@ export function useListQueryParams<TDraft, TParams extends { page: number }>({
 	initialPageSize?: number
 	toParams: (draft: TDraft, page: number, pageSize: number) => TParams
 }) {
-	if (debounceFields.length > 4) {
-		throw new Error("useListQueryParams supports at most 4 debounceFields")
+	if (debounceFields.length > 5) {
+		throw new Error("useListQueryParams supports at most 5 debounceFields")
 	}
 
 	const [filterDraft, setFilterDraftState] = useState(initialDraft)
@@ -55,18 +66,22 @@ export function useListQueryParams<TDraft, TParams extends { page: number }>({
 	const field1 = debounceFields[1]
 	const field2 = debounceFields[2]
 	const field3 = debounceFields[3]
+	const field4 = debounceFields[4]
 	const raw0 = readField(filterDraft, field0)
 	const raw1 = readField(filterDraft, field1)
 	const raw2 = readField(filterDraft, field2)
 	const raw3 = readField(filterDraft, field3)
+	const raw4 = readField(filterDraft, field4)
 	const debounced0 = useDebounce(raw0, { wait: TEXT_FILTER_DEBOUNCE_MS })
 	const debounced1 = useDebounce(raw1, { wait: TEXT_FILTER_DEBOUNCE_MS })
 	const debounced2 = useDebounce(raw2, { wait: TEXT_FILTER_DEBOUNCE_MS })
 	const debounced3 = useDebounce(raw3, { wait: TEXT_FILTER_DEBOUNCE_MS })
+	const debounced4 = useDebounce(raw4, { wait: TEXT_FILTER_DEBOUNCE_MS })
 	const applied0 = field0 ? appliedText(raw0, debounced0) : ""
 	const applied1 = field1 ? appliedText(raw1, debounced1) : ""
 	const applied2 = field2 ? appliedText(raw2, debounced2) : ""
 	const applied3 = field3 ? appliedText(raw3, debounced3) : ""
+	const applied4 = field4 ? appliedText(raw4, debounced4) : ""
 
 	const appliedDraft = useMemo(() => {
 		if (!field0) return filterDraft
@@ -76,20 +91,23 @@ export function useListQueryParams<TDraft, TParams extends { page: number }>({
 			...(field1 ? { [field1]: applied1 } : null),
 			...(field2 ? { [field2]: applied2 } : null),
 			...(field3 ? { [field3]: applied3 } : null),
+			...(field4 ? { [field4]: applied4 } : null),
 		} as TDraft
 	}, [
 		applied0,
 		applied1,
 		applied2,
 		applied3,
+		applied4,
 		field0,
 		field1,
 		field2,
 		field3,
+		field4,
 		filterDraft,
 	])
 
-	const appliedTextKey = [applied0, applied1, applied2, applied3].join("\0")
+	const appliedTextKey = [applied0, applied1, applied2, applied3, applied4].join("\0")
 	const resetKey =
 		extraResetKey === undefined ? appliedTextKey : `${String(extraResetKey)}:${appliedTextKey}`
 	const page = pagination.resetKey === resetKey ? pagination.page : 1
@@ -118,9 +136,12 @@ export function useListQueryParams<TDraft, TParams extends { page: number }>({
 		},
 		[resetKey],
 	)
-	const setPageSize = useCallback((nextPageSize: number) => {
-		setPagination({ page: 1, pageSize: nextPageSize, resetKey })
-	}, [resetKey])
+	const setPageSize = useCallback(
+		(nextPageSize: number) => {
+			setPagination({ page: 1, pageSize: nextPageSize, resetKey })
+		},
+		[resetKey],
+	)
 
 	return {
 		filterDraft,

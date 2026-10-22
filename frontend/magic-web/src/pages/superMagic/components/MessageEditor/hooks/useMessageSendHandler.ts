@@ -1,3 +1,4 @@
+import modelCache from "@/services/superMagic/topicModel/SuperMagicTopicModelCacheService"
 import { serializeWechatChatContent } from "../extensions/wechat-chat-history/transform"
 import { useMemoizedFn } from "ahooks"
 import type { MutableRefObject, RefObject } from "react"
@@ -119,7 +120,7 @@ export default function useMessageSendHandler({
 			value: content,
 			topicMode,
 			mentionItems,
-			selectedModel: selectedModel ? { ...selectedModel } : null,
+			selectedModel: selectedModel ? modelCache.snapshotLanguageModel(selectedModel) : null,
 			selectedImageModel: store.topicModelStore.selectedImageModel,
 			selectedVideoModel,
 		})

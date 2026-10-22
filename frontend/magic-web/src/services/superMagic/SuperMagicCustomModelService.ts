@@ -1,5 +1,6 @@
 import { OrgAiModelProviderApi } from "@/apis"
 import {
+	MODEL_CATEGORY_BY_TYPE,
 	MODEL_TYPE_IMAGE,
 	MODEL_TYPE_LLM,
 	MODEL_TYPE_VIDEO,
@@ -75,7 +76,9 @@ class SuperMagicCustomModelService {
 		options?: LoadMyModelsOptions,
 	): Promise<ServiceProviderModel[]> {
 		const models = await this.getMyModels(options)
-		return models.filter((model) => model.model_type === modelType)
+		// 按 category 归类，model_type 不可靠；入参仍沿用 MODEL_TYPE_*，调用方不用改。
+		const category = MODEL_CATEGORY_BY_TYPE[modelType]
+		return models.filter((model) => model.category === category)
 	}
 
 	async findMyModelById({

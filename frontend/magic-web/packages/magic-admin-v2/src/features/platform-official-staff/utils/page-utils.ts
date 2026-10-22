@@ -96,6 +96,14 @@ export function createDefaultFilterDraft(): FilterDraft {
   };
 }
 
+export function getOfficialStaffFilterActiveCount(filter: FilterDraft) {
+  return (
+    Number(Boolean(filter.identifier.trim())) +
+    Number(Boolean(filter.keyword.trim())) +
+    Number(filter.status !== selectAllValue)
+  );
+}
+
 export {
   getActivePreviewMeta,
   getModelPreviewMeta,

@@ -73,9 +73,9 @@ readonly class MagicDepartmentUserDomainService
      * 获取用户所在部门.
      * 一对多关系.
      */
-    public function getDepartmentIdsByUserId(DataIsolation $dataIsolation, string $userId, bool $withAllParentIds = false): array
+    public function getDepartmentIdsByUserId(DataIsolation $dataIsolation, string $userId, bool $withAllParentIds = false, bool $useCache = true): array
     {
-        return $this->departmentUserRepository->getDepartmentIdsByUserIds($dataIsolation, [$userId], $withAllParentIds)[$userId] ?? [];
+        return $this->departmentUserRepository->getDepartmentIdsByUserIds($dataIsolation, [$userId], $withAllParentIds, $useCache)[$userId] ?? [];
     }
 
     /**

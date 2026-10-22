@@ -132,3 +132,24 @@ describe("platform info global system prompt", () => {
 		)
 	})
 })
+
+/** 新接口只获取售价快照，不发送草稿基准或组织参数。 */
+it("loads the price snapshot through the platform API client", async () => {
+	const signal = new AbortController().signal
+	let seenUrl = ""
+	let seenOptions: unknown
+	const snapshot = { snapshot_id: "mock-snapshot" }
+	const api = createPlatformInfoApi({
+		get: async (url: string, options: unknown) => {
+			seenUrl = url
+			seenOptions = options
+			return snapshot
+		},
+	} as unknown as HttpClient)
+	assert.equal(
+		await api.getModelBillingPreview({ signal, enableErrorMessagePrompt: false }),
+		snapshot,
+	)
+	assert.equal(seenUrl, "/api/v1/platform/setting/model-billing-preview")
+	assert.deepEqual(seenOptions, { signal, enableErrorMessagePrompt: false })
+})

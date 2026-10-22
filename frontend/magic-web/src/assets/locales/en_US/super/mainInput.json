@@ -3,10 +3,8 @@
 		"actions": {
 			"mention": "Mention",
 			"plugin": "Connector",
-			"skills": "Skills",
 			"webSearch": "Web Search"
 		},
-		"addButton": "Add",
 		"closeAriaLabel": "Close add to chat dialog",
 		"media": {
 			"camera": "Camera",
@@ -14,9 +12,6 @@
 			"photos": "Photos"
 		},
 		"title": "Add to Chat"
-	},
-	"analyzeData": {
-		"placeholder": "Describe the website you want to create.\nPress Enter to send ; Shift + Enter for a new line"
 	},
 	"attachments": {
 		"removeAriaLabel": "Remove {{fileName}}"
@@ -37,11 +32,6 @@
 		"title": "Chat Settings"
 	},
 	"crewSelectModal": {
-		"empty": {
-			"all": "No crews available",
-			"my": "No crews in My Crew yet",
-			"official": "No official crews available"
-		},
 		"tab": {
 			"my": "My Crew",
 			"official": "Official"

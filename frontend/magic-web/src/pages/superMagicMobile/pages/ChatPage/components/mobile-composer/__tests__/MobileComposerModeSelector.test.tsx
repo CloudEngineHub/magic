@@ -188,6 +188,28 @@ describe("MobileComposerModeSelector", () => {
 		)
 	})
 
+	it("shows reasoning as its own row next to the model rows, not inside the model list", async () => {
+		render(<MobileComposerModeSelector topicMode={TopicMode.General} />)
+
+		fireEvent.click(screen.getByTestId("mobile-composer-mode-selector-trigger"))
+		const trigger = screen.getByTestId("mobile-composer-reasoning-trigger-button")
+		const languageRow = screen.getByTestId("mobile-composer-language-model-trigger-row")
+		expect(languageRow.contains(trigger)).toBe(true)
+		expect(screen.getByTestId("mobile-composer-reasoning-value")).toHaveTextContent(
+			"messageEditor.modelSwitch.reasoning.default",
+		)
+		// 没有可选档位时该行不可点，也不挂弹层。
+		expect(trigger).toBeDisabled()
+		expect(screen.queryByTestId("mobile-reasoning-effort-sheet")).toBeNull()
+
+		fireEvent.click(screen.getByTestId("mobile-composer-language-model-trigger-button"))
+		const popup = await screen.findByTestId("mobile-composer-mode-selector-model-popup")
+		expect(popup.querySelector("[data-testid='model-switch-reasoning-footer']")).toBeNull()
+		expect(
+			popup.querySelector("[data-testid='mobile-composer-reasoning-trigger-button']"),
+		).toBeNull()
+	})
+
 	it("uses the employee selector trigger for the default variant", () => {
 		render(
 			<MobileComposerModeSelector

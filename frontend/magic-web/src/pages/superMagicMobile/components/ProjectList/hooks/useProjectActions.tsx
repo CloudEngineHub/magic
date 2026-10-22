@@ -56,6 +56,12 @@ import {
 	sortFilteredProjectActions,
 } from "@/pages/superMagicMobile/utils/mobileProjectActionOrder"
 import { mergeProjectListItemWithStoreCache } from "@/pages/superMagicMobile/utils/mergeProjectListItemWithStoreCache"
+import {
+	MAX_PROJECT_NAME_LENGTH,
+	clampProjectName,
+	isProjectNameAtLimit,
+	isProjectNameOverLimit,
+} from "@/pages/superMagicMobile/utils/mobileProjectNameLimit"
 
 interface UseProjectListActionsOptions {
 	onProjectChanged?: () => Promise<void> | void
@@ -677,6 +683,11 @@ export function useProjectListActions({
 		isChatMode ? "chat.deleteChatDescription" : "ui.deleteProjectDescriptionWithoutName",
 	)
 
+	const renameProjectName = currentActionItem?.project_name ?? ""
+	const renameNameLength = renameProjectName.length
+	const isRenameNameOverLimit = isProjectNameOverLimit(renameProjectName)
+	const isRenameNameAtLimit = isProjectNameAtLimit(renameProjectName)
+
 	const projectActionComponents = (
 		<>
 			<MagicPopup
@@ -727,13 +738,15 @@ export function useProjectListActions({
 					icon: <Check />,
 					ariaLabel: t("common.confirm"),
 					onClick: () => {
+						const trimmedName = clampProjectName(renameProjectName)
+						if (!trimmedName || isProjectNameOverLimit(trimmedName)) return
 						void handleRenameProject({
 							projectId: currentActionItem?.id || "",
-							projectName: currentActionItem?.project_name || "",
+							projectName: trimmedName,
 						})
 						setRenameModalVisible(false)
 					},
-					disabled: !currentActionItem?.project_name?.trim(),
+					disabled: !renameProjectName.trim() || isRenameNameOverLimit,
 					tone: "primary",
 					testId: isChatMode
 						? "chat-rename-popup-confirm"
@@ -758,6 +771,7 @@ export function useProjectListActions({
 									? "chat.inputChatName"
 									: "hierarchicalWorkspacePopup.inputProjectName",
 							)}
+							maxLength={MAX_PROJECT_NAME_LENGTH}
 							value={currentActionItem?.project_name}
 							onChange={(e) => {
 								if (!currentActionItem) return
@@ -773,6 +787,34 @@ export function useProjectListActions({
 									: "project-rename-popup-input"
 							}
 						/>
+						{/* Character counter and limit reminder */}
+						<div className="flex items-center justify-between text-xs text-muted-foreground">
+							{isRenameNameOverLimit ? (
+								<span className="text-destructive">
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_PROJECT_NAME_LENGTH,
+									})}
+								</span>
+							) : isRenameNameAtLimit ? (
+								<span>
+									{t("chat.nameMaxLengthTip", {
+										maxLength: MAX_PROJECT_NAME_LENGTH,
+									})}
+								</span>
+							) : (
+								<span />
+							)}
+							<span
+								className={isRenameNameOverLimit ? "text-destructive" : ""}
+								data-testid={
+									isChatMode
+										? "chat-rename-popup-char-count"
+										: "project-rename-popup-char-count"
+								}
+							>
+								{renameNameLength}/{MAX_PROJECT_NAME_LENGTH}
+							</span>
+						</div>
 					</div>
 				</div>
 			</MagicPopup>

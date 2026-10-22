@@ -10,6 +10,7 @@ namespace App\Application\Design\Event\Subscribe;
 use App\Application\Design\Event\Message\DesignVideoPollMessage;
 use App\Application\Design\Event\Message\DesignVideoSubmitMessage;
 use App\Application\Design\Event\Publish\DesignVideoPollDelayPublisher;
+use App\Domain\Contact\Entity\ValueObject\DataIsolation as ContactDataIsolation;
 use App\Domain\Design\Entity\DesignDataIsolation;
 use App\Domain\Design\Service\DesignGenerationTaskDomainService;
 use App\Domain\Design\Service\DesignVideoSubmissionDomainService;
@@ -68,7 +69,9 @@ class DesignVideoSubmitConsumer extends ConsumerMessage
         }
 
         try {
-            $providerPayload = $this->submissionDomainService->submit($entity);
+            $contactIsolation = ContactDataIsolation::create($dataIsolation->getCurrentOrganizationCode(), $dataIsolation->getCurrentUserId());
+            $contactIsolation->initDataIsolationEnv();
+            $providerPayload = $this->submissionDomainService->submitCanvasComposition($entity, $contactIsolation);
             $this->domainService->markAsSubmitted($dataIsolation, $entity, $providerPayload);
             $this->logger->info('design video async submit succeeded', [
                 'video_id' => $entity->getGenerationId(),

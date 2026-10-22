@@ -195,40 +195,40 @@ describe("slides template component regressions", () => {
 	})
 
 	it("debounces all keyword and code filters and lazily loads category and tag options separately", () => {
+		assert.match(pageSource, /useListQueryParams/)
+		assert.equal(
+			[componentSource.templateLibrary, componentSource.categoryManager, componentSource.tagManager].some(
+				(source) => source.includes("useListQueryParams"),
+			),
+			false,
+		)
+		assert.match(pageSource, /debounceFields: \["keyword", "code"\]/)
 		for (const source of [
 			componentSource.templateLibrary,
 			componentSource.categoryManager,
 			componentSource.tagManager,
 		]) {
-			assert.match(source, /useListQueryParams/)
-			assert.match(source, /debounceFields: \["keyword", "code"\]/)
-			assert.match(source, /setDebouncedField\("keyword"/)
+			assert.match(source, /<ListFilterPanel/)
 		}
 		assert.match(componentSource.templateLibrary, /categoryOptionsOpen/)
 		assert.match(componentSource.templateLibrary, /tagOptionsOpen/)
 		assert.equal(componentSource.templateLibrary.includes("const [optionsOpen"), false)
 	})
 
-	it("keeps category and tag keyword, code, and status filters in advanced drafts", () => {
-		assert.match(componentSource.categoryManager, /value=\{advancedFilterDraft\.keyword\}/u)
-		assert.match(componentSource.categoryManager, /setFilterDraft\(advancedFilterDraft\)/u)
-		assert.match(componentSource.tagManager, /value=\{advancedFilterDraft\.keyword\}/u)
-		assert.match(componentSource.tagManager, /value=\{advancedFilterDraft\.code\}/u)
-		assert.match(componentSource.tagManager, /value=\{advancedFilterDraft\.status\}/u)
-		assert.match(componentSource.tagManager, /onApply=\{applyAdvancedFilters\}/u)
+	it("keeps category and tag keyword, code, and status as independent panel fields", () => {
+		for (const source of [componentSource.categoryManager, componentSource.tagManager]) {
+			assert.match(source, /<ListFilterPanel/u)
+			assert.match(source, /value=\{value\.keyword\}/u)
+			assert.match(source, /value=\{value\.code\}/u)
+			assert.match(source, /value=\{value\.status\}/u)
+			assert.match(source, /onChange=\{\(patch\)/u)
+			assert.match(source, /createDefaultValue=/u)
+		}
 		assert.match(
 			componentSource.tagManager,
 			/label=\{t\("slidesTemplate\.tagName"\)\}[\s\S]*?placeholder=\{t\("slidesTemplate\.tagName"\)\}/u,
 		)
 		assert.doesNotMatch(componentSource.tagManager, /label=\{t\("slidesTemplate\.keyword"\)\}/u)
-		assert.doesNotMatch(
-			componentSource.tagManager,
-			/label=\{<span className="sr-only">\{t\("slidesTemplate\.keyword"\)\}<\/span>\}/u,
-		)
-		assert.match(
-			componentSource.tagManager,
-			/onReset=\{\(\) => setAdvancedFilterDraft\(createDefaultTagFilterDraft\(\)\)\}/u,
-		)
 	})
 
 	it("keeps inline pending state scoped to the affected row", () => {
@@ -256,9 +256,9 @@ describe("slides template component regressions", () => {
 
 	it("selects newly created tag resources and preserves required and length constraints", () => {
 		assert.match(componentSource.tagManager, /onCreated=\{\(group\) =>/)
-		assert.match(componentSource.tagManager, /setSelectedGroupId\(String\(group\.id\)\)/)
+		assert.match(componentSource.tagManager, /onSelectedGroupIdChange\(String\(group\.id\)\)/)
 		assert.match(componentSource.tagManager, /onCreated=\{\(tag\) =>/)
-		assert.match(componentSource.tagManager, /setSelectedGroupId\(String\(tag\.parent_id\)\)/)
+		assert.match(componentSource.tagManager, /onSelectedGroupIdChange\(String\(tag\.parent_id\)\)/)
 		assert.match(componentSource.tagManager, /setSelectedTagId\(String\(tag\.id\)\)/)
 		assert.match(componentSource.tagManager, /selectedRowId=\{selectedTagId \?\? undefined\}/)
 		assert.match(dataTableSource, /selectedRowId\?: string/)

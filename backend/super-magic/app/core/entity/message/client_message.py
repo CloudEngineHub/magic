@@ -26,6 +26,7 @@ class User(BaseModel):
     """用户信息"""
 
     id: Optional[str] = None
+    third_platform_id: str = Field(default="", strict=True)
     nickname: Optional[str] = None
     real_name: Optional[str] = None
     work_number: Optional[str] = None
@@ -33,6 +34,11 @@ class User(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     departments: Optional[List[Department]] = Field(default_factory=list)
+
+    @validator("third_platform_id", pre=True)
+    def normalize_third_platform_id(cls, value):
+        """保留来源用户 ID，历史 null 按无法确定处理。"""
+        return "" if value is None else value
 
 
 class Metadata(BaseModel):
@@ -249,6 +255,12 @@ class ChatClientMessage(ClientMessage):
         default=False,
         description="是否在处理完本条消息后更新 session 配置（model_id/image_model 等）。仅前端 chat 消息设为 True，第三方 IM 渠道消息保持默认 False，避免覆盖已有配置。",
     )
+
+    @property
+    def web_search_enabled(self) -> Optional[bool]:
+        """只解析显式布尔状态；旧消息不注入默认开启，以免抵消 prompt 中的关闭约束。"""
+        value = (self.dynamic_config or {}).get("enable_web_search")
+        return value if isinstance(value, bool) else None
 
     @validator("mcp_config", pre=True)
     def validate_mcp_config(cls, v):

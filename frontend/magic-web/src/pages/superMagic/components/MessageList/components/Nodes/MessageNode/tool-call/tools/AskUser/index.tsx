@@ -5,6 +5,7 @@ import { cn } from "@/utils/cn"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import { useToolTooltip } from "@/pages/superMagic/components/MessageList/components/Nodes/ToolCall/hooks/useToolTooltip"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
+import type { AskUserQuestionItem } from "@/types/chat/conversation_message"
 import {
 	buildAskUserToolReplyDetail,
 	isAskUserTaskSuspended,
@@ -64,7 +65,6 @@ interface AskUserToolCallProps {
 }
 
 type AskUserDetailQuestion = {
-	default_value?: string | readonly string[] | null
 	sub_id?: string
 }
 
@@ -78,31 +78,53 @@ function normalizeAskUserStatus(status: unknown) {
 	return ASK_USER_CARD_STATUS.pending
 }
 
-function mergeDetailQuestionDefaults(
+/** 保留标记 Other 由自由输入承接，不能成为候选、默认值或已选答案。 */
+function normalizeChoiceAnswer(
+	value: AskUserAnswerValue | undefined,
+	type: ParsedQuestion["type"],
+): AskUserAnswerValue | undefined {
+	if (type !== "select" && type !== "multi_select") return value
+	if (Array.isArray(value)) return value.filter((item) => item.trim().toLowerCase() !== "other")
+	if (typeof value !== "string") return value
+	if (type === "multi_select")
+		return value
+			.split(",")
+			.map((item) => item.trim())
+			.filter((item) => item.toLowerCase() !== "other")
+	return value.trim().toLowerCase() === "other" ? undefined : value
+}
+
+/** 复用主线正式题源及答案键，仅归一选择题的保留选项。 */
+function resolveDetailQuestions(
 	questions: readonly ParsedQuestion[],
 	detailQuestions: unknown,
 ): readonly ParsedQuestion[] {
 	if (!Array.isArray(detailQuestions) || detailQuestions.length === 0) return questions
 
-	let changed = false
-	const nextQuestions = questions.map((question, index) => {
-		const detailQuestion = detailQuestions[index] as AskUserDetailQuestion | undefined
-		if (
-			!detailQuestion ||
-			question.defaultValue !== undefined ||
-			detailQuestion.default_value == null
-		) {
-			return question
-		}
-
-		changed = true
+	// Prepared operations generate their questions on the server, so model XML
+	// may be absent or differ from the confirmed scope. The detail is authoritative.
+	return (detailQuestions as AskUserQuestionItem[]).map((question, index) => {
 		return {
-			...question,
-			defaultValue: detailQuestion.default_value,
+			// Keep existing XML answer/draft keys; server-only cards use the bound ID.
+			id: questions[index]?.id || question.sub_id,
+			type: question.interaction_type,
+			label: question.question,
+			options: (question.options ?? []).filter(
+				(option) =>
+					(question.interaction_type !== "select" &&
+						question.interaction_type !== "multi_select") ||
+					option.trim().toLowerCase() !== "other",
+			),
+			placeholder: question.placeholder ?? undefined,
+			min: question.min_select ?? undefined,
+			max: question.max_select ?? undefined,
+			defaultValue: normalizeChoiceAnswer(
+				question.default_value ?? undefined,
+				question.interaction_type,
+			),
+			isComplete: true,
 		}
 	})
-
-	return changed ? nextQuestions : questions
 }
 
 /** 服务端答案以 sub_id 为键，流式 XML 题目以 q-{index} 为键，按题目顺序对齐。 */
@@ -125,7 +147,12 @@ function resolveSubmittedAnswers({
 	questions.forEach((question, index) => {
 		const detailQuestion = questionsFromDetail[index] as AskUserDetailQuestion | undefined
 		const subId = typeof detailQuestion?.sub_id === "string" ? detailQuestion.sub_id : ""
-		const answer = answerMap[question.id] ?? (subId ? answerMap[subId] : undefined)
+		const rawAnswer = answerMap[question.id] ?? (subId ? answerMap[subId] : undefined)
+		const answer =
+			typeof rawAnswer === "string" ||
+			(Array.isArray(rawAnswer) && rawAnswer.every((item) => typeof item === "string"))
+				? normalizeChoiceAnswer(rawAnswer, question.type)
+				: undefined
 		if (typeof answer === "string") {
 			mappedAnswers[question.id] = answer
 			hasAnswer = true
@@ -148,6 +175,11 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 
 	const tool = props.toolData
 	const detailData = tool?.detail?.data as Record<string, unknown> | undefined
+	// 错误文案由后端本地化，不能继续把原始参数渲染成可提交问卷。
+	const errorMessage =
+		tool?.detail?.type === "text" && typeof detailData?.message === "string"
+			? detailData.message
+			: ""
 
 	// 优先从 rawArguments 读取原始 arguments 字符串（流式阶段 detail 可能不存在），
 	// 兜底从 detail.data.arguments 读取（已完成的工具调用）。
@@ -167,7 +199,7 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 
 	const parsedQuestions = useMemo(() => {
 		const next = parseQuestionsXml(deferredRaw, prevParsedRef.current)
-		const resolvedQuestions = mergeDetailQuestionDefaults(next, detailData?.questions)
+		const resolvedQuestions = resolveDetailQuestions(next, detailData?.questions)
 		prevParsedRef.current = resolvedQuestions
 		return resolvedQuestions
 	}, [deferredRaw, detailData?.questions])
@@ -483,7 +515,12 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 						</Button>
 					</div>
 				</div>
-				{parsedQuestions.length > 0 && isOpen && (
+				{errorMessage && isOpen && (
+					<p className="p-2 text-sm text-muted-foreground" role="alert">
+						{errorMessage}
+					</p>
+				)}
+				{!errorMessage && parsedQuestions.length > 0 && isOpen && (
 					<div className="w-full duration-200 animate-in fade-in slide-in-from-top-1">
 						<AskUserForm
 							questions={parsedQuestions}

@@ -23,6 +23,9 @@ enum PermissionErrorCode: int
     #[ErrorMessage(message: 'permission.access_denied')]
     case AccessDenied = 42003;
 
+    #[ErrorMessage(message: 'permission.magic_claw_runtime_denied')]
+    case MAGIC_CLAW_RUNTIME_DENIED = 42004;
+
     // 组织相关错误码
     #[ErrorMessage(message: 'permission.organization_code_required')]
     case ORGANIZATION_CODE_REQUIRED = 42100;

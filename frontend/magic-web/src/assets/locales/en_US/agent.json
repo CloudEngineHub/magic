@@ -26,16 +26,11 @@
 			"title": "Authorization Access"
 		},
 		"settings": {
-			"contact": "Contact Us",
 			"func": "Functions",
-			"mcp": "MCP Plugin",
-			"tasks": "Scheduled Tasks",
-			"title": "Settings",
-			"usage": "Usage Preferences"
+			"mcp": "MCP Plugin"
 		},
 		"tool": {
 			"addTool": "Add Tool",
-			"addToolFailed": "Failed to add tool",
 			"addToolSuccess": "Tool added successfully",
 			"cancel": "Cancel",
 			"card": {
@@ -67,7 +62,6 @@
 			},
 			"import": "Import Tool",
 			"importExistingTools": "Import Existing Tools",
-			"importTools": "Import Tool",
 			"importToolsCount": "Import Tools ({{count}})",
 			"menu": {
 				"onlyShowOfficial": "Show Official Tools Only",
@@ -92,10 +86,8 @@
 		"button": {
 			"addMoreConnectors": "Add more connectors",
 			"addedConnectors": "Installed connectors",
-			"create": "Add MCP Plugin",
 			"emptyConnectors": "No connectors available",
 			"text": "Connector",
-			"title": "Configure MCP Connector",
 			"toggleConnector": "Enable {{name}}"
 		},
 		"card": {
@@ -104,8 +96,6 @@
 			"deleteTool": "Delete Tool",
 			"desc": "No description available",
 			"editTool": "Edit Tool",
-			"noQuote": "Not referenced",
-			"quoteAgent": "Referenced by {{count}} assistants",
 			"status": "Enable Status",
 			"toolsCount": "Contains {{count}} tools"
 		},
@@ -133,14 +123,10 @@
 			"command": "Command",
 			"commandPlaceholder": "Please enter command, e.g., npx",
 			"confirm": "Add",
-			"custom": "Custom MCP Plugin",
 			"delete": "Delete",
 			"desc": "Description",
 			"env": "Environment Variables",
-			"headers": "Request Headers",
 			"icon": "Icon",
-			"import": "Import",
-			"importTool": "Import Existing Tool",
 			"map": "Custom Parameters",
 			"mapPlaceholder": "Enter custom parameters",
 			"name": "MCP Plugin Name",
@@ -187,7 +173,6 @@
 			"title": "MCP Plugin",
 			"update": {
 				"confirm": "Update",
-				"content": "Current version is {{version}}, latest version is {{latestVersion}}",
 				"success": "Updated successfully",
 				"title": "Confirm update {{name}} version?"
 			}
@@ -201,10 +186,8 @@
 			"editTitle": "Edit MCP Plugin Service",
 			"empty": "No Plugins Available",
 			"manageAuth": "Manage Authorization",
-			"noAuth": "No authorization required",
 			"official": "Official Plugin",
 			"openForm": "Create MCP Plugin",
-			"required": "Please enter {{name}}",
 			"searchPlaceholder": "Search MCP Plugin",
 			"settings": "Settings",
 			"status": "Query MCP Plugin Status",

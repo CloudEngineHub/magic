@@ -10,7 +10,11 @@ import {
   modelEditorSchema,
   type ModelEditorValues,
 } from "@magic-admin-v2/features/platform-model-list/utils/model-editor-schema";
-import { toSaveInputs } from "@magic-admin-v2/features/platform-model-list/utils/model-editor";
+import {
+  createEditorValues,
+  createEmptyValues,
+  toSaveInputs,
+} from "@magic-admin-v2/features/platform-model-list/utils/model-editor";
 
 function createValues(overrides: Partial<ModelEditorValues> = {}): ModelEditorValues {
   return {
@@ -31,6 +35,8 @@ function createValues(overrides: Partial<ModelEditorValues> = {}): ModelEditorVa
     support_function: true,
     support_multi_modal: true,
     support_deep_think: false,
+    reasoning_effort_levels: ["low", "medium", "high"],
+    reasoning_effort_default: null,
     providers: [
       {
         client_key: "binding-1",
@@ -79,12 +85,14 @@ describe("platform model editor validation", () => {
 
   it("preserves visibility scopes through schema parsing", () => {
     const values = createValues({
-      providers: [{
-        ...createValues().providers[0],
-        visible_organizations: ["org-1"],
-        visible_applications: ["app-1"],
-        visible_packages: ["package-1"],
-      }],
+      providers: [
+        {
+          ...createValues().providers[0],
+          visible_organizations: ["org-1"],
+          visible_applications: ["app-1"],
+          visible_packages: ["package-1"],
+        },
+      ],
     });
 
     const result = modelEditorSchema.safeParse(values);
@@ -127,18 +135,19 @@ describe("platform model editor validation", () => {
   });
 });
 
-
 describe("extra request configuration", () => {
   it("persists extra headers and bodies for Embedding model types", () => {
     const values = createValues({
       category: "llm",
       model_type: providerModelType.embedding,
       max_tokens: "",
-      providers: [{
-        ...createValues().providers[0],
-        extra_header: '{"x-api-key":"test"}',
-        extra_body: '{"encoding_format":"float"}',
-      }],
+      providers: [
+        {
+          ...createValues().providers[0],
+          extra_header: '{"x-api-key":"test"}',
+          extra_body: '{"encoding_format":"float"}',
+        },
+      ],
     });
 
     const [input] = toSaveInputs(values, true, true);
@@ -149,7 +158,6 @@ describe("extra request configuration", () => {
     });
   });
 });
-
 
 describe("official synchronized model bindings", () => {
   it("preserves the synchronized record and only changes load balancing weight", () => {
@@ -166,6 +174,8 @@ describe("official synchronized model bindings", () => {
       model_version: "deployment",
       provider_code: "official",
       config: {
+        reasoning_effort_levels: ["low", "medium", "high"],
+        reasoning_effort_default: null,
         billing_currency: "CNY",
         billing_type: "TextTokens",
         max_tokens: 128000,
@@ -178,13 +188,15 @@ describe("official synchronized model bindings", () => {
       load_balancing_weight: 10,
     };
     const values = createValues({
-      providers: [{
-        ...createValues().providers[0],
-        client_key: "binding-official",
-        record_id: record.id,
-        service_provider_config_id: record.service_provider_config_id,
-        load_balancing_weight: "42",
-      }],
+      providers: [
+        {
+          ...createValues().providers[0],
+          client_key: "binding-official",
+          record_id: record.id,
+          service_provider_config_id: record.service_provider_config_id,
+          load_balancing_weight: "42",
+        },
+      ],
     });
 
     const [input] = toSaveInputs(values, true, true, {}, { [record.id]: record });
@@ -209,5 +221,116 @@ describe("official synchronized model bindings", () => {
 
     assert.equal(input.existingRecordId, "record-ordinary");
     assert.equal(input.payload.model_id, values.model_id);
+  });
+});
+
+describe("思考档位配置", () => {
+  it("新建初始化三档，已有模型直接回显后端档位与显式空数组", () => {
+    assert.deepEqual(createEmptyValues().reasoning_effort_levels, ["low", "medium", "high"]);
+    const record: ProviderModelRecord = {
+      id: "mock-record",
+      status: providerModelStatus.enabled,
+      model_id: "mock-model",
+      name: "Mock",
+      icon: "",
+      description: "",
+      category: "llm",
+      model_type: providerModelType.largeLanguageModel,
+      service_provider_config_id: "mock-provider",
+      model_version: "mock-version",
+      config: {
+        reasoning_effort_levels: ["low", "medium", "high"],
+        reasoning_effort_default: null,
+        billing_currency: "CNY",
+        billing_type: "TextTokens",
+        support_deep_think: true,
+      },
+    };
+    assert.deepEqual(createEditorValues([record]).reasoning_effort_levels, [
+      "low",
+      "medium",
+      "high",
+    ]);
+    assert.deepEqual(
+      createEditorValues([{ ...record, config: { ...record.config, reasoning_effort_levels: [] } }])
+        .reasoning_effort_levels,
+      [],
+    );
+  });
+
+  it("关闭后保存仍保留已配置档位，非法档位无法通过表单校验", () => {
+    const values = createValues({
+      support_deep_think: false,
+      reasoning_effort_levels: ["none", "high"],
+    });
+    const [input] = toSaveInputs(values, true, true);
+    assert.deepEqual(input.payload.config.reasoning_effort_levels, ["none", "high"]);
+    assert.equal(
+      modelEditorSchema.safeParse({ ...values, reasoning_effort_levels: ["unknown"] }).success,
+      false,
+    );
+  });
+});
+
+describe("默认思考强度配置", () => {
+  it("新建默认跟随服务商，默认和明确关闭分开保存", () => {
+    assert.equal(createEmptyValues().reasoning_effort_default, null);
+    const [follow] = toSaveInputs(createValues(), true, true);
+    assert.equal(follow.payload.config.reasoning_effort_default, null);
+    const values = createValues({
+      support_deep_think: true,
+      reasoning_effort_levels: ["none", "high"],
+      reasoning_effort_default: "none",
+    });
+    assert.equal(modelEditorSchema.safeParse(values).success, true);
+    const [off] = toSaveInputs(values, true, true);
+    assert.equal(off.payload.config.reasoning_effort_default, "none");
+  });
+
+  it("默认值只能从可选档位中选择，关闭能力仍保留合法默认", () => {
+    assert.equal(
+      modelEditorSchema.safeParse(createValues({ reasoning_effort_default: "max" })).success,
+      false,
+    );
+    const values = createValues({ support_deep_think: false, reasoning_effort_default: "high" });
+    assert.equal(modelEditorSchema.safeParse(values).success, true);
+    const [input] = toSaveInputs(values, true, true);
+    assert.equal(input.payload.config.reasoning_effort_default, "high");
+  });
+
+  it("详情直接回显后端归一化的默认配置", () => {
+    const record: ProviderModelRecord = {
+      id: "mock-default-record",
+      status: providerModelStatus.enabled,
+      model_id: "mock-default-model",
+      name: "Mock",
+      icon: "",
+      description: "",
+      category: "llm",
+      model_type: providerModelType.largeLanguageModel,
+      service_provider_config_id: "mock-provider",
+      model_version: "mock-version",
+      config: {
+        reasoning_effort_levels: ["low", "medium", "high"],
+        reasoning_effort_default: "high",
+        billing_currency: "CNY",
+        billing_type: "TextTokens",
+        support_deep_think: true,
+      },
+    };
+    assert.equal(createEditorValues([record]).reasoning_effort_default, "high");
+    assert.equal(
+      createEditorValues([
+        {
+          ...record,
+          config: {
+            ...record.config,
+            reasoning_effort_levels: ["low"],
+            reasoning_effort_default: null,
+          },
+        },
+      ]).reasoning_effort_default,
+      null,
+    );
   });
 });

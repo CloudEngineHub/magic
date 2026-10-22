@@ -21,7 +21,7 @@ import {
 	createPptxSlideConfig,
 	resolvePptScaleContentDimensions,
 } from "@/pages/superMagic/components/Detail/contents/HTML/utils/slide-dimensions"
-import type { PptxDestination, StreamingHtmlPageInput } from "@magic/html2pptx"
+import type { ExportIssue, PptxDestination, StreamingHtmlPageInput } from "@magic/html2pptx"
 import {
 	documentExportService,
 	type DocumentExport,
@@ -343,9 +343,19 @@ async function streamPptxTarget(options: {
 	signal?: AbortSignal
 	access?: ClientBatchExportRunOptions["access"]
 	fileApi?: ClientBatchExportRunOptions["fileApi"]
+	onExportIssue?: (issue: ExportIssue) => void
 }): Promise<{ warnings: number }> {
-	const { target, attachments, destination, fileName, onProgress, signal, access, fileApi } =
-		options
+	const {
+		target,
+		attachments,
+		destination,
+		fileName,
+		onProgress,
+		signal,
+		access,
+		fileApi,
+		onExportIssue,
+	} = options
 	throwIfAborted(signal)
 	const input =
 		options.input ??
@@ -364,6 +374,7 @@ async function streamPptxTarget(options: {
 		onResourceLoadError: () => {
 			warnings += 1
 		},
+		onExportIssue,
 		onProgress: (progress) => {
 			if (progress.pageIndex === undefined || !input.pageCount) return
 			onProgress?.(Math.min(99, ((progress.pageIndex + 1) / input.pageCount) * 100))
@@ -388,8 +399,10 @@ async function runStreamingPptxBatch(options: {
 	signal?: AbortSignal
 	access?: ClientBatchExportRunOptions["access"]
 	fileApi?: ClientBatchExportRunOptions["fileApi"]
+	onExportIssue?: (issue: ExportIssue) => void
 }): Promise<ClientBatchExportRunResult> {
-	const { targets, resolveAttachmentScope, onProgress, signal, access, fileApi } = options
+	const { targets, resolveAttachmentScope, onProgress, signal, access, fileApi, onExportIssue } =
+		options
 	const failures: ClientBatchExportFailure[] = []
 	const usedNames = new Set<string>()
 	let successCount = 0
@@ -425,6 +438,7 @@ async function runStreamingPptxBatch(options: {
 				signal,
 				access,
 				fileApi,
+				onExportIssue,
 			})
 			warnings += result.warnings
 			successCount = 1
@@ -484,6 +498,7 @@ async function runStreamingPptxBatch(options: {
 				signal,
 				access,
 				fileApi,
+				onExportIssue,
 			})
 			warnings += result.warnings
 			successCount += 1
@@ -591,8 +606,17 @@ function buildArtifact(
 export async function runClientBatchDocumentExport(
 	options: ClientBatchExportRunOptions,
 ): Promise<ClientBatchExportRunResult> {
-	const { format, targets, attachments, projectName, onProgress, access, fileApi, signal } =
-		options
+	const {
+		format,
+		targets,
+		attachments,
+		projectName,
+		onProgress,
+		access,
+		fileApi,
+		signal,
+		onExportIssue,
+	} = options
 	if (targets.length === 0) {
 		return { successCount: 0, failureCount: 0, failures: [], warnings: 0 }
 	}
@@ -607,6 +631,7 @@ export async function runClientBatchDocumentExport(
 			signal,
 			access,
 			fileApi,
+			onExportIssue,
 		})
 	}
 

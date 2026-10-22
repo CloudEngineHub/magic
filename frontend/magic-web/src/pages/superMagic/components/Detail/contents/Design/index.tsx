@@ -27,6 +27,10 @@ import {
 	resolveDesignProjectBasePathFromAttachments,
 } from "./utils/utils"
 import { resolveDesignCanvasResourceFileItem } from "./utils/designResourceReferenceResolver"
+import {
+	buildCanvasElementFileIndex,
+	setCanvasElementFileIndex,
+} from "./utils/canvasElementFileIndex"
 import { FlexBox } from "@/components/base"
 import { observer } from "mobx-react-lite"
 import workspaceStore from "@/pages/superMagic/stores/core/workspace"
@@ -793,6 +797,22 @@ function DesignViewer(props: DesignViewerProps) {
 			setCanvasElementResourceGetter(designProjectId, null)
 		}
 	}, [designProjectId, displayName, isTabActive, resolveCanvasResourceFile])
+
+	useEffect(() => {
+		if (!designProjectId || isTabActive === false) {
+			setCanvasElementFileIndex(designProjectId, null)
+			return
+		}
+
+		const elements = designData.canvas?.elements
+		const index = buildCanvasElementFileIndex({
+			elements,
+			resolveFileBySrc: resolveCanvasResourceFile,
+		})
+		setCanvasElementFileIndex(designProjectId, index)
+
+		return () => setCanvasElementFileIndex(designProjectId, null)
+	}, [designData.canvas?.elements, designProjectId, isTabActive, resolveCanvasResourceFile])
 
 	const downloadPolicy = useDesignDownloadPolicy()
 	const getContentViewElement = useCallback(
@@ -2013,7 +2033,7 @@ function DesignViewer(props: DesignViewerProps) {
 					getPreviewUrl={getSaveAssetPreviewUrl}
 					onSave={methods.saveAssetToLibrary}
 					onUpdateAsset={async (assetId, params) => {
-						await AssetsApi.updateAsset(assetId, {
+						const updatedAsset = await AssetsApi.updateAsset(assetId, {
 							name: params.name,
 							description: params.description,
 							visibility:
@@ -2022,6 +2042,7 @@ function DesignViewer(props: DesignViewerProps) {
 									: undefined,
 							tag_ids: params.tagIds,
 						})
+						assetLibrarySessionStore.upsertAsset(updatedAsset)
 						const session = saveAssetDialogSessionRef.current
 						if (session?.kind === "edit") session.onUpdated()
 					}}

@@ -31,7 +31,7 @@ function buildCanvasDetail(folder: AttachmentItem, attachments: AttachmentItem[]
 		is_directory: folder.is_directory,
 		children: folder.children as FileItem[] | undefined,
 		relative_file_path: folder.relative_file_path,
-		parent_id: folder.parent_id,
+		parent_id: folder.parent_id ?? undefined,
 		display_config: folder.display_config,
 		file_extension: folder.file_extension,
 		file_size: folder.file_size,

@@ -306,7 +306,7 @@ class HandleAgentMessageAppService extends AbstractAppService
      */
     private function prepareDataIsolation(TopicTaskMessageDTO $messageDTO): DataIsolation
     {
-        return DataIsolation::create(
+        return $this->createContactDataIsolationByUser(
             $messageDTO->getMetadata()->getOrganizationCode(),
             $messageDTO->getMetadata()->getUserId()
         );

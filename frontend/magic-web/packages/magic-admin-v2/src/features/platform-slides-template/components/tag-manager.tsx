@@ -1,4 +1,4 @@
-import { Filter, MoreHorizontal, Pencil, Plus, Tags, Trash2 } from "lucide-react"
+import { MoreHorizontal, Pencil, Plus, Tags, Trash2 } from "lucide-react"
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { toast } from "sonner"
@@ -6,7 +6,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@magic-admin-v2/components/data-table"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { FilterControlField } from "@magic-admin-v2/components/filter-control-field"
-import { FilterSheet } from "@magic-admin-v2/components/filter-sheet"
+import { ListFilterPanel } from "@magic-admin-v2/components/list-filter-panel"
 import { ListPagination } from "@magic-admin-v2/components/list-pagination"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
 import { Button } from "@magic-admin-v2/components/ui/button"
@@ -17,6 +17,7 @@ import {
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
+	DropdownMenuSeparator,
 } from "@magic-admin-v2/components/ui/dropdown-menu"
 import { Input } from "@magic-admin-v2/components/ui/input"
 import {
@@ -28,8 +29,7 @@ import {
 } from "@magic-admin-v2/components/ui/select"
 import { Switch } from "@magic-admin-v2/components/ui/switch"
 import { useRuntime } from "@magic-admin-v2/runtime/context"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
-import { usePagination } from "@magic-admin-v2/hooks/use-pagination"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
 import { useSlidesTemplateTagMutations } from "@magic-admin-v2/features/platform-slides-template/mutations"
 import { useRowPendingIds } from "@magic-admin-v2/features/platform-slides-template/hooks"
 import {
@@ -53,39 +53,21 @@ import { MobileTagGroupSelector } from "@magic-admin-v2/features/platform-slides
 import { MobileTagList } from "@magic-admin-v2/features/platform-slides-template/components/mobile-tag-list"
 import { cn } from "@magic-admin-v2/utils/cn"
 
-const emptyStatus = "all"
-
-type TagFilterDraft = {
-	code: string
-	keyword: string
-	status: string
-}
-
-function createDefaultTagFilterDraft(): TagFilterDraft {
-	return { code: "", keyword: "", status: emptyStatus }
-}
-
-function toTagListParams(
-	draft: TagFilterDraft,
-	page: number,
-	pageSize: number,
-	selectedGroupId: string | null,
-): SlidesTemplateTagQueryParams {
-	return {
-		page,
-		page_size: pageSize,
-		node_type: "tag",
-		...(selectedGroupId ? { parent_id: selectedGroupId } : {}),
-		code: draft.code || undefined,
-		keyword: draft.keyword || undefined,
-		status: draft.status === emptyStatus ? null : (Number(draft.status) as 0 | 1),
-	}
-}
+import {
+	createDefaultTagFilterDraft,
+	emptySlidesTemplateStatus,
+	type TagFilterDraft,
+} from "@magic-admin-v2/features/platform-slides-template/list-params"
 
 type TagManagerProps = {
 	canEdit: boolean
+	mobileFilterOpen: boolean
 	onCreateAvailabilityChange: (available: boolean) => void
 	onDelete: (record: SlidesTemplateTag) => void
+	queryState: ListQueryParamsState<TagFilterDraft, SlidesTemplateTagQueryParams>
+	selectedGroupId: string | null
+	onSelectedGroupIdChange: (groupId: string | null) => void
+	onMobileFilterOpenChange: (open: boolean) => void
 }
 
 export type TagManagerHandle = {
@@ -94,37 +76,34 @@ export type TagManagerHandle = {
 }
 
 export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function TagManager(
-	{ canEdit, onCreateAvailabilityChange, onDelete },
+	{
+		canEdit,
+		mobileFilterOpen,
+		onCreateAvailabilityChange,
+		onDelete,
+		onMobileFilterOpenChange,
+		onSelectedGroupIdChange,
+		queryState,
+		selectedGroupId,
+	},
 	ref,
 ) {
 	const { t } = useTranslation()
 	const { language } = useRuntime()
-	const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 	const [selectedTagId, setSelectedTagId] = useState<string | null>(null)
-	const { pageSize, setPageSize } = usePagination()
-	const toParams = useCallback(
-		(draft: TagFilterDraft, page: number) =>
-			toTagListParams(draft, page, pageSize, selectedGroupId),
-		[pageSize, selectedGroupId],
-	)
 	const {
 		filterDraft: filters,
 		page,
+		pageSize,
 		params,
 		setDebouncedField,
 		setFilterDraft,
 		setPage,
-	} = useListQueryParams({
-		debounceFields: ["keyword", "code"],
-		extraResetKey: `${selectedGroupId ?? ""}:${pageSize}`,
-		initialDraft: createDefaultTagFilterDraft,
-		toParams,
-	})
+		setPageSize,
+	} = queryState
 	const [groupDialogOpen, setGroupDialogOpen] = useState(false)
 	const [tagDialogOpen, setTagDialogOpen] = useState(false)
 	const [editing, setEditing] = useState<SlidesTemplateTag | null>(null)
-	const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false)
-	const [advancedFilterDraft, setAdvancedFilterDraft] = useState(createDefaultTagFilterDraft)
 	const tree = useSlidesTemplateTagTreeQuery(true)
 	const groups = useMemo(
 		() => (tree.data ?? []).filter((node) => node.node_type === "group"),
@@ -140,10 +119,10 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 	useEffect(() => {
 		if (!selectedGroupId || tree.isFetching) return
 		if (!groups.some((group) => String(group.id) === selectedGroupId)) {
-			setSelectedGroupId(null)
+			onSelectedGroupIdChange(null)
 			setSelectedTagId(null)
 		}
-	}, [groups, selectedGroupId, tree.isFetching])
+	}, [groups, onSelectedGroupIdChange, selectedGroupId, tree.isFetching])
 
 	const query = useSlidesTemplateTagsQuery(params)
 	const mutations = useSlidesTemplateTagMutations()
@@ -168,27 +147,17 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 		[canEdit, groups.length],
 	)
 	const reset = useCallback(() => {
-		const next = createDefaultTagFilterDraft()
-		setFilterDraft(next)
-		setAdvancedFilterDraft(next)
+		setFilterDraft(createDefaultTagFilterDraft())
 		setSelectedTagId(null)
 	}, [setFilterDraft])
-	const handleFilterSheetOpenChange = useCallback(
-		(open: boolean) => {
-			if (open) setAdvancedFilterDraft(filters)
-			setIsFilterSheetOpen(open)
+
+	const selectGroup = useCallback(
+		(groupId: string | null) => {
+			onSelectedGroupIdChange(groupId)
+			setSelectedTagId(null)
 		},
-		[filters],
+		[onSelectedGroupIdChange],
 	)
-	const applyAdvancedFilters = useCallback(() => {
-		setFilterDraft(advancedFilterDraft)
-		setSelectedTagId(null)
-		setIsFilterSheetOpen(false)
-	}, [advancedFilterDraft, setFilterDraft])
-	const selectGroup = useCallback((groupId: string | null) => {
-		setSelectedGroupId(groupId)
-		setSelectedTagId(null)
-	}, [])
 	const updateRecordStatus = useCallback(
 		async (record: SlidesTemplateTag, enabled: boolean) => {
 			try {
@@ -331,6 +300,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 									<Pencil className="mr-2 size-4" aria-hidden="true" />
 									{t("common.edit")}
 								</DropdownMenuItem>
+								<DropdownMenuSeparator />
 								<DropdownMenuItem
 									className="text-destructive"
 									disabled={!canEdit}
@@ -400,7 +370,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 								: "hover:bg-muted",
 						)}
 						onClick={() => {
-							setSelectedGroupId(null)
+							onSelectedGroupIdChange(null)
 							setSelectedTagId(null)
 						}}
 						type="button"
@@ -422,7 +392,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 									data-testid="platform-slides-template-tag-action-button"
 									className="flex w-full items-center justify-between gap-2 text-left"
 									onClick={() => {
-										setSelectedGroupId(String(group.id))
+										onSelectedGroupIdChange(String(group.id))
 										setSelectedTagId(null)
 									}}
 									type="button"
@@ -538,214 +508,116 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 							: t("slidesTemplate.allTags")}
 					</h3>
 				</div>
-				<div className="sticky top-0 z-40 mb-3 bg-background md:mb-0 md:border-b md:p-4">
-					<div className="flex min-w-0 items-end gap-2 md:hidden">
-						<FilterControlField
-							className="min-w-0 flex-1"
-							label={t("slidesTemplate.tagName")}
-						>
-							<FilterSearchInput
-								clearLabel={t("common.clear")}
-								clearButtonTestId="platform-slides-template-clear-button"
-								onValueChange={(value) => {
-									setDebouncedField("keyword", value)
-									setSelectedTagId(null)
-								}}
-								placeholder={t("slidesTemplate.tagName")}
-								value={filters.keyword}
-								inputTestId="platform-slides-template-search-input"
-							/>
-						</FilterControlField>
-						<FilterControlField
-							className="w-[104px] shrink-0"
-							label={t("slidesTemplate.status")}
-						>
-							<Select
-								value={filters.status}
-								onValueChange={(status) => {
-									setFilterDraft((state) => ({ ...state, status }))
-									setSelectedTagId(null)
-								}}
-							>
-								<SelectTrigger
-									className="w-full"
-									data-testid="platform-slides-template-select-trigger"
-								>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent data-testid="platform-slides-template-select-content">
-									<SelectItem
-										value={emptyStatus}
-										data-testid="platform-slides-template-option"
-									>
-										{t("slidesTemplate.all")}
-									</SelectItem>
-									<SelectItem
-										value="1"
-										data-testid="platform-slides-template-option"
-									>
-										{t("slidesTemplate.enabled")}
-									</SelectItem>
-									<SelectItem
-										value="0"
-										data-testid="platform-slides-template-option"
-									>
-										{t("slidesTemplate.disabled")}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</FilterControlField>
-						<Button
-							aria-label={t("slidesTemplate.filterTitle")}
-							className={cn(
-								(filters.keyword ||
-									filters.code ||
-									filters.status !== emptyStatus) &&
-									"border-primary text-primary",
-							)}
-							onClick={() => handleFilterSheetOpenChange(true)}
-							size="icon"
-							variant="outline"
-							data-testid="platform-slides-template-filter-button"
-						>
-							<Filter className="size-4" aria-hidden="true" />
-						</Button>
-					</div>
-					<div className="hidden grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px] items-end gap-2 md:grid">
-						<FilterControlField className="min-w-0" label={t("slidesTemplate.tagName")}>
-							<FilterSearchInput
-								clearLabel={t("common.clear")}
-								clearButtonTestId="platform-slides-template-secondary-clear-button"
-								onValueChange={(value) => {
-									setDebouncedField("keyword", value)
-									setSelectedTagId(null)
-								}}
-								placeholder={t("slidesTemplate.tagName")}
-								value={filters.keyword}
-								inputTestId="platform-slides-template-secondary-search-input"
-							/>
-						</FilterControlField>
-						<FilterControlField className="min-w-0" label={t("slidesTemplate.tagCode")}>
-							<FilterSearchInput
-								clearLabel={t("common.clear")}
-								clearButtonTestId="platform-slides-template-tertiary-clear-button"
-								onValueChange={(value) => {
-									setDebouncedField("code", value)
-									setSelectedTagId(null)
-								}}
-								placeholder={t("slidesTemplate.tagCode")}
-								value={filters.code}
-								inputTestId="platform-slides-template-tertiary-search-input"
-							/>
-						</FilterControlField>
-						<FilterControlField label={t("slidesTemplate.status")}>
-							<Select
-								value={filters.status}
-								onValueChange={(status) => {
-									setFilterDraft((state) => ({ ...state, status }))
-									setSelectedTagId(null)
-								}}
-							>
-								<SelectTrigger
-									className="w-full"
-									data-testid="platform-slides-template-select-trigger"
-								>
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent data-testid="platform-slides-template-select-content">
-									<SelectItem
-										value={emptyStatus}
-										data-testid="platform-slides-template-option"
-									>
-										{t("slidesTemplate.all")}
-									</SelectItem>
-									<SelectItem
-										value="1"
-										data-testid="platform-slides-template-option"
-									>
-										{t("slidesTemplate.enabled")}
-									</SelectItem>
-									<SelectItem
-										value="0"
-										data-testid="platform-slides-template-option"
-									>
-										{t("slidesTemplate.disabled")}
-									</SelectItem>
-								</SelectContent>
-							</Select>
-						</FilterControlField>
-					</div>
-				</div>
-				<FilterSheet
-					contentTestId="platform-slides-template-filter-sheet"
-					bodyTestId="platform-slides-template-filter-body"
-					resetButtonTestId="platform-slides-template-reset-button"
-					applyButtonTestId="platform-slides-template-apply-button"
-					closeButtonTestId="platform-slides-template-tag-filter-close-button"
+				<ListFilterPanel
 					applyLabel={t("slidesTemplate.applyFilters")}
-					description={t("slidesTemplate.mobile.tagCodeFilterDescription")}
-					onApply={applyAdvancedFilters}
-					onOpenChange={handleFilterSheetOpenChange}
-					onReset={() => setAdvancedFilterDraft(createDefaultTagFilterDraft())}
-					open={isFilterSheetOpen}
-					presentation="mobile-only"
+					mobileApplyTestId="platform-slides-template-apply-button"
+					mobileBodyTestId="platform-slides-template-filter-body"
+					mobileCloseButtonTestId="platform-slides-template-tag-filter-close-button"
+					mobileContentTestId="platform-slides-template-filter-sheet"
+					mobileResetTestId="platform-slides-template-reset-button"
+					className="mb-3 md:mb-0 md:p-4"
+					createDefaultValue={createDefaultTagFilterDraft}
+					mobileOpen={mobileFilterOpen}
+					onMobileOpenChange={onMobileFilterOpenChange}
+					showMobileTrigger={false}
+					onApply={(draft) => {
+						setFilterDraft(draft)
+						setSelectedTagId(null)
+					}}
+					onChange={(patch) => {
+						if (patch.keyword !== undefined) setDebouncedField("keyword", patch.keyword)
+						if (patch.code !== undefined) setDebouncedField("code", patch.code)
+						if (patch.status !== undefined)
+							setFilterDraft((previous) => ({ ...previous, status: patch.status! }))
+						setSelectedTagId(null)
+					}}
+					onReset={reset}
+					renderFields={({ layout, onChange, value }) => (
+						<>
+							<FilterControlField label={t("slidesTemplate.tagName")}>
+								<FilterSearchInput
+									clearButtonTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-clear-button"
+											: "platform-slides-template-secondary-clear-button"
+									}
+									clearLabel={t("common.clear")}
+									inputTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-input"
+											: "platform-slides-template-secondary-search-input"
+									}
+									onValueChange={(keyword) =>
+										layout === "grid"
+											? setDebouncedField("keyword", keyword)
+											: onChange({ keyword })
+									}
+									placeholder={t("slidesTemplate.tagName")}
+									value={value.keyword}
+								/>
+							</FilterControlField>
+							<FilterControlField label={t("slidesTemplate.tagCode")}>
+								<FilterSearchInput
+									clearButtonTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-clear-button"
+											: "platform-slides-template-tertiary-clear-button"
+									}
+									clearLabel={t("common.clear")}
+									inputTestId={
+										layout === "sheet"
+											? "platform-slides-template-advanced-search-input"
+											: "platform-slides-template-tertiary-search-input"
+									}
+									onValueChange={(code) =>
+										layout === "grid"
+											? setDebouncedField("code", code)
+											: onChange({ code })
+									}
+									placeholder={t("slidesTemplate.tagCode")}
+									value={value.code}
+								/>
+							</FilterControlField>
+							<FilterControlField label={t("slidesTemplate.status")}>
+								<Select
+									value={value.status}
+									onValueChange={(status) => onChange({ status })}
+								>
+									<SelectTrigger
+										className="w-full"
+										data-testid="platform-slides-template-select-trigger"
+									>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent data-testid="platform-slides-template-select-content">
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value={emptySlidesTemplateStatus}
+										>
+											{t("slidesTemplate.all")}
+										</SelectItem>
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="1"
+										>
+											{t("slidesTemplate.enabled")}
+										</SelectItem>
+										<SelectItem
+											data-testid="platform-slides-template-option"
+											value="0"
+										>
+											{t("slidesTemplate.disabled")}
+										</SelectItem>
+									</SelectContent>
+								</Select>
+							</FilterControlField>
+						</>
+					)}
 					resetLabel={t("slidesTemplate.reset")}
 					title={t("slidesTemplate.filterTitle")}
-				>
-					<FilterControlField className="w-full" label={t("slidesTemplate.tagName")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(keyword) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, keyword }))
-							}
-							placeholder={t("slidesTemplate.tagName")}
-							value={advancedFilterDraft.keyword}
-							inputTestId="platform-slides-template-advanced-search-input"
-							clearButtonTestId="platform-slides-template-advanced-search-clear-button"
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.tagCode")}>
-						<FilterSearchInput
-							clearLabel={t("common.clear")}
-							onValueChange={(code) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, code }))
-							}
-							placeholder={t("slidesTemplate.tagCode")}
-							value={advancedFilterDraft.code}
-							inputTestId="platform-slides-template-advanced-search-input"
-							clearButtonTestId="platform-slides-template-advanced-search-clear-button"
-						/>
-					</FilterControlField>
-					<FilterControlField className="w-full" label={t("slidesTemplate.status")}>
-						<Select
-							value={advancedFilterDraft.status}
-							onValueChange={(status) =>
-								setAdvancedFilterDraft((previous) => ({ ...previous, status }))
-							}
-						>
-							<SelectTrigger
-								className="w-full"
-								data-testid="platform-slides-template-select-trigger"
-							>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent data-testid="platform-slides-template-select-content">
-								<SelectItem
-									value={emptyStatus}
-									data-testid="platform-slides-template-option"
-								>
-									{t("slidesTemplate.all")}
-								</SelectItem>
-								<SelectItem value="1" data-testid="platform-slides-template-option">
-									{t("slidesTemplate.enabled")}
-								</SelectItem>
-								<SelectItem value="0" data-testid="platform-slides-template-option">
-									{t("slidesTemplate.disabled")}
-								</SelectItem>
-							</SelectContent>
-						</Select>
-					</FilterControlField>
-				</FilterSheet>
+					value={filters}
+				/>
+
 				<div>
 					<MobileTagList
 						canEdit={canEdit}
@@ -813,7 +685,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 				mode="group"
 				mutations={mutations}
 				onCreated={(group) => {
-					setSelectedGroupId(String(group.id))
+					onSelectedGroupIdChange(String(group.id))
 					setSelectedTagId(null)
 				}}
 				onOpenChange={setGroupDialogOpen}
@@ -826,7 +698,7 @@ export const TagManager = forwardRef<TagManagerHandle, TagManagerProps>(function
 				mode="tag"
 				mutations={mutations}
 				onCreated={(tag) => {
-					setSelectedGroupId(String(tag.parent_id))
+					onSelectedGroupIdChange(String(tag.parent_id))
 					setSelectedTagId(String(tag.id))
 					setFilterDraft(createDefaultTagFilterDraft())
 				}}

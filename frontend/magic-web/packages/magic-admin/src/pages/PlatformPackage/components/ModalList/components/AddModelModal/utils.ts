@@ -66,6 +66,13 @@ export const getDefaultModelInfo = ({
 						temperature: 0.7,
 						temperature_type: AiModel.ModelTemperatureType.Recommended,
 						chat_api: AiModel.ChatApi.ChatCompletions,
+						// 仅初始化新建表单，历史模型直接回显后端配置。
+						reasoning_effort_levels: [
+							"low",
+							"medium",
+							"high",
+						] as AiModel.ReasoningEffort[],
+						reasoning_effort_default: null,
 					}
 				: {}),
 		},

@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway;
 
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
+use App\Domain\SuperMagic\Task\Entity\ValueObject\SandboxImageTarget;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\AbstractSandboxOS;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Constants\SandboxEndpoints;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\Constant\ResponseCode;
@@ -57,7 +58,8 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         string $projectSpaceRootFileId = '',
         string $userSpaceRootFileId = '',
         string $topicSpaceRootFileId = '',
-        array $labels = []
+        array $labels = [],
+        ?SandboxImageTarget $images = null
     ): GatewayResult {
         // In local debugging mode, return mock success result
         if (! $this->isEnabledSandbox()) {
@@ -87,6 +89,12 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         if (! empty($labels)) {
             $config['labels'] = $labels;
         }
+        // 只有指定了镜像的运行才把镜像写进创建请求；未指定时留空，让网关继续读它的
+        // ConfigMap，避免把"计划时看到的发布版本"固化成一次快照。
+        $launchImages = $images?->launchImages() ?? [];
+        if ($launchImages !== []) {
+            $config += $launchImages;
+        }
 
         $this->logger->debug('[Sandbox][Gateway] Creating sandbox', [
             'config' => [
@@ -97,6 +105,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
                 'user_space_root_file_id' => $userSpaceRootFileId,
                 'authorization_provided' => $dataIsolation->getUserAuthorizationToken() !== null && $dataIsolation->getUserAuthorizationToken() !== '',
                 'labels' => $labels,
+                'images' => $launchImages,
             ],
             'max_retries' => 5,
             'retry_delay' => 30000,
@@ -1309,7 +1318,7 @@ class SandboxGatewayService extends AbstractSandboxOS implements SandboxGatewayI
         $organizationCode = $dataIsolation->getCurrentOrganizationCode();
         $authorization = $dataIsolation->getUserAuthorizationToken();
 
-        if ($userId !== null && $userId !== '') {
+        if ($userId !== '') {
             $headers['magic-user-id'] = $userId;
         }
         if ($organizationCode !== '') {

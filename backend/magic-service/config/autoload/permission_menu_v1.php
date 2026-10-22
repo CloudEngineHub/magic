@@ -114,8 +114,24 @@ return [
             ],
             'tag' => '安全与权限',
         ],
+        'admin.setting.identity_watermark' => [
+            'path' => [
+                ['key' => 'enterprise_function', 'label' => '企业功能', 'order' => 3],
+                ['key' => 'organization_settings', 'label' => '组织设置', 'order' => 5],
+                ['key' => 'identity_watermark', 'label' => '页面身份水印', 'order' => 1],
+            ],
+            'tag' => '组织设置',
+        ],
 
         // 官方组织：平台管理
+        'platform.ai.model_multiplier' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
+                ['key' => 'model_management', 'label' => '模型管理', 'order' => 2],
+                ['key' => 'model_multiplier', 'label' => '模型倍率', 'order' => 4],
+            ],
+            'tag' => '模型管理',
+        ],
         'platform.model.text' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
@@ -250,6 +266,7 @@ return [
         'workspace.model.image',
         'workspace.model.video',
         'admin.ai.application.menu',
+        'admin.setting.identity_watermark',
         'workspace.ai.model_audit_log',
         'workspace.ai.model_audit_statistics',
     ],

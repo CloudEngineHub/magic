@@ -12,6 +12,7 @@ use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use Hyperf\Contract\ValidatorInterface;
 use Hyperf\Validation\Request\FormRequest;
 
+/** 平台设置更新契约，金额保留十进制原文，默认值由应用层补齐。 */
 class PlatformSettingsUpdateRequest extends FormRequest
 {
     public function authorize(): bool
@@ -19,6 +20,7 @@ class PlatformSettingsUpdateRequest extends FormRequest
         return true;
     }
 
+    /** 声明平台更新字段与长度，具体单价规则交由配置层校验。 */
     public function rules(): array
     {
         return [
@@ -49,6 +51,7 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'global_system_prompt' => 'sometimes|string|max:5000',
             'custom_service_provider_whitelist' => 'sometimes|array',
             'custom_service_provider_whitelist.*' => 'string|max:128',
+            ...ModelBillingMultiplierUpdateRequest::multiplierRules(),
             'watermark' => 'sometimes|array',
             'watermark.enabled' => 'sometimes|boolean',
             'watermark.fields' => 'sometimes|array',
@@ -66,6 +69,7 @@ class PlatformSettingsUpdateRequest extends FormRequest
             'minimal_logo_url.regex' => 'platform_settings.invalid_url',
             'footer.filing.link.regex' => 'platform_settings.invalid_url',
             'default_language.in' => 'platform_settings.invalid_locale',
+            'model_billing_multiplier.currency.in' => 'platform_settings.invalid_model_billing_multiplier',
         ];
     }
 

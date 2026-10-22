@@ -1,4 +1,8 @@
 {
+    "ask_user.invalid_questions": {
+        "zh_CN": "问题生成失败，请重新生成问卷",
+        "en_US": "Could not prepare the questions. Please generate the questionnaire again."
+    },
     "send_wechat_message.error.text_too_long": {
         "zh_CN": "正文超过当前发送长度，请分成多条发送；本批未发送",
         "en_US": "Text exceeds the current budget; divide it into messages. This batch was not sent."

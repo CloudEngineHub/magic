@@ -1,3 +1,5 @@
+import type { ModelBillingMultiplierSettings as SharedModelBillingMultiplierSettings } from "../../../model-billing-reference"
+
 export const enum SupportLocales {
 	auto = "auto",
 	zhCN = "zh_CN",
@@ -13,6 +15,9 @@ export type PlatformWatermarkIntensity = "light" | "standard" | "strong"
 
 /** 平台信息 */
 export namespace PlatformInfo {
+	/** 配置仅用于价格比较，最终参考金额由后端提供。 */
+	export type ModelBillingMultiplierSettings = SharedModelBillingMultiplierSettings
+
 	/** 组织水印配置 */
 	export interface WatermarkConfig {
 		id: string
@@ -39,6 +44,7 @@ export namespace PlatformInfo {
 
 	/** 平台信息详情 */
 	export interface Details {
+		model_billing_multiplier?: ModelBillingMultiplierSettings
 		name_i18n: Record<SupportLocales, string>
 		logo: Record<SupportLocales, string>
 		minimal_logo: string | null
@@ -56,6 +62,7 @@ export namespace PlatformInfo {
 	}
 	/** 修改平台信息 */
 	export interface UpdateParams {
+		model_billing_multiplier?: ModelBillingMultiplierSettings
 		name_i18n: Record<SupportLocales, string>
 		logo_zh_url: string
 		logo_en_url: string

@@ -15,6 +15,7 @@ use App\Application\Flow\ExecuteManager\NodeRunner\Code\CodeExecutor\PythonExecu
 use App\Application\Flow\ExecuteManager\NodeRunner\ReplyMessage\Struct\BaseMessageAttachmentHandler;
 use App\Application\Flow\ExecuteManager\NodeRunner\ReplyMessage\Struct\MessageAttachmentHandlerInterface;
 use App\Application\Kernel\Contract\MagicPermissionInterface;
+use App\Application\Kernel\DataIsolationInitializer;
 use App\Application\Kernel\MagicPermission;
 use App\Application\KnowledgeBase\Port\EmbeddingProviderPort;
 use App\Application\KnowledgeBase\Port\FragmentHttpPassthroughPort;
@@ -226,6 +227,8 @@ use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationsPlatformRe
 use App\Domain\OrganizationEnvironment\Repository\MagicEnvironmentsRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsEnvironmentRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsPlatformRepository;
+use App\Domain\Permission\Gateway\OrganizationAdminSyncInterface;
+use App\Domain\Permission\Gateway\NullOrganizationAdminSync;
 use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
@@ -288,6 +291,7 @@ use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
+use App\Infrastructure\Core\DataIsolation\DataIsolationInitializerInterface;
 use App\Infrastructure\Core\DataIsolation\HandleDataIsolationInterface;
 use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
@@ -317,6 +321,7 @@ use App\Infrastructure\Design\Contract\VideoGatewayClientInterface;
 use App\Infrastructure\Design\ModelGatewayVideoGatewayClient;
 use App\Infrastructure\Design\VideoGatewayPayloadBuilder;
 use App\Infrastructure\ExternalAPI\Proxy\EmptyProxyConfigResolverInterface;
+use App\Infrastructure\ExternalAPI\Proxy\LocalProxyConfigResolver;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\ExternalAPI\Sms\SmsInterface;
 use App\Infrastructure\ExternalAPI\Sms\TemplateInterface;
@@ -393,6 +398,7 @@ $dependencies = [
     TemplateInterface::class => Template::class,
 
     // core
+    DataIsolationInitializerInterface::class => DataIsolationInitializer::class,
     ThirdPlatformDataIsolationManagerInterface::class => BaseThirdPlatformDataIsolationManager::class,
     DocumentSplitterInterface::class => OdinRecursiveCharacterTextSplitter::class,
     TempAuthInterface::class => RedisTempAuth::class,
@@ -513,6 +519,7 @@ $dependencies = [
     // rerank
 
     // permission
+    OrganizationAdminSyncInterface::class => NullOrganizationAdminSync::class,
     OperationPermissionRepositoryInterface::class => OperationPermissionRepository::class,
     RoleRepositoryInterface::class => RoleRepository::class,
     OrganizationAdminRepositoryInterface::class => OrganizationAdminRepository::class,
@@ -721,5 +728,10 @@ foreach ($dependenciesPriority as $interface => $definition) {
 // regardless of the fallback bindings declared above or other provider order.
 $dependencies[AgentExecuteInterface::class] = SuperAgentMessageSubscriberV2::class;
 $dependencies[SuperAgentMessageInterface::class] = SuperAgentMessage::class;
+
+// 在服务商优先级配置合并后覆盖，仅供本地调试，避免读取数据库代理地址。
+if (\Hyperf\Support\env('APP_ENV', '') === 'local' && \Hyperf\Support\env('MODEL_GATEWAY_LOCAL_PROXY_ENABLED', false)) {
+    $dependencies[ProxyConfigResolverInterface::class] = LocalProxyConfigResolver::class;
+}
 
 return $dependencies;

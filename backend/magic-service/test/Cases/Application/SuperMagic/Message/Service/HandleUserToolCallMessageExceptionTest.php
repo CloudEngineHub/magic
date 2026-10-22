@@ -7,11 +7,14 @@ declare(strict_types=1);
 
 namespace HyperfTest\Cases\Application\SuperMagic\Message\Service;
 
+use App\Application\Kernel\DataIsolationInitializer;
 use App\Application\MCP\SupperMagicMCP\ProjectMcpConfigService;
 use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAccessAppService;
 use App\Application\SuperMagic\Message\DTO\UserMessageDTO;
 use App\Application\SuperMagic\Message\Service\HandleUserMessageAppService;
 use App\Application\SuperMagic\Task\Service\AgentAppService;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
+use App\Application\SuperMagic\Task\Service\ReferencedProjectMountService;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
 use App\Domain\Chat\DTO\Message\ChatMessage\UserToolCallMessage;
@@ -23,6 +26,10 @@ use App\Domain\SuperMagic\Task\Service\AgentDomainService;
 use App\Domain\SuperMagic\Task\Service\TaskDomainService;
 use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\EventErrorCode;
+use App\Infrastructure\Core\DataIsolation\DataIsolationInitializerInterface;
+use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
+use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
+use App\Infrastructure\Core\DataIsolation\ThirdPlatformDataIsolationManagerInterface;
 use App\Infrastructure\Core\Exception\EventException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\SandboxOperationException;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Exception\UserToolCallNotFoundException;
@@ -64,6 +71,12 @@ class HandleUserToolCallMessageExceptionTest extends TestCase
         $container = new FakeContainer();
         $container->services[ConfigInterface::class] = $config;
         $container->services[TranslatorInterface::class] = $translator;
+
+        // 隔离基础上下文管理器，仅注册延迟回调，不访问真实用户或环境。
+        $container->services[DataIsolationInitializerInterface::class] = new DataIsolationInitializer();
+        $container->services[ThirdPlatformDataIsolationManagerInterface::class] = $this->createMock(ThirdPlatformDataIsolationManagerInterface::class);
+        $container->services[SubscriptionManagerInterface::class] = $this->createMock(SubscriptionManagerInterface::class);
+        $container->services[OrganizationInfoManagerInterface::class] = $this->createMock(OrganizationInfoManagerInterface::class);
 
         ApplicationContext::setContainer($container);
     }
@@ -119,7 +132,7 @@ class HandleUserToolCallMessageExceptionTest extends TestCase
 
     private function buildService(TopicTaskAppServiceForTest $topicTaskAppService): HandleUserMessageAppService
     {
-        // 13 个构造依赖中只有 topicTaskAppService 参与被测路径，其余仅需可构造。
+        // 构造依赖中只有 topicTaskAppService 参与被测路径，其余仅需可构造。
         // 部分依赖是 readonly 无法 mock，用反射跳过构造函数创建。
         return new HandleUserMessageAppService(
             $this->stub(TopicDomainService::class),
@@ -133,6 +146,8 @@ class HandleUserToolCallMessageExceptionTest extends TestCase
             $this->stub(TaskFileDomainService::class),
             $this->stub(ProjectMcpConfigService::class),
             $this->stub(SuperMagicAgentAccessAppService::class),
+            $this->stub(ReferencedProjectMountPlanner::class),
+            $this->stub(ReferencedProjectMountService::class),
             $this->stub(Redis::class),
             $this->buildLoggerFactory()
         );
@@ -204,6 +219,12 @@ class FakeContainer implements ContainerInterface
     public function get(string $id): mixed
     {
         return $this->services[$id] ?? null;
+    }
+
+    /** 使用已注册的离线依赖模拟容器实例化。 */
+    public function make(string $id, array $parameters = []): mixed
+    {
+        return $this->get($id);
     }
 
     public function has(string $id): bool

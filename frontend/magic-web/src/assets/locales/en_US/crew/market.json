@@ -279,6 +279,9 @@
 			"title": "Add Crew"
 		},
 		"badgeUpdated": "Updated",
+		"copyUsageLink": "Copy usage link",
+		"copyUsageLinkFailed": "Failed to copy usage link",
+		"copyUsageLinkSuccess": "Usage link copied",
 		"crewType": {
 			"ariaLabel": "Crew type",
 			"collaborated": "Collaborated",

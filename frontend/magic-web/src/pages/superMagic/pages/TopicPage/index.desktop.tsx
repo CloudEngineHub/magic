@@ -21,6 +21,7 @@ import { useDetailModeCache } from "../../hooks/useDetailModeCache"
 import { useAttachmentsPolling } from "../../hooks/useAttachmentsPolling"
 import { useProjectAttachmentsChangeRealtime } from "../../hooks/useProjectAttachmentsChangeRealtime"
 import { useDeferUntilFileTabsCacheLoaded } from "../../hooks/useDeferUntilFileTabsCacheLoaded"
+import { useAutoOpenCanvasFile } from "../../hooks/useAutoOpenCanvasFile"
 import { useRefreshTopicDetailOnTaskComplete } from "../../hooks/useRefreshTopicDetailOnTaskComplete"
 import { AttachmentDataProcessor } from "../../utils/attachmentDataProcessor"
 import {
@@ -245,6 +246,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 
 	const {
 		shouldShowDetailPanel,
+		activeDetailTabType,
 		isDetailPanelCollapsed,
 		collapseDetailPanel,
 		expandDetailPanel,
@@ -272,6 +274,18 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const { onFileTabsCacheLoaded, scheduleWhenTabsCacheReady } = useDeferUntilFileTabsCacheLoaded(
 		selectedProject?.id,
 	)
+	const activeFileIdRef = useRef<string | null>(activeFileId)
+	activeFileIdRef.current = activeFileId
+
+	useAutoOpenCanvasFile({
+		topicId: selectedTopic?.chat_topic_id,
+		projectId: selectedProject?.id,
+		activeFileId,
+		getActiveFileId: () => activeFileIdRef.current,
+		attachments,
+		attachmentList,
+		scheduleWhenTabsCacheReady,
+	})
 
 	useAICardDeepLinkOpen({
 		topicId: selectedTopic?.id,
@@ -862,6 +876,8 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				topicActions={topicActions}
 				isConversationPanelCollapsed={isConversationPanelCollapsed}
 				isDraggingPanel={isDraggingPanel}
+				activeFileId={activeFileId}
+				activeDetailTabType={activeDetailTabType}
 				onToggleConversationPanel={onToggleConversationPanel}
 				onExpandConversationPanel={onExpandConversationPanel}
 				detailPanelVisible={shouldShowDetailPanel}

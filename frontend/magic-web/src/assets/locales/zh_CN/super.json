@@ -165,6 +165,7 @@
 		"nameRequired": "智能体名称不能为空",
 		"placeholder": "请输入智能体的提示词内容，按“/”唤起菜单",
 		"promptRequired": "提示词不能为空",
+		"refreshHtml": "刷新 HTML",
 		"saveSuccess": "保存成功",
 		"title": "自定义智能体",
 		"toolSelectModal": {
@@ -329,6 +330,7 @@
 		"friend": "朋友",
 		"greet": "嗨, {{name}}",
 		"inputChatName": "请输入对话名称",
+		"nameMaxLengthTip": "名称长度不能超过 {{maxLength}} 个字符",
 		"noChats": "暂无对话",
 		"noPreview": "暂无对话预览",
 		"pinChat": "置顶",
@@ -403,11 +405,8 @@
 	},
 	"collaborationManage": {
 		"collaboratorList": {
-			"batchAction": "批量操作",
-			"empty": "暂无协作者",
 			"joinedViaInviteLink": "通过邀请链接加入",
 			"owner": "创建人",
-			"remove": "移除",
 			"selectPlaceholder": "请选择",
 			"title": "协作者"
 		},
@@ -839,7 +838,6 @@
 					"collapseForm": "收起编辑",
 					"description": "选择一个常见观察场景，系统会预填观察目标、展示模板、执行频率和 AI 调整权限。",
 					"expandForm": "展开编辑",
-					"summary": "当前模板",
 					"summaryAutonomy": "AI 调整权限",
 					"summaryGoal": "观察目标",
 					"summaryName": "名称",
@@ -2952,6 +2950,7 @@
 			"completedWithErrors": "上传完成，{{count}} 个失败",
 			"creatingFolders": "正在创建目录结构",
 			"paused": "已暂停",
+			"processing": "处理中",
 			"uploading": "上传中"
 		},
 		"confirmations": {
@@ -3180,6 +3179,13 @@
 		"sloganTitle": "今天需要我帮你做些什么？"
 	},
 	"htmlEditor": {
+		"codeChangeConfirm": {
+			"content": "「{{appName}}」在你授权之后修改了代码，现在要使用：{{scope}}。请确认是否继续。选择“允许并记住”后，有效期内代码再次修改也不再询问这项权限。",
+			"deny": "拒绝",
+			"once": "仅这一次",
+			"remember": "允许并记住",
+			"title": "应用代码已修改"
+		},
 		"designStyle": {
 			"apply": "添加到对话",
 			"browseCategories": "按分类浏览",
@@ -3400,6 +3406,18 @@
 			"authorize": "授权",
 			"authorizeFailed": "授权失败",
 			"authorizeSuccess": "已授权",
+			"codeBanner": {
+				"acknowledge": "确认当前代码",
+				"acknowledgeFailed": "确认失败",
+				"acknowledgeSuccess": "已确认当前代码",
+				"descriptionReadOnly": "这些授权仍然有效。如果不放心，可以撤销。",
+				"descriptionWithReconfirm": "读取类授权仍然有效；{{count}} 项写入、发送或消耗额度类授权会在下次使用时重新确认。",
+				"revokeAll": "撤销全部授权",
+				"title": "应用代码在你授权之后已修改"
+			},
+			"codeChanged": "代码已修改",
+			"codeChangedDot": "应用代码已修改，授权需要留意",
+			"codeChangedHint": "应用代码在授权后已修改，这项授权仍然有效。",
 			"currentTab": "保存在当前浏览器",
 			"declared": "已声明",
 			"declaredCount": "已声明 {{count}} 项",
@@ -3429,6 +3447,8 @@
 			"notGranted": "未授权",
 			"open": "授权管理",
 			"permissionsTitle": "权限列表",
+			"reconfirmNext": "下次使用需重新确认",
+			"reconfirmNextHint": "这项权限会写入数据、对外发送内容或消耗额度，代码修改后会再次确认。",
 			"remainingDays": "剩余 {{count}} 天",
 			"remainingExpired": "已过期",
 			"remainingHours": "剩余 {{count}} 小时",
@@ -3579,7 +3599,7 @@
 			"provider": "厂商",
 			"providerAlias": "厂商别名",
 			"selectPlaceholder": "请选择",
-			"teamModels": "企业内置模型",
+			"teamModels": "企业模型",
 			"typeImage": "图像",
 			"typeText": "文本",
 			"typeVideo": "视频",
@@ -3635,8 +3655,14 @@
 		"modelLoadFailed": "模型加载失败，请稍后重试",
 		"modelSwitch": {
 			"autoModelDescription": "Auto 模式自动选用当前任务执行效率最高的AI模型，适合处理大多数常规任务，积分消耗适中。",
+			"billingMultiplier": "消耗速度",
+			"billingMultiplierHint": "倍率仅供参考，实际消耗以用量和计费规则为准。",
+			"billingMultiplierValue": "消耗倍率 {{value}} 倍",
 			"collapseDescription": "收起模型描述",
+			"collapseDescriptionShort": "收起",
+			"contextWindow": "上下文窗口",
 			"expandDescription": "展开模型描述",
+			"expandDescriptionShort": "展开",
 			"headerTitle": "模型选择",
 			"imageModel": "生图模型",
 			"languageModel": "语言模型",
@@ -3651,12 +3677,27 @@
 			"noModelsFound": "未找到匹配的模型",
 			"noVideoModels": "暂无视频模型",
 			"noVideoModelsDesc": "当前模式暂无可用的视频模型",
+			"platformModels": "平台模型",
+			"reasoning": {
+				"default": "默认",
+				"high": "高",
+				"label": "思考强度",
+				"low": "低",
+				"max": "极致",
+				"medium": "中",
+				"minimal": "最低",
+				"mobileLabel": "思考强度",
+				"none": "关闭",
+				"summary": "思考强度：{{level}}",
+				"xhigh": "超高"
+			},
 			"searchPlaceholder": "搜索模型",
 			"selectModel": "选择模型",
 			"tooltipImageModel": "生图模型",
 			"tooltipLanguageModel": "语言模型",
 			"tooltipVideoModel": "视频模型",
-			"videoModel": "视频模型"
+			"videoModel": "视频模型",
+			"viewModelInfo": "查看模型介绍"
 		},
 		"newTopicButton": "新建话题",
 		"placeholder": "输入消息...",
@@ -3700,6 +3741,7 @@
 		"archived": "已归档",
 		"cannotDeleteCurrentTopicInRecording": "当前正在录音中，无法删除当前话题",
 		"cannotDeleteLastTopic": "无法删除最后一个话题",
+		"closeWidget": "关闭助手",
 		"collapseConversationPanel": "收起对话面板",
 		"confirmDeleteTopic": "确认删除",
 		"confirmDeleteTopicContent": "确定要删除话题 \"{{name}}\" 吗？",
@@ -3711,12 +3753,15 @@
 		"deleteTopicSuccess": "删除话题成功",
 		"editTopicSuccess": "修改话题成功",
 		"expandConversationPanel": "展开对话面板",
+		"fullscreen": "全屏",
+		"headerActionFailed": "操作失败，请重试",
 		"historyTopics": "其他话题",
 		"more": "更多",
 		"newTopic": "新话题",
 		"noMatchingTopics": "暂无匹配的话题",
 		"noTopics": "暂无话题",
 		"pin": "置顶",
+		"pinWindow": "钉住窗口",
 		"pinned": "置顶",
 		"refreshTopics": "刷新话题",
 		"rename": "重命名",
@@ -3737,6 +3782,7 @@
 		"unarchive": "取消归档",
 		"unpin": "取消置顶",
 		"untitledTopic": "未命名话题",
+		"widgetTitle": "麦吉助手",
 		"yesterday": "昨天"
 	},
 	"messageQueue": {
@@ -8414,6 +8460,7 @@
 			"selectMultiple": "多选",
 			"shareFile": "分享",
 			"showInfo": "显示简介",
+			"upload": "上传",
 			"uploadError": "文件上传失败",
 			"uploadFile": "上传文件",
 			"uploadFolder": "上传文件夹",
@@ -8496,6 +8543,8 @@
 		"entryFileNotFound": "未找到可导出的入口文件（index.html），请检查该文件夹内是否包含 index.html",
 		"error": {
 			"copyFileFailed": "复制文件失败",
+			"createDesignFailed": "创建画布项目失败",
+			"createDesignSuccess": "创建画布项目成功",
 			"createFileSuccess": "文件创建成功",
 			"createFolderSuccess": "文件夹创建成功",
 			"deleteFileFailed": "删除文件失败",

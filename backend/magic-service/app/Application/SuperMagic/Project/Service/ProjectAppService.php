@@ -106,6 +106,7 @@ use App\Interfaces\SuperMagic\Project\DTO\Response\ProjectListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Request\GetSidebarTopicsRequestDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\SidebarTopicListResponseDTO;
 use App\Interfaces\SuperMagic\Topic\DTO\Response\TopicItemDTO;
+use Closure;
 use DirectoryIterator;
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Amqp\Producer;
@@ -1437,7 +1438,7 @@ class ProjectAppService extends AbstractAppService
 
         try {
             // Call file domain service to handle file migration
-            $dataIsolation = DataIsolation::simpleMake($event->getOrganizationCode(), $event->getUserId());
+            $dataIsolation = $this->createContactDataIsolationByUser($event->getOrganizationCode(), $event->getUserId());
 
             $sourceProjectEntity = $this->projectDomainService->getProjectNotUserId($event->getSourceProjectId());
 
@@ -1445,7 +1446,7 @@ class ProjectAppService extends AbstractAppService
 
             $forkProjectRecordEntity = $this->projectDomainService->getForkProjectRecordById($event->getForkRecordId());
 
-            $sourceToForkFileIdMap = $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $event->getFileIds());
+            $sourceToForkFileIdMap = $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $this->createContactDataIsolationByUser($forkProjectEntity->getUserOrganizationCode(), $forkProjectEntity->getUserId()), $event->getFileIds());
             if (! empty($sourceToForkFileIdMap)) {
                 $this->audioProjectDomainService->updateForkedAudioFileIdFromMigrationMap(
                     $sourceProjectEntity->getId(),
@@ -1991,10 +1992,16 @@ class ProjectAppService extends AbstractAppService
     // ========================================
     // Agent Project Methods
     // ========================================
+    /**
+     * Prepare conversation identities before opening the business transaction.
+     * @param null|Closure(ProjectEntity): void $beforeCommit bind the owning resource atomically with its project
+     */
     public function createAgentProject(
         RequestContext $requestContext,
         CreateAgentProjectRequestDTO $requestDTO,
-        ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT
+        ProjectMode $projectMode = ProjectMode::CUSTOM_AGENT,
+        bool $setDefaultTopic = true,
+        ?Closure $beforeCommit = null
     ) {
         $this->logger->info('Starting agent project creation');
 
@@ -2051,7 +2058,13 @@ class ProjectAppService extends AbstractAppService
                 $requestDTO->getInitTemplateFiles()
             );
 
-            $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
+            // Resource creation/binding shares this transaction; no event escapes a failed binding.
+            $beforeCommit?->__invoke($projectEntity);
+
+            // A background skill draft must not redirect the conversation that requested it.
+            if ($setDefaultTopic) {
+                $this->chatAppService->setMagicChatDefaultTopic($pendingDefault);
+            }
             Db::commit();
             $transactionOpen = false;
 

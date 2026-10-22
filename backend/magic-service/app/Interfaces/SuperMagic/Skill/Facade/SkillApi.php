@@ -7,15 +7,14 @@ declare(strict_types=1);
 
 namespace App\Interfaces\SuperMagic\Skill\Facade;
 
-use App\Application\SuperMagic\Project\DTO\Request\CreateAgentProjectRequestDTO;
-use App\Application\SuperMagic\Project\Service\ProjectAppService;
+use App\Application\SuperMagic\Common\Transfer\ResourceTransferAppService;
 use App\Application\SuperMagic\Skill\Service\SkillAppService;
-use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillListScope;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Infrastructure\Core\ValueObject\Page;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\SuperMagic\Common\DTO\Request\TransferResourceRequestDTO;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use App\Interfaces\SuperMagic\Skill\Assembler\SkillAssembler;
 use App\Interfaces\SuperMagic\Skill\DTO\Request\AddSkillFromStoreRequestDTO;
@@ -30,20 +29,30 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillDetailResponseDTO;
 use App\Interfaces\SuperMagic\Skill\DTO\Response\SkillListResponseDTO;
 use App\Interfaces\SuperMagic\Skill\FormRequest\SkillQueryFormRequest;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
+use Hyperf\Di\Annotation\Inject;
 use Hyperf\HttpServer\Contract\RequestInterface;
-use RuntimeException;
-
-use function Hyperf\Support\retry;
 
 #[ApiResponse('low_code')]
 class SkillApi extends AbstractApi
 {
+    #[Inject]
+    protected ResourceTransferAppService $resourceTransferAppService;
+
     public function __construct(
         protected RequestInterface $request,
         protected SkillAppService $userSkillAppService,
-        private readonly ProjectAppService $projectAppService,
     ) {
         parent::__construct($request);
+    }
+
+    public function transfer(string $code): array
+    {
+        return $this->resourceTransferAppService->transfer(
+            $this->getAuthorization(),
+            $code,
+            false,
+            TransferResourceRequestDTO::fromRequest($this->request)
+        );
     }
 
     /**
@@ -189,7 +198,8 @@ class SkillApi extends AbstractApi
             pageSize: $page->getPageNum(),
             total: $result['total'],
             creatorUserMap: $result['creator_user_map'] ?? [],
-            latestVersionMap: $result['latest_version_map'] ?? []
+            latestVersionMap: $result['latest_version_map'] ?? [],
+            skillOperations: $result['skill_operations'] ?? []
         );
     }
 
@@ -450,7 +460,7 @@ class SkillApi extends AbstractApi
     }
 
     /**
-     * 创建并绑定项目（带重试机制）.
+     * 复用幂等的项目创建与绑定用例.
      *
      * @param RequestContext $requestContext 请求上下文
      * @param string $projectName 项目名称
@@ -459,24 +469,6 @@ class SkillApi extends AbstractApi
      */
     private function createAndBindProject(RequestContext $requestContext, string $projectName, string $skillCode): array
     {
-        return retry(3, function () use ($requestContext, $projectName, $skillCode) {
-            // 创建项目请求DTO
-            $projectRequestDTO = new CreateAgentProjectRequestDTO();
-            $projectRequestDTO->setProjectName($projectName);
-            $projectRequestDTO->setInitTemplateFiles(false);
-
-            // 创建项目
-            $projectResult = $this->projectAppService->createAgentProject($requestContext, $projectRequestDTO, ProjectMode::SKILL_CREATOR);
-
-            $projectId = (int) ($projectResult['project']['id'] ?? 0);
-            if ($projectId <= 0) {
-                throw new RuntimeException('Failed to create project: project ID is invalid');
-            }
-
-            // 绑定项目
-            $this->userSkillAppService->bindProject($requestContext, $skillCode, $projectId);
-
-            return $projectResult;
-        }, 1000); // 重试间隔1秒
+        return $this->userSkillAppService->createAndBindProject($requestContext, $projectName, $skillCode);
     }
 }
