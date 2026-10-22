@@ -1,13 +1,15 @@
-import { Film, Type } from "lucide-react"
+import { Film, Mic, Type } from "lucide-react"
 import { ImageSparkles } from "../../primitives/icons"
 import type { MenuItem } from "./types"
 
-export type CreateElementMenuKind = "text" | "image-generator" | "video-generator"
+export type CreateElementMenuKind =
+	"text" | "image-generator" | "video-generator" | "audio-generator"
 
 interface CreateElementMenuTranslationKeys {
 	text: string
 	imageGenerator: string
 	videoGenerator: string
+	audioGenerator: string
 }
 
 interface CreateElementMenuItemsOptions {
@@ -22,6 +24,7 @@ const DEFAULT_TRANSLATION_KEYS: CreateElementMenuTranslationKeys = {
 	text: "tools.text",
 	imageGenerator: "tools.imageGenerator",
 	videoGenerator: "tools.videoGenerator",
+	audioGenerator: "tools.audioGenerator",
 }
 
 export function getCreateElementMenuItems({
@@ -36,6 +39,7 @@ export function getCreateElementMenuItems({
 		text: fallbacks?.text ?? "文本",
 		imageGenerator: fallbacks?.imageGenerator ?? "图片生成",
 		videoGenerator: fallbacks?.videoGenerator ?? "视频生成",
+		audioGenerator: fallbacks?.audioGenerator ?? "音频生成",
 	}
 
 	return [
@@ -56,6 +60,12 @@ export function getCreateElementMenuItems({
 			label: translate(keys.videoGenerator, labels.videoGenerator),
 			icon: Film,
 			onClick: () => onSelect("video-generator"),
+		},
+		{
+			id: `${idPrefix}-audio-generator`,
+			label: translate(keys.audioGenerator, labels.audioGenerator),
+			icon: Mic,
+			onClick: () => onSelect("audio-generator"),
 		},
 	]
 }

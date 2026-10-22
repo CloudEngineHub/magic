@@ -3,6 +3,12 @@
 	cursor: pointer !important;
 }
 
+/* 空白菜单与子菜单按内容定宽，保留相同的字号、行高和图标尺寸。 */
+.canvas-menu {
+	width: max-content;
+	min-width: 0 !important;
+}
+
 .menu-item-icon {
 	display: inline-flex;
 	flex-shrink: 0;

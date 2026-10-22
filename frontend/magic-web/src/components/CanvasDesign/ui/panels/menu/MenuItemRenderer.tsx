@@ -16,12 +16,14 @@ interface MenuItemRendererProps {
 	menuWidth: number
 	items: MenuItem[]
 	isClickEnabled?: boolean
+	submenuSideOffset?: number
 }
 
 export function MenuItemRenderer({
 	menuWidth,
 	items,
 	isClickEnabled = true,
+	submenuSideOffset,
 }: MenuItemRendererProps) {
 	return (
 		<>
@@ -89,6 +91,7 @@ export function MenuItemRenderer({
 								)}
 							</ContextMenuSubTrigger>
 							<ContextMenuSubContent
+								sideOffset={submenuSideOffset}
 								className={cn(
 									/* Radix 子菜单默认 minWidth 对齐触发项，显式改为按内容收缩 */
 									"w-max min-w-0 max-w-[min(100vw,20rem)]",
@@ -99,6 +102,7 @@ export function MenuItemRenderer({
 									menuWidth={menuWidth}
 									items={option.children}
 									isClickEnabled={isClickEnabled}
+									submenuSideOffset={submenuSideOffset}
 								/>
 							</ContextMenuSubContent>
 						</ContextMenuSub>

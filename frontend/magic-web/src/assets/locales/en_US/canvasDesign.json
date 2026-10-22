@@ -503,6 +503,7 @@
 	},
 	"menu": {
 		"addFrame": "Add Frame",
+		"addNode": "Add node",
 		"addToCurrentConversation": "Add to Current Conversation",
 		"addToNewConversation": "Add to New Topic",
 		"batchDownload": "Batch download",
@@ -511,6 +512,7 @@
 		"copyLoadingDescription": "Preparing media files, please wait...",
 		"copyPng": "Copy as PNG",
 		"copySuccess": "Copy successful",
+		"createAudioGenerator": "Audio generation",
 		"createImageGenerator": "Image Generation",
 		"createText": "Text",
 		"createVideoGenerator": "Video Generation",
@@ -562,6 +564,7 @@
 		"moveUp": "Move Up",
 		"paste": "Paste",
 		"pasteUseShortcutHint": "System files please use Ctrl/Cmd+V to paste",
+		"redo": "Redo",
 		"removeCurrentImageVersion": "Remove current version",
 		"removeElementDescription": "Remove canvas elements only",
 		"removeFrame": "Remove Frame",
@@ -573,6 +576,7 @@
 		"saveToAssets": "Save to Assets",
 		"seedanceCompliance": "Seedance Compliance Check",
 		"show": "Show",
+		"undo": "Undo",
 		"unlock": "Unlock"
 	},
 	"messageHistory": {

@@ -11,6 +11,7 @@ import {
 	ContextMenu,
 	ContextMenuContent,
 	ContextMenuTrigger,
+	ContextMenuLabel,
 } from "../../primitives/shadcn/context-menu"
 import { ElementMenuContext } from "./ElementMenuContext"
 import { getMenuItems } from "./getMenuItems"
@@ -22,7 +23,7 @@ import { useCanvasUI } from "../../../app/providers/CanvasUIProvider"
 import { useCanvasEvent } from "../../../app/hooks/canvas"
 import { useUpdateEffect } from "ahooks"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
-import { ClipboardPaste } from "lucide-react"
+import { ClipboardPaste, Film, Image, Mic, Plus, Redo2, Undo2, Upload } from "lucide-react"
 import { getShortcutDisplay } from "../../../runtime/shared/lib/index"
 import {
 	resolveCanvasDownloadMenuContext,
@@ -39,6 +40,7 @@ import {
 	parseAssetResourcePath,
 	resolveCanvasStorageResourceReference,
 } from "../../../runtime/shared/path/canvasResourcePath"
+import styles from "./index.module.css"
 
 export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	const { children } = props
@@ -420,7 +422,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 	)
 
 	// 获取画布空白区域的菜单项（只有粘贴项），position 用于预计算时传入即将使用的位置
-	const getCanvasMenuItems = useCallback(
+	const getCanvasPasteMenuItems = useCallback(
 		(position?: { x: number; y: number }): MenuItem[] => {
 			if (!canvas || !canvas.permissionManager.can("document.write")) return []
 
@@ -464,6 +466,13 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				return
 			}
 
+			if (kind === "audio-generator") {
+				canvas.toolManager
+					.getAudioGeneratorTool()
+					.createAudioAtCanvasPoint(targetPosition.x, targetPosition.y)
+				return
+			}
+
 			if (kind === "image-generator") {
 				canvas.toolManager
 					.getImageGeneratorTool()
@@ -496,10 +505,93 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 					text: "menu.createText",
 					imageGenerator: "menu.createImageGenerator",
 					videoGenerator: "menu.createVideoGenerator",
+					audioGenerator: "menu.createAudioGenerator",
 				},
 			})
 		},
 		[canvas, canvasMenuPosition, createElementAtCanvasPoint, t],
+	)
+
+	const getCanvasUploadMenuItems = useCallback(
+		(position?: { x: number; y: number }): MenuItem[] => {
+			const targetPosition = position ?? canvasMenuPosition
+			if (!canvas || !targetPosition || !canvas.permissionManager.can("document.write"))
+				return []
+
+			const requestUpload = (mediaType: "image" | "video" | "audio") => {
+				canvas.eventEmitter.emit({
+					type: "ui:upload:request",
+					data: { mediaType, position: targetPosition },
+				})
+			}
+			return [
+				{
+					id: "canvas-upload",
+					label: t("tools.upload", "上传"),
+					icon: Upload,
+					children: [
+						{
+							id: "canvas-upload-image",
+							label: t("tools.uploadImage", "上传图片"),
+							icon: Image,
+							onClick: () => requestUpload("image"),
+						},
+						{
+							id: "canvas-upload-video",
+							label: t("tools.uploadVideo", "上传视频"),
+							icon: Film,
+							onClick: () => requestUpload("video"),
+						},
+						{
+							id: "canvas-upload-audio",
+							label: t("tools.uploadAudio", "上传音频"),
+							icon: Mic,
+							onClick: () => requestUpload("audio"),
+						},
+					],
+				},
+			]
+		},
+		[canvas, canvasMenuPosition, t],
+	)
+
+	const getCanvasMenuItems = useCallback(
+		(position?: { x: number; y: number }): MenuItem[] => {
+			if (!canvas || !canvas.permissionManager.can("document.write")) return []
+			return [
+				...getCanvasUploadMenuItems(position),
+				{
+					id: "canvas-add-node",
+					label: t("menu.addNode", "添加节点"),
+					icon: Plus,
+					children: getCanvasCreateMenuItems(position),
+				},
+				{ type: "separator" },
+				{
+					id: "canvas-undo",
+					label: t("menu.undo", "撤销"),
+					icon: Undo2,
+					shortcut: getShortcutDisplay("edit.undo"),
+					disabled: () => !canvas.userActionRegistry.canExecute("edit.undo"),
+					onClick: () => {
+						void canvas.userActionRegistry.execute("edit.undo")
+					},
+				},
+				{
+					id: "canvas-redo",
+					label: t("menu.redo", "重做"),
+					icon: Redo2,
+					shortcut: getShortcutDisplay("edit.redo"),
+					disabled: () => !canvas.userActionRegistry.canExecute("edit.redo"),
+					onClick: () => {
+						void canvas.userActionRegistry.execute("edit.redo")
+					},
+				},
+				{ type: "separator" },
+				...getCanvasPasteMenuItems(position),
+			]
+		},
+		[canvas, t, getCanvasUploadMenuItems, getCanvasCreateMenuItems, getCanvasPasteMenuItems],
 	)
 
 	// 获取菜单项
@@ -509,7 +601,12 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 
 		// 画布空白区域菜单根据触发方式显示粘贴项或创建项
 		if (isCanvasMenu) {
-			if (isCanvasCreateMenu) return getCanvasCreateMenuItems()
+			if (isCanvasCreateMenu)
+				return [
+					...getCanvasCreateMenuItems(),
+					{ type: "separator" } as const,
+					...getCanvasUploadMenuItems(),
+				]
 			return getCanvasMenuItems()
 		}
 
@@ -537,6 +634,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 		isCanvasMenu,
 		isCanvasCreateMenu,
 		getCanvasCreateMenuItems,
+		getCanvasUploadMenuItems,
 		getCanvasMenuItems,
 		fileInfoEpoch,
 		handleRenameElement,
@@ -647,8 +745,8 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 					/>
 				</ContextMenuTrigger>
 				<ContextMenuContent
-					className="box-border data-[state=closed]:hidden data-[state=closed]:!animate-none data-[state=closed]:!transition-none data-[state=closed]:!duration-0"
-					style={{ width: MENU_WIDTH, minWidth: MENU_WIDTH }}
+					className={`box-border data-[state=closed]:hidden data-[state=closed]:!animate-none data-[state=closed]:!transition-none data-[state=closed]:!duration-0 ${isCanvasMenu ? styles.canvasMenu : ""}`}
+					style={isCanvasMenu ? undefined : { width: MENU_WIDTH, minWidth: MENU_WIDTH }}
 					data-canvas-ui-component
 					onCloseAutoFocus={(event) => {
 						event.preventDefault()
@@ -656,11 +754,20 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 				>
 					{((isCanvasMenu && !!menuItems.length) ||
 						(currentElementId && !!menuItems.length)) && (
-						<MenuItemRenderer
-							menuWidth={MENU_WIDTH}
-							items={menuItems}
-							isClickEnabled={isClickEnabled}
-						/>
+						<>
+							{isCanvasMenu && isCanvasCreateMenu && (
+								<ContextMenuLabel className="text-xs font-normal text-muted-foreground">
+									{t("menu.addNode", "添加节点")}
+								</ContextMenuLabel>
+							)}
+							<MenuItemRenderer
+								menuWidth={MENU_WIDTH}
+								items={menuItems}
+								isClickEnabled={isClickEnabled}
+								// 子菜单以菜单行定位，与主菜单边缘轻微搭接，保持连续层级。
+								submenuSideOffset={isCanvasMenu ? 3 : undefined}
+							/>
+						</>
 					)}
 				</ContextMenuContent>
 			</ContextMenu>
