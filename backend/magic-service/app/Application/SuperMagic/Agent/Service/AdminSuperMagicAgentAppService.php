@@ -318,8 +318,13 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             throw $throwable;
         }
 
-        $agent = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $versionEntity->getCode());
-        $this->container->get(ReviewNotificationAppService::class)->publishAgentApproved($versionEntity, (string) ($agent->getId() ?? ''));
+        try {
+            $agent = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $versionEntity->getCode());
+            $this->container->get(ReviewNotificationAppService::class)->publishAgentApproved($versionEntity, (string) ($agent->getId() ?? ''));
+        } catch (Throwable $throwable) {
+            // Notification delivery must not invalidate the committed approval.
+            $this->logger->warning('Agent approval notification failed', ['version_id' => $id, 'error' => $throwable->getMessage()]);
+        }
 
         AsyncEventUtil::dispatch(new AgentMarketPublishedEvent(
             (string) $publishedMarketId,
@@ -474,7 +479,11 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             throw $throwable;
         }
 
-        $this->container->get(ReviewNotificationAppService::class)->publishAgentApproved($pendingVersion, (string) ($agentEntity->getId() ?? ''));
+        try {
+            $this->container->get(ReviewNotificationAppService::class)->publishAgentApproved($pendingVersion, (string) ($agentEntity->getId() ?? ''));
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Agent approval notification failed', ['version_id' => $pendingVersion->getId(), 'error' => $throwable->getMessage()]);
+        }
 
         if ($publishedMarketId !== null) {
             AsyncEventUtil::dispatch(new AgentMarketPublishedEvent(

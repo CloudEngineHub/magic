@@ -59,4 +59,17 @@ final class DefaultNotificationCatalogStrategy implements NotificationCatalogStr
     {
         return in_array($notificationType, self::NOTIFICATION_TYPES, true);
     }
+
+    public function notificationTypeForEvent(string $eventType, array $payload = []): ?string
+    {
+        return match ($eventType) {
+            'task.finished' => 'task_finished',
+            'task.error' => 'task_failed',
+            'share.project.recipients_added' => 'project_shared',
+            'share.file.recipients_added' => 'file_shared',
+            'review.skill.version_approved' => 'skill_approved',
+            'review.agent.version_approved' => 'agent_approved',
+            default => null,
+        };
+    }
 }

@@ -396,7 +396,12 @@ class AdminSkillAppService extends AbstractSkillAppService
             throw $throwable;
         }
 
-        $this->container->get(ReviewNotificationAppService::class)->publishSkillApproved($versionEntity, (string) ($skillEntity?->getId() ?? ''));
+        try {
+            $this->container->get(ReviewNotificationAppService::class)->publishSkillApproved($versionEntity, (string) ($skillEntity?->getId() ?? ''));
+        } catch (Throwable $throwable) {
+            // Notification delivery must not invalidate the committed approval.
+            $this->logger->warning('Skill approval notification failed', ['version_id' => $id, 'error' => $throwable->getMessage()]);
+        }
     }
 
     /**
@@ -584,8 +589,12 @@ class AdminSkillAppService extends AbstractSkillAppService
         if ($requestDTO->getAction() === ReviewStatus::APPROVED->value) {
             $version = $this->skillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($id);
             if ($version !== null) {
-                $skill = $this->skillDomainService->findSkillByCode($dataIsolation, $version->getCode());
-                $this->container->get(ReviewNotificationAppService::class)->publishSkillApproved($version, (string) ($skill?->getId() ?? ''));
+                try {
+                    $skill = $this->skillDomainService->findSkillByCode($dataIsolation, $version->getCode());
+                    $this->container->get(ReviewNotificationAppService::class)->publishSkillApproved($version, (string) ($skill?->getId() ?? ''));
+                } catch (Throwable $throwable) {
+                    $this->logger->warning('Skill approval notification failed', ['version_id' => $id, 'error' => $throwable->getMessage()]);
+                }
             }
             $market = $version === null ? null : $this->skillMarketDomainService->findStoreSkillBySkillCode($version->getCode());
             if ($market !== null && $market->getId() !== null) {
