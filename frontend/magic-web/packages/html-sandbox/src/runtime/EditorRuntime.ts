@@ -155,6 +155,11 @@ export class EditorRuntime {
 	/**
 	 * Register all handlers
 	 */
+	private clearPPTBuildPreview(): void {
+		this.pptBuildPreview.clear()
+		this.pptBuildMarkers.setSuspended(false)
+	}
+
 	private registerHandlers(): void {
 		// Animation configuration only selects source elements. It must never enable
 		// text editing, element manipulation shortcuts, or the full editor's tools.
@@ -167,7 +172,7 @@ export class EditorRuntime {
 			else if (!this.isEditMode) this.elementSelector.disable()
 			if (!enabled) {
 				this.pptBuildMarkers.destroy()
-				this.pptBuildPreview.clear()
+				this.clearPPTBuildPreview()
 			}
 			this.notifySelectionModeChanged(enabled || this.isEditMode)
 			return { success: true }
@@ -176,14 +181,14 @@ export class EditorRuntime {
 		this.bridge.onCommand("UPDATE_PPT_BUILDS", (payload) => {
 			this.pptBuildManager.updateBuilds((payload as { updates: PPTBuildUpdate[] })?.updates)
 			// A stale preview would show the old step layout.
-			this.pptBuildPreview.clear()
+			this.clearPPTBuildPreview()
 			this.elementSelector.refreshSelection()
 			return { success: true }
 		})
 		this.bridge.onRequest("PREVIEW_PPT_BUILD", (payload) => {
 			const steps = (payload as { steps?: unknown })?.steps
 			if (steps === null) {
-				this.pptBuildPreview.clear()
+				this.clearPPTBuildPreview()
 				return { success: true }
 			}
 			if (typeof steps !== "number" || !Number.isInteger(steps) || steps < 0)
@@ -191,6 +196,8 @@ export class EditorRuntime {
 			if (!this.isEditMode && !this.isPPTBuildMode)
 				throw new Error("PPT_BUILD_EDIT_MODE_REQUIRED")
 			this.pptBuildPreview.show(steps, (payload as { animate?: unknown })?.animate === true)
+			// A preview should look like the presentation, without the authoring overlay.
+			this.pptBuildMarkers.setSuspended(true)
 			return { success: true }
 		})
 		this.bridge.onRequest("SET_PPT_BUILD_MARKERS", (payload) => {
@@ -219,7 +226,7 @@ export class EditorRuntime {
 					this.textStyleManager.startMonitoring()
 				} else {
 					this.pptBuildMarkers.destroy()
-					this.pptBuildPreview.clear()
+					this.clearPPTBuildPreview()
 					this.textStyleManager.stopMonitoring()
 				}
 			},
@@ -548,7 +555,7 @@ export class EditorRuntime {
 	destroy(): void {
 		EditorLogger.info("Destroy editor runtime")
 		this.pptBuildMarkers.destroy()
-		this.pptBuildPreview.clear()
+		this.clearPPTBuildPreview()
 
 		// Remove keyboard shortcut handler
 		if (this.keyboardShortcutHandler) {

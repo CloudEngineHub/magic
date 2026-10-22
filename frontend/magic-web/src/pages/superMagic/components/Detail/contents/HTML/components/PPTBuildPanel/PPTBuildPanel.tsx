@@ -82,17 +82,18 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 		onCommit,
 	)
 	const groups = groupBuildQueue(entries)
-	const locked = disabled || busy || loading || failed
+	const { playing, play, stop } = usePPTBuildPlayPreview(
+		editorRef,
+		groups.map((group) => groupAutoDelay(group.items)),
+	)
+	// While the preview plays the queue is read-only; only stopping it is allowed.
+	const locked = disabled || busy || loading || failed || playing
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
 		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
 	)
 	// Display number of the step the canvas is previewed up to; null shows the full page.
 	const [previewSteps, setPreviewSteps] = useState<number | null>(null)
-	const { playing, play, stop } = usePPTBuildPlayPreview(
-		editorRef,
-		groups.map((group) => groupAutoDelay(group.items)),
-	)
 	const togglePreview = (steps: number) => {
 		if (playing) void stop()
 		const next = previewSteps === steps ? null : steps

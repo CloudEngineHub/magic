@@ -224,4 +224,28 @@ describe("PPT build panel", () => {
 		fireEvent.click(screen.getByTestId("ppt-build-play"))
 		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenLastCalledWith(null))
 	})
+
+	it("is read-only while the preview plays and only offers stopping", async () => {
+		state.selectedElement = { selector: "third" }
+		state.history = { canUndo: true, canRedo: true }
+		const { editor } = setup()
+		await screen.findByText("first")
+		expect(screen.getByRole("button", { name: "ppt.build.addSelected" })).not.toBeDisabled()
+		fireEvent.click(screen.getByTestId("ppt-build-play"))
+		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenCalledWith(0))
+		expect(screen.getByRole("button", { name: "ppt.build.addSelected" })).toBeDisabled()
+		expect(screen.getByTestId("ppt-build-undo")).toBeDisabled()
+		expect(screen.getByTestId("ppt-build-redo")).toBeDisabled()
+		for (const button of screen.getAllByRole("button", { name: "ppt.build.remove" }))
+			expect(button).toBeDisabled()
+		for (const button of screen.getAllByRole("button", { name: "ppt.build.moveUp" }))
+			expect(button).toBeDisabled()
+		expect(screen.getByTestId("ppt-build-play")).not.toBeDisabled()
+		fireEvent.click(screen.getByTestId("ppt-build-play"))
+		await waitFor(() =>
+			expect(
+				screen.getByRole("button", { name: "ppt.build.addSelected" }),
+			).not.toBeDisabled(),
+		)
+	})
 })

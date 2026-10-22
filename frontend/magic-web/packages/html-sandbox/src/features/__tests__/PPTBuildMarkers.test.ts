@@ -93,4 +93,19 @@ describe("PPTBuildMarkers", () => {
 		await nextFrame()
 		expect(labels()).toEqual(["1", "1"])
 	})
+
+	it("can be suspended and resumed without tearing the overlay down", () => {
+		markers.setVisible(true)
+		const host = () => document.querySelector<HTMLElement>(`[${PPT_BUILD_MARKERS_ATTRIBUTE}]`)!
+		markers.setSuspended(true)
+		expect(host().style.visibility).toBe("hidden")
+		markers.setSuspended(false)
+		expect(host().style.visibility).toBe("")
+		// A suspension requested before the overlay exists still applies when it appears.
+		markers.destroy()
+		markers.setSuspended(true)
+		markers.setVisible(true)
+		expect(host().style.visibility).toBe("hidden")
+		markers.setSuspended(false)
+	})
 })

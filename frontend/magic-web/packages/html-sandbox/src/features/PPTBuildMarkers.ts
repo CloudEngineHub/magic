@@ -10,6 +10,13 @@ export class PPTBuildMarkers {
 	private resize: ResizeObserver | null = null
 	private observed = new Set<Element>()
 	private frame: number | null = null
+	private suspended = false
+
+	/** Hides the overlay without tearing it down, e.g. while the slide is previewed as presented. */
+	setSuspended(suspended: boolean): void {
+		this.suspended = suspended
+		if (this.host) this.host.style.visibility = suspended ? "hidden" : ""
+	}
 
 	setVisible(visible: boolean): void {
 		if (!visible) {
@@ -26,6 +33,7 @@ export class PPTBuildMarkers {
 		this.host.style.cssText =
 			"position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;z-index:2147483646;"
 		this.shadow = this.host.attachShadow({ mode: "open" })
+		if (this.suspended) this.host.style.visibility = "hidden"
 		document.documentElement.append(this.host)
 		this.mutations = new MutationObserver((records) => {
 			if (
