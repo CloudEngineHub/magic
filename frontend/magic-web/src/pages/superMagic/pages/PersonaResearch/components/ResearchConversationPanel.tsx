@@ -239,7 +239,11 @@ const ResearchConversationPanel = forwardRef<
 	const renderAttachments = useMemoizedFn<
 		NonNullable<MessageListContextState["renderAttachments"]>
 	>(({ files, className }) => {
-		const deliverables = classifyStudyDeliverables(files, store.studyAttachments)
+		const deliverables = classifyStudyDeliverables(
+			files,
+			store.studyAttachments,
+			store.attachmentById,
+		)
 		if (!deliverables) return null
 		return (
 			<ResearchDeliverables

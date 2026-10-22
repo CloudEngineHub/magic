@@ -210,6 +210,11 @@ export class PersonaResearchStore {
 		return listReportTemplates(this.attachmentList)
 	}
 
+	/** Project files by id, cached until the attachment list changes (never rebuilt per message). */
+	get attachmentById(): ReadonlyMap<string, AttachmentItem> {
+		return new Map(this.attachmentList.map((item) => [String(item.file_id), item]))
+	}
+
 	get studyAttachments(): StudyAttachments | null {
 		const dir = this.studyDir
 		return dir ? collectStudyAttachments(this.attachmentList, dir) : null

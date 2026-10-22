@@ -29,6 +29,10 @@ import type { ResearchConsoleTab } from "./ResearchConsole"
 
 const INVALID_FILE_NAME = /[\\/:*?"<>|\r\n]+/g
 
+/** Message attachments name the file `filename` / `display_filename`; project files use `file_name`. */
+const displayNameOf = (file: AttachmentItem) =>
+	file.file_name || file.display_filename || file.filename || ""
+
 interface ResearchDeliverablesProps {
 	deliverables: StudyDeliverables
 	className?: string
@@ -193,7 +197,7 @@ function ResearchDeliverables({
 
 			{[
 				...documents.map(({ key, file }) => ({ title: documentLabels[key], file })),
-				...others.map((file) => ({ title: file.file_name ?? "", file })),
+				...others.map((file) => ({ title: displayNameOf(file), file })),
 			].map(({ title, file }) => (
 				<DeliverableRow
 					key={String(file.file_id ?? file.relative_file_path)}

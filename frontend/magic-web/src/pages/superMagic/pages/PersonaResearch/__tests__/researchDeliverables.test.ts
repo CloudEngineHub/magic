@@ -80,3 +80,54 @@ describe("persona library files", () => {
 		expect(result?.others.map((item) => item.file_id)).toEqual(["uploads/notes.png"])
 	})
 })
+
+describe("message attachments without a project path", () => {
+	// A finished-task message lists files by `filename` and `file_key` only.
+	const messageFile = (id: string, filename: string): AttachmentItem => ({
+		file_id: id,
+		filename,
+		display_filename: filename,
+	})
+	const library = [
+		file("personas/p_chen_1a2b.json"),
+		file("personas/p_li_3c4d.json"),
+		file("personas/portraits/p_chen_1a2b/0123456789abcdef0123.webp"),
+	]
+	const byId = new Map<string, AttachmentItem>(
+		[...projectFiles, ...library].map((item) => [String(item.file_id), item]),
+	)
+
+	it("resolves persona files by id so they render as people, and hides their portraits", () => {
+		const result = classifyStudyDeliverables(
+			[
+				messageFile("studies/recorder-7f3a/report.html", "report.html"),
+				messageFile("personas/p_chen_1a2b.json", "p_chen_1a2b.json"),
+				messageFile("personas/p_li_3c4d.json", "p_li_3c4d.json"),
+				messageFile(
+					"personas/portraits/p_chen_1a2b/0123456789abcdef0123.webp",
+					"0123456789abcdef0123.webp",
+				),
+			],
+			study,
+			byId,
+		)
+
+		expect(result?.personas.map((item) => personaIdOfFile(item))).toEqual([
+			"p_chen_1a2b",
+			"p_li_3c4d",
+		])
+		expect(result?.others).toEqual([])
+	})
+
+	it("keeps an unknown message file as is", () => {
+		const result = classifyStudyDeliverables(
+			[
+				messageFile("studies/recorder-7f3a/report.html", "report.html"),
+				messageFile("unknown-id", "notes.png"),
+			],
+			study,
+			byId,
+		)
+		expect(result?.others.map((item) => item.filename)).toEqual(["notes.png"])
+	})
+})

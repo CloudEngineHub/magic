@@ -1,6 +1,8 @@
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import { PERSONAS_DIR, getAttachmentPath, type StudyAttachments } from "./researchFiles"
 
+const PERSON_PORTRAITS_DIR = `${PERSONAS_DIR}portraits/`
+
 /** Readable study documents, in reading order. */
 export type StudyDocumentKey = "plan" | "deskResearch"
 
@@ -50,6 +52,7 @@ const sameFile = (a: AttachmentItem, b: AttachmentItem | null | undefined) => {
 export function classifyStudyDeliverables(
 	files: AttachmentItem[],
 	study: StudyAttachments | null,
+	projectFileById?: ReadonlyMap<string, AttachmentItem>,
 ): StudyDeliverables | null {
 	if (!study) return null
 	const result: StudyDeliverables = {
@@ -65,7 +68,11 @@ export function classifyStudyDeliverables(
 		personas: [],
 		others: [],
 	}
-	files.forEach((file) => {
+	files.forEach((messageFile) => {
+		// A message attachment carries only `filename` and `file_key`, no project path. Resolve it to
+		// the project's own record by file id, so persona files and portraits are told apart by path
+		// and the row keeps a readable name. Unknown ids keep the message record.
+		const file = projectFileById?.get(String(messageFile.file_id)) ?? messageFile
 		const is = (candidate: AttachmentItem | null) => sameFile(file, candidate)
 		if (is(study.report)) result.report = file
 		else if (is(study.validation)) result.validation = file
@@ -79,6 +86,8 @@ export function classifyStudyDeliverables(
 		else if (is(study.validationResults)) result.hasValidationResults = true
 		// study.json is the page's own state file; it has nothing to read on its own.
 		else if (is(study.study)) return
+		// Avatar images bound to personas are shown on the persona cards, not as separate files.
+		else if (getAttachmentPath(file).replace(/^\//, "").startsWith(PERSON_PORTRAITS_DIR)) return
 		else if (personaIdOfFile(file)) result.personas.push(file)
 		else result.others.push(file)
 	})
