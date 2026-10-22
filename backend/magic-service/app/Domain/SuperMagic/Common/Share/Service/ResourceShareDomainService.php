@@ -406,6 +406,11 @@ class ResourceShareDomainService
         // share_code 更新规则：
         // - 更新时保持 share_code 不变，确保分享链接固定
         // - share_code = resource_id（固定规则）
+        // 历史记录可能在早期迁移中缺失该字段；在下一次保存时修复，
+        // 确保分享通知和分享详情使用同一个有效访问码。
+        if (trim($shareEntity->getShareCode()) === '') {
+            $shareEntity->setShareCode($resourceId);
+        }
 
         // 更新分享类型（如果提供）
         if (isset($attributes['share_type'])) {
