@@ -17,7 +17,9 @@
   - Margin notes (.margin-note) sit in the same row as the paragraph they support; put the strongest quote first.
   - Image slots (figure[data-image-slot]): fill each with one image or delete the whole figure, following
     report-templates.md "Images". A finished report never contains .image-placeholder.
-  - Write all visible text in the user's language, including the short labels inside the scripts (marked TRANSLATE); set <html lang> accordingly.
+  - Write all visible text in the user's language and set <html lang> to it. The page chrome (top bar label, contents list, buttons, popover) fills itself:
+    the top bar uses the <title>, the contents list is built from the section titles, and the fixed button labels come from the LABELS map in the last script
+    (zh and en built in; add one entry there for another language). Never edit the chrome by hand.
   - Remove a section only when it truly does not apply (for example no focus group was run).
 -->
 <html lang="en" class="scroll-smooth">
@@ -183,48 +185,23 @@
     </style>
 </head>
 <body class="font-sans">
-    <!-- CUSTOMIZE: a short report label (max 15 chars). On narrow screens the contents sit in a menu here. -->
+    <!-- Top bar: the label is the <title> text before " — " (set by the page script); on narrow screens the contents sit in a menu, built from the section titles. -->
     <nav class="top-bar sticky top-0 z-50" aria-label="Report">
         <div class="max-w-6xl mx-auto px-5 h-12 flex items-center gap-3 text-[13px]">
-            <span class="font-bold whitespace-nowrap">Trial Churn</span>
-            <span class="text-muted truncate">AI persona research · Template preview</span>
+            <span class="font-bold truncate" id="topbar-title"></span>
             <details class="toc-mobile relative ml-auto lg:hidden">
-                <summary class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-rule text-muted hover:text-ink"><i class="fa-solid fa-list-ul text-[11px]"></i><span data-label="contents">Contents</span></summary>
-                <div class="toc-panel">
-                    <a href="#summary">Bottom line</a>
-                    <a href="#hypotheses">Hypotheses</a>
-                    <a href="#business">Recommended actions</a>
-                    <a href="#method">Scope and method</a>
-                    <a href="#findings">Findings</a>
-                    <a href="#real-voices">Public voices</a>
-                    <a href="#tensions">Open questions</a>
-                    <a href="#personas">Personas</a>
-                    <a href="#voices">Quotes</a>
-                    <a href="#limitations">Limitations</a>
-                    <a href="#validation">Real-person validation</a>
-                    <a href="#sources">Sources</a>
-                </div>
+                <summary class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-rule text-muted hover:text-ink"><i class="fa-solid fa-list-ul text-[11px]"></i><span data-label="contents"></span></summary>
+                <div class="toc-panel" data-contents-list></div>
             </details>
         </div>
         <div class="progress" id="reading-progress" aria-hidden="true"></div>
     </nav>
 
     <div class="max-w-6xl mx-auto px-5 lg:grid lg:grid-cols-[180px_minmax(0,1fr)] lg:gap-12 py-7 sm:py-10">
-        <!-- Table of contents: one link per section that exists, in page order; keep the labels the same as the section titles -->
-        <aside class="toc hidden lg:block sticky top-20 self-start space-y-0.5">
-            <p class="text-xs text-faint mb-2 tracking-wide">Contents</p>
-            <a href="#summary">Bottom line</a>
-            <a href="#hypotheses">Hypotheses</a>
-            <a href="#business">Recommended actions</a>
-            <a href="#method">Scope and method</a>
-            <a href="#findings">Findings</a>
-            <a href="#real-voices">Public voices</a>
-            <a href="#tensions">Open questions</a>
-            <a href="#personas">Personas</a>
-            <a href="#voices">Quotes</a>
-            <a href="#limitations">Limitations</a>
-            <a href="#validation">Real-person validation</a>
-            <a href="#sources">Sources</a>
+        <!-- Contents: built by the page script from each section's title, so it always matches the sections that exist and their language. -->
+        <aside class="toc hidden lg:block sticky top-20 self-start space-y-0.5" data-contents-from-headings>
+            <p class="text-xs text-faint mb-2 tracking-wide" data-label="contents"></p>
+            <div data-contents-list></div>
         </aside>
 
         <main class="min-w-0 space-y-14">
@@ -512,9 +489,9 @@
         </main>
     </div>
 
-    <!-- Floating helpers; their labels are filled in by the page script below. -->
-    <button type="button" id="back-to-text" class="float-btn"><i class="fa-solid fa-arrow-up-long text-[11px]"></i><span data-label="back-to-text">Back to the text</span></button>
-    <button type="button" id="back-to-top" class="float-btn" aria-label="Back to top"><i class="fa-solid fa-chevron-up text-xs"></i></button>
+    <!-- Floating helpers; their labels come from the LABELS map in the page script below. -->
+    <button type="button" id="back-to-text" class="float-btn"><i class="fa-solid fa-arrow-up-long text-[11px]"></i><span data-label="back-to-text"></span></button>
+    <button type="button" id="back-to-top" class="float-btn"><i class="fa-solid fa-chevron-up text-xs"></i></button>
 
     <!-- Persona portraits and colours, drawn from data-persona; same templates as the research app — keep this block unchanged -->
     <script>
@@ -550,10 +527,10 @@
     </script>
 
     <!-- Citation popover for [S#] sources and [Q#] quotes. Works with the mouse, the keyboard (focus) and touch; Escape closes it.
-         Keep the logic; translate the two strings marked TRANSLATE. -->
+         Keep the logic; its two labels come from window.reportLabels (defined in the page script below). -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            var LABELS = { open: 'Open', jump: 'Jump to source' }; // TRANSLATE
+            var LABELS = window.reportLabels || { open: 'Open', jump: 'Jump to source' };
             var tip = document.createElement('div');
             tip.className = 'citation-tooltip';
             tip.id = 'citation-tooltip';
@@ -626,10 +603,31 @@
     </script>
 
     <!-- Page behaviour: reading progress, the section in view, heading links, return-to-text after a citation jump,
-         back to top, the narrow-screen contents menu, and open details when printing. Translate the strings marked TRANSLATE. -->
+         back to top, the narrow-screen contents menu, and open details when printing. All chrome text comes from LABELS; add one entry for another language. -->
     <script>
         (function () {
-            var LABELS = { contents: 'Contents', backToText: 'Back to the text', backToTop: 'Back to top', copyLink: 'Link to this section' }; // TRANSLATE
+            // Fixed labels by <html lang> prefix; an unknown language falls back to English.
+            var ALL_LABELS = {
+                en: { contents: 'Contents', backToText: 'Back to the text', backToTop: 'Back to top', copyLink: 'Link to this section', open: 'Open', jump: 'Jump to source' },
+                zh: { contents: '目录', backToText: '返回正文', backToTop: '回到顶部', copyLink: '链接到本节', open: '打开', jump: '跳转到来源' }
+            };
+            var LABELS = ALL_LABELS[(document.documentElement.lang || 'en').slice(0, 2).toLowerCase()] || ALL_LABELS.en;
+            window.reportLabels = LABELS; // read by the citation popover script
+
+            // Top bar label: the <title> text before " — ", so no separate label has to be written.
+            var topbar = document.getElementById('topbar-title');
+            if (topbar) topbar.textContent = document.title.split(' — ')[0].split(' - ')[0];
+
+            // Contents (desktop list and narrow-screen menu) from the section titles, before heading links are added.
+            var sections = Array.prototype.slice.call(document.querySelectorAll('main section[id]')).filter(function (sec) { return sec.querySelector('h2.section-title'); });
+            document.querySelectorAll('[data-contents-list]').forEach(function (box) {
+                sections.forEach(function (sec) {
+                    var a = document.createElement('a');
+                    a.href = '#' + sec.id;
+                    a.textContent = sec.querySelector('h2.section-title').textContent.trim();
+                    box.appendChild(a);
+                });
+            });
             var progress = document.getElementById('reading-progress');
             var toTop = document.getElementById('back-to-top');
             var toText = document.getElementById('back-to-text');
@@ -638,6 +636,7 @@
             document.querySelectorAll('[data-label="contents"]').forEach(function (el) { el.textContent = LABELS.contents; });
             document.querySelectorAll('[data-label="back-to-text"]').forEach(function (el) { el.textContent = LABELS.backToText; });
             toTop.setAttribute('aria-label', LABELS.backToTop);
+            document.querySelectorAll('[data-label="back-to-top"]').forEach(function (el) { el.textContent = LABELS.backToTop; });
 
             // Each section title gets a link that can be copied.
             document.querySelectorAll('section[id] > h2.section-title').forEach(function (h) {

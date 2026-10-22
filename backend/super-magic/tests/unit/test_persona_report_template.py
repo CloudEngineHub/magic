@@ -17,6 +17,7 @@ class ReportDocument(HTMLParser):
         self.citations = []
         self.before_summary = []
         self.in_contents = False
+        self.generated_contents = False
         self.summary_seen = False
         self.current_section = None
         self.evidence_bars = []
@@ -42,6 +43,7 @@ class ReportDocument(HTMLParser):
             self.before_summary.append((tag, attrs))
         if tag == "aside" and "toc" in classes:
             self.in_contents = True
+            self.generated_contents = "data-contents-from-headings" in attrs
         if tag == "a" and self.in_contents:
             self.contents.append(attrs.get("href", "").removeprefix("#"))
         if tag == "a" and "citation-ref" in classes:
@@ -73,7 +75,16 @@ class PersonaReportTemplateTest(unittest.TestCase):
             "tensions", "personas", "voices", "limitations", "validation", "sources",
         ]
         self.assertEqual(self.document.sections, expected)
-        self.assertEqual(self.document.contents, expected)
+        # 目录由页面脚本按各章节的标题生成，模板里不再手写一份会漏译的链接清单。
+        self.assertTrue(self.document.generated_contents)
+        self.assertEqual(self.document.contents, [])
+
+    def test_page_chrome_has_no_hand_written_labels(self):
+        text = TEMPLATE.read_text(encoding="utf-8")
+        for sample in ("Trial Churn", "Template preview", "TRANSLATE"):
+            self.assertNotIn(sample, text.split("<main")[0].split("<body")[1], sample)
+        self.assertIn("window.reportLabels", text)
+        self.assertIn("data-contents-list", text)
 
     def test_decision_precedes_decorative_and_method_content(self):
         for tag, attrs in self.document.before_summary:
