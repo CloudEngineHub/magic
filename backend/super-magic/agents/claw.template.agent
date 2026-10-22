@@ -12,8 +12,8 @@ tools:
   - grep_search
   - write_file
   - edit_file
-  - edit_file_range
-  - find_file_range
+  - edit_file_ranges
+  - find_file_ranges
   - multi_edit_file
   - delete_files
   - shell_exec

@@ -76,7 +76,7 @@ class ToolResultContentMode(StrEnum):
     INSTRUCTION = "instruction"
 
 
-_FILE_EDIT_TOOL_NAMES = frozenset({"edit_file", "multi_edit_file", "edit_file_range"})
+_FILE_EDIT_TOOL_NAMES = frozenset({"edit_file", "multi_edit_file", "edit_file_ranges"})
 
 
 class BaseTool(Generic[T], ABC):

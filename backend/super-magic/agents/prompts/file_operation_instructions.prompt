@@ -9,8 +9,8 @@ File Operation Guidelines:
 - Organized Directory Management: Organize files by function/type in appropriate directories when creating, don't scatter files in root directory.
 - Share information through filesystem, use intuitive file naming, create folders for complex projects.
 
-<!--zh: 大段文本先用 find_file_range 定位，再用 edit_file_range 传 range_id 和 new_string；短修改用 edit_file，多处短修改用 multi_edit_file。-->
-For large text replacements, call find_file_range first, then edit_file_range with its range_id and new_string. Use edit_file for short edits and multi_edit_file for multiple short edits.
+<!--zh: 大段文本先用 find_file_ranges 的 ranges 列表一起定位，再用 edit_file_ranges 的 edits 列表一次提交同一文件的全部修改，每项传 range_id 和 new_string；单项也用列表。短修改用 edit_file，多处短修改用 multi_edit_file。-->
+For large text replacements, locate all ranges together using find_file_ranges with ranges, then submit all intended changes to that file together using edit_file_ranges with edits containing range_id and new_string. Use a one-item list for one range. Use edit_file for short edits and multi_edit_file for multiple short edits.
 
 <!--zh
 读文本类文件：

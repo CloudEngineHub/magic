@@ -263,7 +263,7 @@ When editing the same file multiple times:
                     error_msg += "SOLUTIONS:\n"
                     error_msg += "1. Read current file content around the target snippet to check if it has been modified, then retry with latest text\n"
                     error_msg += "2. Check character-by-character alignment (whitespace, indentation, punctuation, newlines)\n"
-                    error_msg += "3. For a large replacement, call find_file_range first, then edit_file_range with its range_id\n"
+                    error_msg += "3. For large replacements, call find_file_ranges first, then submit its range IDs together in the edit_file_ranges edits list\n"
                     error_msg += "4. As a last resort, use shell commands or a Python script for precise edits"
 
                 # Check for excessive escaping and add warning at the end
@@ -287,8 +287,8 @@ When editing the same file multiple times:
                 if replacement_id:
                     error_msg += (
                         "\n\nGenerated replacement text was saved as replacement_id="
-                        f"{replacement_id}. After calling find_file_range again, pass that replacement_id "
-                        "to edit_file_range instead of sending the long text again."
+                        f"{replacement_id}. After calling find_file_ranges again, pass that replacement_id "
+                        "in an edit_file_ranges edits item with the new range_id, instead of sending the long text again."
                     )
 
                 return ToolResult.error(
@@ -320,8 +320,8 @@ When editing the same file multiple times:
                 if replacement_id:
                     error_msg += (
                         "\n\nGenerated replacement text was saved as replacement_id="
-                        f"{replacement_id}. After calling find_file_range again, pass that replacement_id "
-                        "to edit_file_range instead of sending the long text again."
+                        f"{replacement_id}. After calling find_file_ranges again, pass that replacement_id "
+                        "in an edit_file_ranges edits item with the new range_id, instead of sending the long text again."
                     )
 
                 return ToolResult.error(
@@ -346,8 +346,8 @@ When editing the same file multiple times:
                 if replacement_id:
                     error_message += (
                         "\n\nGenerated replacement text was saved as replacement_id="
-                        f"{replacement_id}. After calling find_file_range again, pass that replacement_id "
-                        "to edit_file_range instead of sending the long text again."
+                        f"{replacement_id}. After calling find_file_ranges again, pass that replacement_id "
+                        "in an edit_file_ranges edits item with the new range_id, instead of sending the long text again."
                     )
                 return ToolResult.error(
                     error_message,
@@ -439,7 +439,7 @@ When editing the same file multiple times:
                 error="The edit_file tool encountered an unexpected error. "
                       "First re-read current file content around the target snippet to check if it has been modified, then retry with latest text. "
                       "Then check exact character alignment (whitespace/punctuation/newlines). "
-                      "For a large replacement, call find_file_range and then edit_file_range. "
+                      "For a large replacement, call find_file_ranges and then edit_file_ranges. "
                       "As a last resort, use shell commands (e.g., sed/awk; avoid piping sed to cat -A for multi-byte characters) "
                       "or write a Python script."
             )
