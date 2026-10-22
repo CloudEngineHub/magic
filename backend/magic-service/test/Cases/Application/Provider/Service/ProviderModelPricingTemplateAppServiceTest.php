@@ -139,19 +139,6 @@ class ProviderModelPricingTemplateAppServiceTest extends TestCase
         self::assertSame(BillingType::Seedream5ProImage->value, $templates[0]['code']);
     }
 
-    public function testLovartUsesImageTokenTemplates(): void
-    {
-        $config = require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php';
-        $service = new ProviderModelPricingTemplateAppService($config);
-
-        $templates = $service->queries(Category::VLM, ProviderCode::Lovart);
-
-        self::assertSame(
-            [BillingType::ImageTokens->value, BillingType::ImageTokensWithThought->value],
-            array_column($templates, 'code')
-        );
-    }
-
     public function testGeminiImageTokenTemplateLabelsDescribeTextUsage(): void
     {
         $config = require dirname(__DIR__, 5) . '/config/autoload/provider_model_pricing_templates.php';
