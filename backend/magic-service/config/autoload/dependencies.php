@@ -237,6 +237,7 @@ use App\Domain\Permission\Repository\Persistence\OperationPermissionRepository;
 use App\Domain\Permission\Repository\Persistence\ResourceVisibilityRepository;
 use App\Domain\Provider\Repository\Facade\AiAbilityRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\MagicProviderAndModelsInterface;
+use App\Domain\Provider\Repository\Facade\ModelIdentifierMappingRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderConfigRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderModelConfigVersionRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderModelRepositoryInterface;
@@ -244,6 +245,7 @@ use App\Domain\Provider\Repository\Facade\ProviderOriginalModelRepositoryInterfa
 use App\Domain\Provider\Repository\Facade\ProviderRepositoryInterface;
 use App\Domain\Provider\Repository\Persistence\AiAbilityRepository;
 use App\Domain\Provider\Repository\Persistence\MagicProviderAndModelsRepository;
+use App\Domain\Provider\Repository\Persistence\ModelIdentifierMappingRepository;
 use App\Domain\Provider\Repository\Persistence\ProviderConfigRepository;
 use App\Domain\Provider\Repository\Persistence\ProviderModelConfigVersionRepository;
 use App\Domain\Provider\Repository\Persistence\ProviderModelRepository;
@@ -479,6 +481,7 @@ $dependencies = [
     ProviderModelConfigVersionRepositoryInterface::class => ProviderModelConfigVersionRepository::class,
     ProviderOriginalModelRepositoryInterface::class => ProviderOriginalModelRepository::class,
     MagicProviderAndModelsInterface::class => MagicProviderAndModelsRepository::class,
+    ModelIdentifierMappingRepositoryInterface::class => ModelIdentifierMappingRepository::class,
     AiAbilityRepositoryInterface::class => AiAbilityRepository::class,
     // magicbase
     MagicBaseTableRepositoryInterface::class => MagicBaseTableRepository::class,
