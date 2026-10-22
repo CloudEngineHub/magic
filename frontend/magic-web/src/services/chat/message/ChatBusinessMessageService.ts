@@ -18,6 +18,8 @@ import IntermediateMessageApplyService from "./MessageApplyServices/Intermediate
 import { WorkspaceStateCache } from "@/pages/superMagic/utils/superMagicCache"
 import { shouldSuppressRecordSummaryNotification } from "@/services/audioRecordings"
 import { logger as Logger } from "@/infrastructure/logger"
+import type { NotificationUpdateMessage } from "@/apis/modules/notifications"
+import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 const logger = Logger.createLogger("ChatBusinessMessageService")
 
@@ -144,7 +146,12 @@ class ChatBusinessMessageService {
 				StreamMessageApplyServiceV2.apply(message.payload as StreamResponseV2)
 				break
 			case EventType.Intermediate:
-				this.handleIntermediateMessage(message.payload as RecordSummaryResultMessage)
+				this.handleIntermediateMessage(
+					message.payload as
+						| RecordSummaryResultMessage
+						| NotificationUpdateMessage
+						| IntermediateResponse,
+				)
 				break
 			default:
 				this.handleSeqRecordMessage(message.payload as SeqRecord<CMessage>)
@@ -156,8 +163,13 @@ class ChatBusinessMessageService {
 	 * Handle intermediate message (including record summary results)
 	 */
 	private handleIntermediateMessage(
-		messagePayload: RecordSummaryResultMessage | IntermediateResponse,
+		messagePayload:
+			RecordSummaryResultMessage | NotificationUpdateMessage | IntermediateResponse,
 	) {
+		if (messagePayload?.type === "notification_update") {
+			pubsub.publish(PubSubEvents.Notification_Updated, messagePayload.notification_update)
+			return
+		}
 		// Check if it's a record summary result message
 		if (
 			typeof messagePayload === "object" &&

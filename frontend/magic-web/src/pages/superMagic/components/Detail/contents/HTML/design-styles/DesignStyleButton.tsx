@@ -35,7 +35,6 @@ export default function DesignStyleButton({
 	const [open, setOpen] = useState(false)
 	const submittedRequestRef = useRef<string | null>(null)
 
-
 	const canApply = Boolean(fileInfo.fileId && fileInfo.fileName && fileInfo.filePath) && !disabled
 
 	const handleOpenChange = useCallback((nextOpen: boolean) => {
