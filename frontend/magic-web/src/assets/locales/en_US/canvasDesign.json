@@ -142,14 +142,29 @@
 		"unsupportedReferenceImageType": "Only image files can be added as reference images"
 	},
 	"elementBottomToolbar": {
+		"closeVersionPanel": "Close versions panel",
+		"collapseVersions": "Collapse versions",
 		"deleteVersion": "Delete version",
+		"deleteVersionNumber": "Delete V{{number}}",
 		"discardedDraft": "Discarded draft",
 		"label": "Element bottom toolbar",
 		"mainVersion": "Main version",
 		"nextVersion": "Next version",
 		"previousVersion": "Previous version",
 		"setMainVersion": "Set as main version",
-		"versionCount": "{{current}}/{{total}}"
+		"setMainVersionNumber": "Set V{{number}} as main version",
+		"switchToVersion": "Switch to V{{number}}",
+		"versionAudioLoadFailed": "{{name}} failed to load",
+		"versionAudioLoading": "Loading {{name}}",
+		"versionCount": "{{current}}/{{total}}",
+		"versionPanelTitle": "View versions",
+		"versionStatusEmpty": "No content",
+		"versionStatusGenerating": "Generating",
+		"versionStatusLoading": "Loading",
+		"versionStatusReplacing": "Replacing",
+		"versionStatusTerminated": "Terminated",
+		"versionStatusUploading": "Uploading",
+		"viewVersions": "View versions"
 	},
 	"elementConflict": {
 		"deleteElement": "Delete element",
@@ -628,7 +643,6 @@
 		"imageTitle": "Image title (element name)",
 		"main": "Main",
 		"nameUndetermined": "Name not yet available",
-		"newFileName": "New file",
 		"notGenerated": "Rename the file after generation",
 		"originalFileName": "Original",
 		"pendingEditableLater": "Editable after generation",
@@ -636,7 +650,6 @@
 		"renamed": "File renamed",
 		"retry": "Retry remaining changes",
 		"save": "Confirm rename",
-		"savedFileName": "Saved file",
 		"saving": "Saving",
 		"sharedFile": "Shared file",
 		"sharedTitle": "Shared across versions; file names are separate",
@@ -654,7 +667,6 @@
 		"unchanged": "No changes",
 		"uniform": "Apply to files below",
 		"uniformHint": "Click “Apply to files below” to fill in version names. Files change only after confirmation.",
-		"version": "V{{number}}",
 		"versionFiles": "Version filenames"
 	},
 	"seedanceCompliance": {

@@ -136,6 +136,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 	}
 
 	public applyFileInfoMetadata(entry: TEntry, fileInfo: GetFileInfoResponse): void {
+		const previousResourceVersion = entry.resourceVersion
 		entry.sourceUrl = fileInfo.src
 		entry.expiresAt = parseExpiresAt(fileInfo.expires_at)
 		entry.source = fileInfo.source
@@ -143,14 +144,29 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		entry.resourceVersion = fileInfo.resource_version ?? null
 		entry.sourceUpdatedAt = fileInfo.updated_at ?? null
 		entry.contentLength = fileInfo.content_length ?? null
+		if (
+			previousResourceVersion &&
+			entry.resourceVersion &&
+			previousResourceVersion !== entry.resourceVersion
+		) {
+			entry.lastBackgroundRefreshAt = undefined
+		}
 	}
 
 	public applyResourceMeta(entry: TEntry, meta: CanvasFileResourceMeta): void {
+		const previousResourceVersion = entry.resourceVersion
 		entry.source = meta.source
 		entry.fileName = meta.fileName
 		entry.resourceVersion = meta.resourceVersion ?? null
 		entry.sourceUpdatedAt = meta.updatedAt ?? null
 		entry.contentLength = meta.contentLength ?? null
+		if (
+			previousResourceVersion &&
+			entry.resourceVersion &&
+			previousResourceVersion !== entry.resourceVersion
+		) {
+			entry.lastBackgroundRefreshAt = undefined
+		}
 	}
 
 	public isSameResourceVersion(
@@ -459,20 +475,15 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			this.options.incrementDiagnostic("backgroundRefreshDedupedCount")
 			return
 		}
-		const shouldCooldownFallbackRefresh =
-			typeof this.options.canvas.magicConfigManager.config?.methods?.getFileResourceMeta !==
-			"function"
 		const now = Date.now()
-		if (shouldCooldownFallbackRefresh) {
-			if (
-				entry.lastBackgroundRefreshAt !== undefined &&
-				now - entry.lastBackgroundRefreshAt < BACKGROUND_METADATA_REFRESH_COOLDOWN_MS
-			) {
-				this.options.incrementDiagnostic("backgroundRefreshSkippedCount")
-				return
-			}
-			entry.lastBackgroundRefreshAt = now
+		if (
+			entry.lastBackgroundRefreshAt !== undefined &&
+			now - entry.lastBackgroundRefreshAt < BACKGROUND_METADATA_REFRESH_COOLDOWN_MS
+		) {
+			this.options.incrementDiagnostic("backgroundRefreshSkippedCount")
+			return
 		}
+		entry.lastBackgroundRefreshAt = now
 
 		this.options.incrementDiagnostic("backgroundRefreshQueuedCount")
 		entry.backgroundRefreshPromise = this.refreshResourceMetadata(path, resourceIdentity, entry)
@@ -499,10 +510,15 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 		}
 		const methods = this.options.canvas.magicConfigManager.config?.methods
 		const getFileInfo = methods?.getFileInfo
-		if (!getFileInfo) return
+		if (!getFileInfo) {
+			// A host without metadata support must not consume the full cooldown.
+			entry.lastBackgroundRefreshAt = undefined
+			return
+		}
 		const refreshToken = Symbol(`media-metadata-refresh:${path}`)
 		entry.exchangeToken = refreshToken
 		const isCurrentRefresh = () => entry.exchangeToken === refreshToken
+		let refreshSucceeded = false
 
 		try {
 			const getFileResourceMeta = methods?.getFileResourceMeta
@@ -518,6 +534,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					this.options.incrementDiagnostic("metadataDeletedCount")
 					this.options.setFailureReason(entry, "not-found")
 					this.options.onResourceDeleted(resourceIdentity, entry)
+					refreshSucceeded = true
 					return
 				}
 
@@ -532,6 +549,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					if (!currentVersion) {
 						this.options.onResourceMetadataHydrated?.(resourceIdentity, entry)
 					}
+					refreshSucceeded = true
 					return
 				}
 
@@ -539,6 +557,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 					meta.status === "exists" ? "metadataChangedCount" : "metadataUnknownCount",
 				)
 				await this.options.refreshResource(path)
+				refreshSucceeded = true
 				return
 			}
 
@@ -580,9 +599,11 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 						registerOfflineResource: true,
 					},
 				)
+				refreshSucceeded = true
 				return
 			}
 			await this.options.refreshResource(path)
+			refreshSucceeded = true
 		} catch (error) {
 			if (!isCurrentRefresh()) return
 			const reason = getFailureReasonFromGetFileInfoError(error)
@@ -592,6 +613,7 @@ export class MediaResourceUrlLifecycle<TEntry extends MediaResourceUrlEntry> {
 			this.options.onResourceDeleted(resourceIdentity, entry)
 		} finally {
 			if (isCurrentRefresh()) {
+				if (!refreshSucceeded) entry.lastBackgroundRefreshAt = undefined
 				entry.exchangeToken = undefined
 			}
 		}

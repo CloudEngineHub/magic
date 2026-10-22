@@ -81,6 +81,9 @@ export class VideoRenderer {
 	private renderToken = 0
 	private forceLoadingOverlay = false
 	private touchControlsHideTimer?: ReturnType<typeof setTimeout>
+	private renderVisibilityEnabled = true
+	private playerRafCancel?: () => void
+	private playerRafStart?: () => void
 
 	public destroy(): void {
 		this.clearPlayerUiSubscription()
@@ -107,6 +110,20 @@ export class VideoRenderer {
 		this.playback.detach()
 		this.previewVideo = undefined
 		this.forceLoadingOverlay = false
+	}
+
+	/**
+	 * Visibility culling hides the Konva node but does not stop an already scheduled player RAF.
+	 * Keep the playback resource intact while cancelling only the render loop for far elements.
+	 */
+	public setRenderVisibility(enabled: boolean): void {
+		if (this.renderVisibilityEnabled === enabled) return
+		this.renderVisibilityEnabled = enabled
+		if (enabled) {
+			this.playerRafStart?.()
+		} else {
+			this.playerRafCancel?.()
+		}
 	}
 
 	private clearPlayerUiSubscription(): void {
@@ -550,6 +567,10 @@ export class VideoRenderer {
 		}
 		const periodMs = VIDEO_CONFIG.BUFFER_SPINNER_PERIOD_MS
 		const rafLoop = (ts: number) => {
+			if (!this.renderVisibilityEnabled) {
+				stopRaf()
+				return
+			}
 			const snap = this.mediaState.getSnapshot()
 			const showLoadingOverlay = snap.isBuffering || this.forceLoadingOverlay
 			if (showLoadingOverlay && this.playerRefs?.bufferingSpinnerRoot) {
@@ -566,12 +587,25 @@ export class VideoRenderer {
 
 			draw()
 			const v = this.previewVideo
-			if (this.forceLoadingOverlay || (v && !v.paused && !v.ended)) {
+			if (
+				this.renderVisibilityEnabled &&
+				(this.forceLoadingOverlay || (v && !v.paused && !v.ended))
+			) {
 				rafId = requestAnimationFrame(rafLoop)
 			} else {
 				rafId = 0
 			}
 		}
+		const startRaf = () => {
+			if (!this.renderVisibilityEnabled || rafId !== 0) return
+			const snap = this.mediaState.getSnapshot()
+			const playing = !snap.paused && !snap.ended
+			if (this.forceLoadingOverlay || playing) {
+				rafId = requestAnimationFrame(rafLoop)
+			}
+		}
+		this.playerRafCancel = stopRaf
+		this.playerRafStart = startRaf
 
 		let unsubMedia: (() => void) | undefined
 		if (video) {
@@ -579,10 +613,8 @@ export class VideoRenderer {
 				this.updatePlayerUi(snapshot)
 
 				const playing = !snapshot.paused && !snapshot.ended
-				if (this.forceLoadingOverlay || playing) {
-					if (rafId === 0) {
-						rafId = requestAnimationFrame(rafLoop)
-					}
+				if (this.renderVisibilityEnabled && (this.forceLoadingOverlay || playing)) {
+					startRaf()
 				} else {
 					stopRaf()
 				}
@@ -600,12 +632,14 @@ export class VideoRenderer {
 			})
 		}
 
-		if (this.forceLoadingOverlay && rafId === 0) {
-			rafId = requestAnimationFrame(rafLoop)
+		if (this.renderVisibilityEnabled && this.forceLoadingOverlay && rafId === 0) {
+			startRaf()
 		}
 
 		this.playerUnsub = () => {
 			stopRaf()
+			if (this.playerRafCancel === stopRaf) this.playerRafCancel = undefined
+			if (this.playerRafStart === startRaf) this.playerRafStart = undefined
 			unsubMedia?.()
 			video?.removeEventListener("loadeddata", nudgeLayerDraw)
 			video?.removeEventListener("seeked", nudgeLayerDraw)

@@ -103,6 +103,34 @@ function showAttachments(content: string, paths: string[]) {
 describe("AttachmentSection file reference deduplication", () => {
 	beforeEach(() => vi.clearAllMocks())
 
+	it("prefers completed task attachments over previous-message file references", () => {
+		state.content = "[Generated](./Canvas/images/generated.jpg)"
+		state.files = [
+			{
+				file_id: "generated-file",
+				relative_file_path: "Canvas/images/generated.jpg",
+			},
+		] as AttachmentItem[]
+
+		render(
+			<AttachmentSection
+				node={{
+					role: "tool",
+					status: "finished",
+					tool: { name: "finish_task" },
+					attachments: [
+						{ file_id: "generated-file", file_name: "generated.jpg" },
+						{ file_id: "config", file_name: "magic.project.js" },
+					],
+				}}
+				prevSuperMessageId="previous-message"
+			/>,
+		)
+
+		expect(screen.getByTestId("fallback-attachments")).toBeInTheDocument()
+		expect(screen.queryByTestId("open-file-by-path")).not.toBeInTheDocument()
+	})
+
 	it("looks up each repeated reference once and counts unique files in first-appearance order", () => {
 		showAttachments(
 			"[B](./docs/b.md) [A](./docs/a.md) [B again](./docs/b.md) [A again](./docs/a.md) [B third](./docs/b.md)",

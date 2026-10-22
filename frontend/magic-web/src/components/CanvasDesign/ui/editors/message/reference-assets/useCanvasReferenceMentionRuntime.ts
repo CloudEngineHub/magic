@@ -136,6 +136,7 @@ export function useCanvasReferenceMentionRuntime(
 				limits: {
 					[type]: maxReferenceFiles,
 				},
+				totalLimit: maxReferenceFiles,
 				getItemAssetType: (item) => {
 					const fileClass = classifyReferenceAssetFile({
 						filePath: item.data.file_path,
@@ -164,6 +165,7 @@ export function useCanvasReferenceMentionRuntime(
 				video: assetLimits.reference_videos.max,
 				audio: assetLimits.reference_audios.max,
 			},
+			totalLimit: assetLimits.total.max,
 			getItemAssetType: (item) => {
 				const fileClass = classifyReferenceAssetFile({
 					filePath: item.data.file_path,

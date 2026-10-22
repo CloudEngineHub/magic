@@ -1,4 +1,5 @@
 import { CircleCheck, CircleX, Image, Loader2 } from "lucide-react"
+import type { ReactNode } from "react"
 import { cn } from "@/utils/cn"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useReferenceImageUrls } from "../../../app/hooks/resources/useReferenceImageUrls"
@@ -6,19 +7,29 @@ import type { ImageElement } from "../../../runtime/document/types"
 import { splitRenameFileName, type ImageRenameRow } from "./useImageRename"
 import RenameNameField from "./RenameNameField"
 
-const nameRowClass =
-	"grid grid-cols-[64px_minmax(0,1fr)] items-start gap-2 px-3 py-2 text-sm leading-5"
-const fileInputRowClass = "flex min-w-0 flex-col gap-1 px-3 py-2 text-sm leading-5"
+const nameRowClass = "grid grid-cols-[64px_minmax(0,1fr)] items-start gap-2 py-2 text-sm leading-5"
+const fileInputRowClass = "flex min-w-0 flex-col py-2 text-sm leading-5"
 const labelClass = "whitespace-nowrap text-muted-foreground"
+const versionBadgeClass =
+	"pointer-events-none inline-flex h-[18px] items-center whitespace-nowrap rounded bg-black/70 px-1 font-[Arial,sans-serif] text-[10px] leading-[18px] text-white"
 
-function RenameThumbnail({ path, processing }: { path: string; processing: boolean }) {
+function RenameThumbnail({
+	path,
+	processing,
+	badges,
+}: {
+	path: string
+	processing: boolean
+	badges: ReactNode
+}) {
 	const { lowUrl, isLoading } = useReferenceImageUrls(path, {
 		enabled: Boolean(path) && !processing,
 	})
 	return (
 		<div
+			data-testid="rename-file-thumbnail"
 			className={cn(
-				"mt-0.5 flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30",
+				"relative mt-0.5 flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30",
 				processing &&
 					"bg-gradient-to-br from-violet-100 via-rose-50 to-blue-100 dark:from-violet-950 dark:via-rose-950 dark:to-blue-950",
 			)}
@@ -30,6 +41,12 @@ function RenameThumbnail({ path, processing }: { path: string; processing: boole
 			) : (
 				<Image size={16} className="text-muted-foreground" />
 			)}
+			<div
+				data-testid="rename-file-version-badges"
+				className="pointer-events-none absolute left-1 top-1 z-10 flex flex-wrap gap-1"
+			>
+				{badges}
+			</div>
 		</div>
 	)
 }
@@ -49,6 +66,8 @@ export default function ImageRenameFileRow({
 	const file = row.file
 	const edited = Boolean(file && row.name !== file.fileName)
 	const parts = splitRenameFileName(row.name)
+	const isMain = element.mainContentId === row.content.contentId
+	const isCurrent = element.activeContentId === row.content.contentId
 	const status = row.processing ? (
 		<span className="flex items-center gap-1">
 			<Loader2 size={16} className="animate-spin" />
@@ -73,25 +92,30 @@ export default function ImageRenameFileRow({
 		<span>{t("rename.awaitingConfirmation", "待确认")}</span>
 	) : null
 	return (
-		<li className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] items-start gap-3 px-3 py-2.5">
-			<RenameThumbnail path={row.content.src || ""} processing={row.processing} />
+		<li
+			data-testid="rename-file-row"
+			className="grid min-w-0 grid-cols-[80px_minmax(0,1fr)] items-start gap-3 py-2.5"
+		>
+			<RenameThumbnail
+				path={row.content.src || ""}
+				processing={row.processing}
+				badges={
+					<>
+						{isMain && (
+							<span className={versionBadgeClass}>{t("rename.main", "主版本")}</span>
+						)}
+						{isCurrent && (
+							<span className={versionBadgeClass}>{t("rename.current", "当前")}</span>
+						)}
+					</>
+				}
+			/>
 			<div className="min-w-0">
-				<div className="mb-1 flex min-h-5 min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
-					<span className="font-medium text-foreground">
-						{t("rename.version", { defaultValue: "V{{number}}", number: row.version })}
-					</span>
-					{element.mainContentId === row.content.contentId && (
-						<span className="rounded bg-muted px-1.5 py-0.5">
-							{t("rename.main", "主版本")}
-						</span>
-					)}
-					{element.activeContentId === row.content.contentId && (
-						<span className="rounded bg-muted px-1.5 py-0.5">
-							{t("rename.current", "当前")}
-						</span>
-					)}
-					{row.shared && <span>{t("rename.sharedFile", "共用同一文件")}</span>}
-				</div>
+				{row.shared && (
+					<div className="mb-1 min-h-5 text-xs leading-5 text-muted-foreground">
+						{t("rename.sharedFile", "共用同一文件")}
+					</div>
+				)}
 				{status && (
 					<div className="mb-1 flex min-h-5 items-center text-xs text-muted-foreground">
 						{status}
@@ -124,13 +148,6 @@ export default function ImageRenameFileRow({
 									edited && "border-t",
 								)}
 							>
-								<span className={`${labelClass} text-xs leading-4`}>
-									{row.status === "success"
-										? t("rename.savedFileName", "现文件名")
-										: edited
-											? t("rename.newFileName", "新文件名")
-											: t("rename.fileNameLabel", "文件名")}
-								</span>
 								{/* 窄版本行内限制输入高度，避免长文件名撑满整个重命名面板。 */}
 								<RenameNameField
 									value={parts.base}
@@ -162,7 +179,7 @@ export default function ImageRenameFileRow({
 								{row.expectedName || t("rename.nameUndetermined", "名称尚未确定")}
 							</span>
 						</div>
-						<p className="m-0 pb-2 pl-[84px] pr-3 text-xs leading-5 text-muted-foreground">
+						<p className="m-0 pb-2 text-xs leading-5 text-muted-foreground">
 							{t("rename.notGenerated", "生成后可修改文件名")}
 						</p>
 					</div>

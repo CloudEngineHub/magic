@@ -291,6 +291,7 @@ export function useCanvasReferenceMention(options?: UseCanvasReferenceMentionOpt
 		return {
 			currentCounts: summary.currentCounts,
 			limits: summary.limits,
+			totalLimit: summary.totalLimit,
 			getItemAssetType: (item) => {
 				if (item.type !== CANVAS_REFERENCE_MENTION_ITEM_TYPE.projectFile) return undefined
 				return summary.getItemAssetType?.({ type: item.type, data: item.data })

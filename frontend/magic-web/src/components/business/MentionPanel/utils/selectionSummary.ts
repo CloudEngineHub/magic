@@ -35,3 +35,43 @@ export function getMentionPanelSelectionSummaryCounts(
 
 	return counts
 }
+
+/**
+ * 判断某个「新增」项是否还能被暂存进多选会话。
+ *
+ * 已提交（isItemAlreadySelected）的引用不占新槽；未归类到 image/video/audio
+ * 的项不参与限制。容量以「已提交数量 + 当前暂存数量」为基准，per-type 与
+ * totalLimit（总上限）任一命中即拦截。
+ */
+export function canAcceptPendingItem(
+	item: MentionItem,
+	selectionSummary: MentionPanelSelectionSummary | undefined,
+	pendingEntries: Iterable<{ item: MentionItem }>,
+): boolean {
+	if (!selectionSummary) return true
+
+	// 已提交的引用不占新槽位。
+	if (selectionSummary.isItemAlreadySelected?.(item)) return true
+
+	const assetType = selectionSummary.getItemAssetType?.(item)
+	if (!assetType) return true
+
+	const counts = getMentionPanelSelectionSummaryCounts(selectionSummary, pendingEntries)
+	if (!counts) return true
+
+	const limit = selectionSummary.limits[assetType]
+	if (typeof limit === "number" && Number.isFinite(limit) && counts[assetType] + 1 > limit) {
+		return false
+	}
+
+	const totalLimit = selectionSummary.totalLimit
+	if (
+		typeof totalLimit === "number" &&
+		Number.isFinite(totalLimit) &&
+		counts.image + counts.video + counts.audio + 1 > totalLimit
+	) {
+		return false
+	}
+
+	return true
+}
