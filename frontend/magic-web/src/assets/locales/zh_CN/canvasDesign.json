@@ -643,7 +643,6 @@
 		"imageTitle": "图片标题（元素名称）",
 		"main": "主版本",
 		"nameUndetermined": "名称尚未确定",
-		"newFileName": "新文件名",
 		"notGenerated": "生成后可修改文件名",
 		"originalFileName": "原文件名",
 		"pendingEditableLater": "生成后可修改",
@@ -651,7 +650,6 @@
 		"renamed": "文件已改名",
 		"retry": "重试未完成项",
 		"save": "确认重命名",
-		"savedFileName": "现文件名",
 		"saving": "正在保存",
 		"sharedFile": "共用同一文件",
 		"sharedTitle": "各版本共用，文件名独立",
@@ -669,7 +667,6 @@
 		"unchanged": "名称尚未修改",
 		"uniform": "批量应用到下方",
 		"uniformHint": "点击「批量应用到下方」填写各版本名称，确认后才改文件。",
-		"version": "V{{number}}",
 		"versionFiles": "版本文件名"
 	},
 	"seedanceCompliance": {

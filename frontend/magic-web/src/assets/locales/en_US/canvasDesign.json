@@ -643,7 +643,6 @@
 		"imageTitle": "Image title (element name)",
 		"main": "Main",
 		"nameUndetermined": "Name not yet available",
-		"newFileName": "New file",
 		"notGenerated": "Rename the file after generation",
 		"originalFileName": "Original",
 		"pendingEditableLater": "Editable after generation",
@@ -651,7 +650,6 @@
 		"renamed": "File renamed",
 		"retry": "Retry remaining changes",
 		"save": "Confirm rename",
-		"savedFileName": "Saved file",
 		"saving": "Saving",
 		"sharedFile": "Shared file",
 		"sharedTitle": "Shared across versions; file names are separate",
@@ -669,7 +667,6 @@
 		"unchanged": "No changes",
 		"uniform": "Apply to files below",
 		"uniformHint": "Click “Apply to files below” to fill in version names. Files change only after confirmation.",
-		"version": "V{{number}}",
 		"versionFiles": "Version filenames"
 	},
 	"seedanceCompliance": {

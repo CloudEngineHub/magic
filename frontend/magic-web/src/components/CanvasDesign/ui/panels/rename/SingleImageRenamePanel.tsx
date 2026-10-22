@@ -76,8 +76,9 @@ export default function SingleImageRenamePanel({ element }: { element: ImageElem
 			}
 		>
 			<ScrollArea
+				data-floating-scroll-trap="dynamic"
 				className={`${styles.renameScrollable} min-h-0`}
-				viewportClassName="[&>div]:!block"
+				viewportClassName={`${styles.renameScrollViewport} [&>div]:!block`}
 			>
 				<div className={styles.renameBody}>
 					<div className={styles.renameSection}>

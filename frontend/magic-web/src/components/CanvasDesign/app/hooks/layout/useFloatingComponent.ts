@@ -15,9 +15,48 @@ const POINTER_INTERACTIVE_SELECTOR = [
 	"[data-floating-pan-trap='true']",
 ].join(",")
 const POINTER_PAN_THROUGH_SELECTOR = "[data-floating-pan-through='true']"
+const DYNAMIC_SCROLL_TRAP_SELECTOR = "[data-floating-scroll-trap='dynamic']"
+const SCROLL_AREA_VIEWPORT_SELECTOR = "[data-slot='scroll-area-viewport']"
 
 function isAxisScrollable(overflow: string, scrollSize: number, clientSize: number): boolean {
 	return OVERFLOW_SCROLL_VALUES.has(overflow) && scrollSize > clientSize + 1
+}
+
+function getComposedElementPath(container: HTMLElement, e: Event): HTMLElement[] {
+	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
+	const elements: HTMLElement[] = []
+	for (const node of path) {
+		if (!(node instanceof HTMLElement)) continue
+		elements.push(node)
+		if (node === container) break
+	}
+	return elements
+}
+
+/** A scrollbar only owns canvas navigation while it can actually scroll content. */
+function hasVisibleScrollbar(element: HTMLElement): boolean {
+	const style = getComputedStyle(element)
+	return (
+		isAxisScrollable(style.overflowY, element.scrollHeight, element.clientHeight) ||
+		isAxisScrollable(style.overflowX, element.scrollWidth, element.clientWidth)
+	)
+}
+
+/**
+ * Dynamic scroll traps preserve native scrollbar interaction only when content overflows.
+ * Without overflow the event keeps following the surface's normal canvas pass-through path.
+ */
+function scrollTrapHasVisibleScrollbar(container: HTMLElement, e: Event): boolean {
+	const path = getComposedElementPath(container, e)
+	const trapIndex = path.findIndex((node) => node.matches(DYNAMIC_SCROLL_TRAP_SELECTOR))
+	if (trapIndex < 0) return false
+
+	const trapRoot = path[trapIndex]
+	const candidates = new Set(path.slice(0, trapIndex + 1))
+	trapRoot.querySelectorAll<HTMLElement>(SCROLL_AREA_VIEWPORT_SELECTOR).forEach((node) => {
+		candidates.add(node)
+	})
+	return Array.from(candidates).some(hasVisibleScrollbar)
 }
 
 /**
@@ -49,56 +88,38 @@ function elementShouldConsumeWheel(el: HTMLElement, e: WheelEvent): boolean {
 
 /** 显式标记：滚轮始终留在 DOM 内、顶/底也不穿透（见 MessageHistory 展开提示词） */
 function wheelInsideHardTrapRegion(container: HTMLElement, e: WheelEvent): boolean {
-	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
-	for (const node of path) {
-		if (!(node instanceof HTMLElement)) continue
+	for (const node of getComposedElementPath(container, e)) {
 		if (node.dataset.wheelTrap === "hard") {
 			return true
-		}
-		if (node === container) {
-			break
 		}
 	}
 	return false
 }
 
 function wheelShouldDeferToDomScroll(container: HTMLElement, e: WheelEvent): boolean {
-	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
-	for (const node of path) {
-		if (!(node instanceof HTMLElement)) continue
+	for (const node of getComposedElementPath(container, e)) {
 		if (elementShouldConsumeWheel(node, e)) {
 			return true
-		}
-		if (node === container) {
-			break
 		}
 	}
 	return false
 }
 
 function pointerShouldDeferToDomInteraction(container: HTMLElement, e: PointerEvent): boolean {
-	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
-	for (const node of path) {
-		if (!(node instanceof HTMLElement)) continue
+	for (const node of getComposedElementPath(container, e)) {
 		if (
 			node.matches(POINTER_INTERACTIVE_SELECTOR) &&
 			!node.matches(POINTER_PAN_THROUGH_SELECTOR)
 		) {
 			return true
 		}
-		if (node === container) {
-			break
-		}
 	}
 	return false
 }
 
 function pointerAllowsPanThrough(container: HTMLElement, e: PointerEvent): boolean {
-	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
-	for (const node of path) {
-		if (!(node instanceof HTMLElement)) continue
+	for (const node of getComposedElementPath(container, e)) {
 		if (node.matches(POINTER_PAN_THROUGH_SELECTOR)) return true
-		if (node === container) break
 	}
 	return false
 }
@@ -174,6 +195,12 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 		// 如果启用 wheel 转发，添加事件监听
 		if (enableWheelForwarding) {
 			const wheelHandler = (e: WheelEvent) => {
+				// An active scrollbar owns both scrolling and zoom gestures until its content fits.
+				if (scrollTrapHasVisibleScrollbar(container, e)) {
+					if (isCanvasZoomWheel(e)) e.preventDefault()
+					e.stopPropagation()
+					return
+				}
 				// Trackpad pinch is represented as ctrl/meta + wheel. It must always
 				// belong to the canvas viewport, even inside scrollable popovers.
 				if (isCanvasZoomWheel(e)) {
@@ -201,6 +228,7 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 				e.button !== 0 ||
 				!canvas.stage.draggable() ||
 				pointerPanMoveHandlerRef.current ||
+				scrollTrapHasVisibleScrollbar(container, e) ||
 				pointerShouldDeferToDomInteraction(container, e)
 			) {
 				return
