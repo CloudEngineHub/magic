@@ -1,4 +1,5 @@
 import type { SuperMagicMessageItem } from "./type"
+import type { TaskStatus } from "../../pages/Workspace/types"
 import { getMessageNodeKey } from "./helpers"
 import { canRenderFinalAttachments, canToolMessageRender } from "./message-render-contract"
 import {
@@ -35,6 +36,9 @@ export interface VirtualProcessToggleItem {
 	sourceIndex: number
 	turnKey: string
 	groupKey: string
+	status: TaskStatus.FINISHED | TaskStatus.SUSPENDED | TaskStatus.ERROR
+	showStatus: boolean
+	hasRetainedContent: boolean
 	count: number
 	expanded: boolean
 	showHeader: boolean
