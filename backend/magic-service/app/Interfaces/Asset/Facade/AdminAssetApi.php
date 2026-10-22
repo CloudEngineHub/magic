@@ -114,7 +114,6 @@ class AdminAssetApi extends AbstractApi
     public function createTag(): array
     {
         $authorization = $this->getAuthorization();
-        $this->assertAdmin($authorization);
         $request = SaveAssetTagRequestDTO::fromRequest($this->request);
         return AssetAssembler::createTagItem($this->assetAppService->createOfficialTag(
             $authorization,
@@ -129,7 +128,6 @@ class AdminAssetApi extends AbstractApi
     public function tags(): array
     {
         $authorization = $this->getAuthorization();
-        $this->assertAdmin($authorization);
         // 不传 business_type 返回全部业务类型，便于后台总览；传了只看该类型。
         $businessType = trim((string) $this->request->input('business_type', ''));
         return AssetAssembler::createTagList($this->assetAppService->listOfficialTags($authorization, $businessType === '' ? null : $businessType));
