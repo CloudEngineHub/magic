@@ -9,13 +9,14 @@ import { default as Chat } from "./Chat"
 import { default as Reminder } from "./Reminder"
 import { default as AgentThink } from "./AgentThink"
 import { default as MessageNode } from "./MessageNode"
-import { memo, type CSSProperties } from "react"
+import { memo, type CSSProperties, type MouseEvent } from "react"
 import { SuperMagicMessageType } from "@/pages/superMagic/components/MessageList/type"
 import { observer } from "mobx-react-lite"
 import { superMagicStore } from "@/pages/superMagic/stores"
 import { useTimeTooltip } from "./hooks/useTimeTooltip"
 import { withNode, type WithNodeProps } from "./withNode"
 import { cn } from "@/utils/cn"
+import { useMessageListContext } from "../../context"
 
 export const NodeMap = {
 	[SuperMagicMessageType.Reminder]: Reminder,
@@ -41,9 +42,9 @@ const nodeEntryVariantMap: Partial<Record<SuperMagicMessageType, EntryAnimationV
 }
 
 function NodeContent(props: WithNodeProps) {
+	const { onMessageDebugClick } = useMessageListContext()
 	const node = superMagicStore.getMessageNode(props?.node?.super_message_id) as
-		| Record<string, unknown>
-		| undefined
+		Record<string, unknown> | undefined
 	const textContent = typeof node?.content === "string" ? node.content : undefined
 	const hasCopyableTextContent = Boolean(textContent?.trim())
 	const isAssistantMessage = props?.node?.role === "assistant" || node?.role === "assistant"
@@ -82,18 +83,13 @@ function NodeContent(props: WithNodeProps) {
 		enableCopyMessage,
 	})
 
-	const printNode = () => {
-		try {
-			/** keep-console */
-			console.log(JSON.parse(JSON.stringify(props?.node)))
-		} catch (error) {
-			console.error(error)
-		}
+	const handleDebugClick = (event: MouseEvent<HTMLDivElement>) => {
+		onMessageDebugClick?.(props.node, event)
 	}
 
 	if (["rich_text"].includes(props?.node?.type)) {
 		return (
-			<div className={entryClassName} style={entryStyle} onClick={printNode}>
+			<div className={entryClassName} style={entryStyle} onClick={handleDebugClick}>
 				<RichText {...props} />
 			</div>
 		)
@@ -105,7 +101,7 @@ function NodeContent(props: WithNodeProps) {
 				<div
 					className={cn(entryClassName, "group relative")}
 					style={entryStyle}
-					onClick={printNode}
+					onClick={handleDebugClick}
 				>
 					<MessageNode
 						{...props}
@@ -124,7 +120,7 @@ function NodeContent(props: WithNodeProps) {
 			<div
 				className={cn(entryClassName, "group relative")}
 				style={entryStyle}
-				onClick={printNode}
+				onClick={handleDebugClick}
 			>
 				<AssistantNode
 					{...props}
