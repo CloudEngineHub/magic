@@ -20,8 +20,8 @@ import type { PlatformInfo } from "@admin/types/platformInfo"
 import { useStyles } from "./styles"
 import LogoUploadItemComponent from "./components/LogoUploadItem"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
-import WatermarkSettings from "./WatermarkSettings"
 import ModelMultiplierSettings from "./ModelMultiplierSettings"
+import { WatermarkSettings } from "@admin/components/WatermarkSettings"
 
 export enum PlatformLogoType {
 	ZH = "zh",
@@ -529,7 +529,11 @@ const InfoManagementPage = () => {
 					)}
 				</Flex>
 				<SubHeader title={tPlatform("watermarkSettings")} />
-				<WatermarkSettings form={form} canEdit={hasEditRight} />
+				<WatermarkSettings
+					form={form}
+					namespace="admin/platform/info"
+					canEdit={hasEditRight}
+				/>
 			</Form>
 		</BaseLayout>
 	)

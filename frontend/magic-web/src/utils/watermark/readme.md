@@ -29,12 +29,11 @@ import { WATERMARK_CONFIG, watermarkService } from "@/utils/watermark"
 | 策略 `UserWatermarkMode` | 触发条件 | 文字 | 渲染配置 |
 | --- | --- | --- | --- |
 | `platform` | 非个人组织且平台水印已开启 | 组织配置的身份字段 | `WATERMARK_DEPTH_CONFIG[depth]` |
-| `legacy`（个人组织） | 个人组织且 `MAGIC_WATERMARK_ENABLED` 为 `true` | `user_id`（含部署标识） | `USER_ID_WATERMARK_CONFIG`，接近透明 |
-| `legacy`（其他） | 其余组织且 `MAGIC_WATERMARK_ENABLED` 为 `true` | `user_id`（含部署标识） | `WATERMARK_CONFIG` |
+| `legacy` | 平台水印不可用（个人组织，或平台水印未开启），且 `MAGIC_WATERMARK_ENABLED` 为 `true` | `user_id`（含部署标识） | `USER_ID_WATERMARK_CONFIG`，接近透明 |
 | `disabled` | 其余情况 | — | — |
 
-个人组织版不会应用组织级水印配置，只保留由环境变量开启的 `user_id` 水印，
-且颜色接近透明（`rgba(0, 0, 0, 0.01)`），仅作为隐性溯源标记，不干扰成员阅读。
+`legacy` 只由 `MAGIC_WATERMARK_ENABLED` 环境变量开启，个人组织、团队组织、企业组织统一使用
+`rgba(0, 0, 0, 0.01)`，仅作为隐性溯源标记，不干扰成员阅读；个人组织不会应用组织级水印配置。
 
 ### mount
 

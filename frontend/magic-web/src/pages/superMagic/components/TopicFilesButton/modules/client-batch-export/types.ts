@@ -1,5 +1,6 @@
 import type { FileAccessContext } from "@/pages/superMagic/fileAccess/fileAccessContext"
 import type { FileApi } from "@/pages/superMagic/fileAccess/fileApi"
+import type { ExportIssue } from "@magic/html2pptx"
 
 export type ClientBatchExportFormat = "pdf" | "pptx"
 
@@ -74,6 +75,8 @@ export interface ClientBatchExportRunOptions {
 	onProgress?: (progress: number) => void
 	access?: FileAccessContext
 	fileApi?: FileApi
+	/** Reports recoverable PPTX page/resource issues to the host notifier. */
+	onExportIssue?: (issue: ExportIssue) => void
 	/** Cancels the active streaming target and prevents later targets from starting. */
 	signal?: AbortSignal
 }
