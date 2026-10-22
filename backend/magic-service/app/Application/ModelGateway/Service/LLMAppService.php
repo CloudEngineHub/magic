@@ -40,6 +40,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\AiAbilityDomainService;
+use App\Domain\Provider\Service\ModelIdentifierMappingDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -1193,6 +1194,12 @@ class LLMAppService extends AbstractLLMAppService
             $modeId = $this->aggregateModelResolverService->resolve($originalModelId, $modelGatewayDataIsolation, $accessContext);
             // 动态模型解析后仍需二次校验，确保最终落到的真实子模型也在用户可访问范围内。
             $this->modelGatewayModelAccessService->assertCanAccess($accessContext, $modeId);
+
+            // 将高可用最终确定的模型标识替换为平台配置的目标模型标识。
+            $modeId = di(ModelIdentifierMappingDomainService::class)->replaceModelIdentifier(
+                ProviderDataIsolation::create()->disabled(),
+                $modeId,
+            );
 
             // 设置原始 model_id（目前用于识别是否动态模型）.
             if ($proxyModelRequest instanceof AbstractRequestDTO) {

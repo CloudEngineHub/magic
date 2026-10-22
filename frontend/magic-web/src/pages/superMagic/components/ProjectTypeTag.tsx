@@ -16,17 +16,10 @@ export const RECENT_PROJECT_MARK_CLASS_NAME =
 	"h-3.5 w-3.5 border-0 bg-transparent p-0 [&_svg]:!h-[14px] [&_svg]:!w-[14px]"
 
 /**
- * Stroke width of line icons on a 24-unit grid (lucide, tabler). Strokes scale with the icon, so
- * every mark keeps the same rendered line weight only when this is set per grid size.
+ * For the collaboration and shortcut marks. Line weights come from the global lucide stroke
+ * (src/styles/lucide.css), which already matches the type marks, so no stroke override here.
  */
-const LINE_STROKE_WIDTH = 1.8
-
-/**
- * For the collaboration and shortcut marks (24-unit line icons with their own default stroke 2):
- * the same line weight as the type marks. Not for the pinned mark, which is a filled shape.
- */
-// Literal class (Tailwind only generates classes it finds verbatim); 1.8 = LINE_STROKE_WIDTH.
-export const RECENT_PROJECT_LINE_MARK_CLASS_NAME = `${RECENT_PROJECT_MARK_CLASS_NAME} [&_svg]:[stroke-width:1.8]`
+export const RECENT_PROJECT_LINE_MARK_CLASS_NAME = RECENT_PROJECT_MARK_CLASS_NAME
 
 /** Icon size of the type mark in recent project lists, matching RECENT_PROJECT_MARK_CLASS_NAME. */
 export const RECENT_PROJECT_MARK_SIZE = 14
@@ -36,8 +29,8 @@ interface ProjectTypeTagProps {
 	/** Icon size in px; 16 by default. */
 	size?: number
 	/**
-	 * Recent project lists: scale the stroke number by each icon's grid so every mark renders the
-	 * same line weight. Elsewhere icons keep the plain 1.8 stroke.
+	 * Recent project lists ask for one line weight across marks. Here the global lucide stroke
+	 * (src/styles/lucide.css) and MagiClaw's own 16-unit default already give that, so it is a no-op.
 	 */
 	uniformStroke?: boolean
 	tooltipDisabled?: boolean
@@ -55,15 +48,9 @@ type ProjectTypeTagLabelKey =
 
 const PROJECT_TYPE_ICONS: Record<
 	string,
-	{
-		Icon: ComponentType<LucideProps>
-		labelKey: ProjectTypeTagLabelKey
-		/** Icon grid size when it is not lucide's 24 units; used to keep the line weight equal. */
-		gridSize?: number
-	}
+	{ Icon: ComponentType<LucideProps>; labelKey: ProjectTypeTagLabelKey }
 > = {
-	// Drawn on a 16-unit grid: the same stroke number would render about 1.5x heavier.
-	magiclaw: { Icon: MagiClaw, labelKey: "projectTypeTag.magicClaw", gridSize: 16 },
+	magiclaw: { Icon: MagiClaw, labelKey: "projectTypeTag.magicClaw" },
 	"micro-app": { Icon: Boxes, labelKey: "projectTypeTag.microApp" },
 	agent_creator: { Icon: Bot, labelKey: "projectTypeTag.agent" },
 	custom_agent: { Icon: Bot, labelKey: "projectTypeTag.agent" },
@@ -80,7 +67,6 @@ export default function ProjectTypeTag({
 	projectMode,
 	tooltipDisabled = false,
 	size = 16,
-	uniformStroke = false,
 	className,
 }: ProjectTypeTagProps) {
 	const { t } = useTranslation("super")
@@ -101,15 +87,9 @@ export default function ProjectTypeTag({
 				aria-label={label}
 				data-testid="project-type-tag"
 			>
-				<Icon
-					size={size}
-					strokeWidth={
-						uniformStroke
-							? (LINE_STROKE_WIDTH * (config.gridSize ?? 24)) / 24
-							: LINE_STROKE_WIDTH
-					}
-					aria-hidden="true"
-				/>
+				{/* 不传 strokeWidth：Lucide 图标沿用 src/styles/lucide.css 的全局 1.5px，
+				    MagiClaw 沿用自身 16 画板的默认线宽，与侧栏菜单图标视觉线粗一致。 */}
+				<Icon size={size} aria-hidden="true" />
 			</span>
 		</MagicTooltip>
 	)

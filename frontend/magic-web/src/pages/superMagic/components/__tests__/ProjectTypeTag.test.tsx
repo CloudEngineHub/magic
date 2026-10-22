@@ -26,20 +26,13 @@ describe("ProjectTypeTag", () => {
 		expect(tag.querySelector("svg")).toHaveAttribute("width", "14")
 	})
 
-	it("keeps one line weight for icons drawn on different grids", () => {
+	it("leaves line weight to the global lucide stroke and MagiClaw's own default", () => {
 		render(<ProjectTypeTag projectMode="magiclaw" size={14} uniformStroke />)
-		// The claw is drawn on a 16-unit grid: 1.8 on 24 units equals 1.2 on 16 units.
+		// No strokeWidth is passed (see src/styles/lucide.css): MagiClaw keeps its default 1 on
+		// its 16-unit grid, which renders like lucide's global 1.5 on 24 units.
 		expect(screen.getByTestId("project-type-tag").querySelector("path")).toHaveAttribute(
 			"stroke-width",
-			"1.2",
-		)
-	})
-
-	it("keeps the plain stroke outside recent lists", () => {
-		render(<ProjectTypeTag projectMode="magiclaw" />)
-		expect(screen.getByTestId("project-type-tag").querySelector("path")).toHaveAttribute(
-			"stroke-width",
-			"1.8",
+			"1",
 		)
 	})
 
