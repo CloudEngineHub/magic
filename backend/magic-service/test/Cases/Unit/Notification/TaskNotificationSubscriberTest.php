@@ -52,6 +52,8 @@ final class TaskNotificationSubscriberTest extends TestCase
         self::assertSame('ORG', $published[0]->organizationCode);
         self::assertSame('456', $published[0]->source->id);
         self::assertSame('task:ORG:456:usi_recipient:finished', $published[0]->recipients[0]->sourceEventKey);
+        self::assertSame('project', $published[0]->payload['resource_type']);
+        self::assertSame('project', $published[0]->recipients[0]->payload['resource_type']);
         self::assertSame('finished', $published[0]->payload['status']);
         self::assertSame('Weekly report', $published[0]->payload['task_name']);
     }
@@ -75,6 +77,8 @@ final class TaskNotificationSubscriberTest extends TestCase
         self::assertCount(1, $published);
         self::assertSame('task.error', $published[0]->eventType);
         self::assertSame('task:ORG:456:usi_recipient:error', $published[0]->recipients[0]->sourceEventKey);
+        self::assertSame('project', $published[0]->payload['resource_type']);
+        self::assertSame('project', $published[0]->recipients[0]->payload['resource_type']);
         self::assertSame($status, $published[0]->payload['status']);
         self::assertSame('task failed', $published[0]->payload['error_message']);
     }
