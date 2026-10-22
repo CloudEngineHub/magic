@@ -7,6 +7,7 @@ import dashboard from "./dashboard.json";
 import internalPublishReview from "./internalPublishReview.json";
 import language from "./language.json";
 import modelList from "./modelList.json";
+import modelIdentifierMapping from "./modelIdentifierMapping.json";
 import nav from "./nav.json";
 import notFound from "./notFound.json";
 import officialMarketplace from "./officialMarketplace.json";
@@ -37,6 +38,7 @@ const messages = {
   internalPublishReview,
   language,
   modelList,
+  modelIdentifierMapping,
   nav,
   notFound,
   officialMarketplace,
