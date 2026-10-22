@@ -32,6 +32,7 @@ export function PPTControlBar({
 	isTransitioning,
 	isMobile,
 	isFullscreen,
+	isStarting = false,
 	onPrevSlide,
 	onNextSlide,
 	onGoToFirstSlide,
@@ -61,6 +62,11 @@ export function PPTControlBar({
 	currentFileId,
 }: PPTControlBarProps) {
 	const { t } = useTranslation("super")
+	const fullscreenLabel = isStarting
+		? t("ppt.presenter.cancelStart")
+		: isFullscreen
+			? t("fileViewer.exitFullscreen")
+			: t("ppt.startSlideshow")
 	const isRefreshingAll = Boolean(refreshAllProgress)
 	const [jumpPageInput, setJumpPageInput] = useState<string>("")
 	const [isPageInputVisible, setIsPageInputVisible] = useState(false)
@@ -301,9 +307,7 @@ export function PPTControlBar({
 					)}
 				</div>
 				{/* Reuse the same fullscreen action on phones; icon labels stay accessible. */}
-				<MagicTooltip
-					title={isFullscreen ? t("fileViewer.exitFullscreen") : t("ppt.startSlideshow")}
-				>
+				<MagicTooltip title={fullscreenLabel}>
 					<span>
 						<Button
 							variant="ghost"
@@ -315,21 +319,15 @@ export function PPTControlBar({
 								e.currentTarget.blur()
 								onToggleFullscreen()
 							}}
-							aria-label={
-								isFullscreen
-									? t("fileViewer.exitFullscreen")
-									: t("ppt.startSlideshow")
-							}
+							aria-label={fullscreenLabel}
 						>
-							{isFullscreen ? (
+							{isFullscreen || isStarting ? (
 								<Minimize className="h-4 w-4" />
 							) : (
 								<Maximize className="h-4 w-4" />
 							)}
 							<span className={isMobile ? "sr-only" : undefined}>
-								{isFullscreen
-									? t("fileViewer.exitFullscreen")
-									: t("ppt.startSlideshow")}
+								{fullscreenLabel}
 							</span>
 						</Button>
 					</span>

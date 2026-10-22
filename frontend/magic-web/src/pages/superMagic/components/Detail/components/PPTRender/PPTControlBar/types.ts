@@ -8,6 +8,7 @@ export interface PPTControlBarProps {
 	isTransitioning: boolean
 	isMobile: boolean
 	isFullscreen: boolean
+	isStarting?: boolean
 	isRefreshingCurrentSlide: boolean
 	onRefreshCurrentSlide?: () => void
 	onPrevSlide: () => void
