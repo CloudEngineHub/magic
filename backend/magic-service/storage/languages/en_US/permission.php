@@ -56,6 +56,7 @@ return [
         'platform_setting_platform_info' => 'Platform Info',
         'platform_setting_maintenance' => 'Maintenance',
         'platform_slides_template' => 'Slides Templates',
+        'platform_asset' => 'Asset Library',
         'platform_organization' => 'Organization',
         'platform_organization_list' => 'Organization List',
         'platform_user_list' => 'Platform User List',
