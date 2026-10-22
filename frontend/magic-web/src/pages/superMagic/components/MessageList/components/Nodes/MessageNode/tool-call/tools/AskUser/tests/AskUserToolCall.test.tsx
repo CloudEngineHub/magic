@@ -258,4 +258,201 @@ describe("AskUserToolCall structured confirmation", () => {
 		fireEvent.click(screen.getByText("B"))
 		expect(screen.getAllByRole("checkbox")[2]).toBeDisabled()
 	})
+	it("preserves input and remark when the first detail and cache key arrive", () => {
+		const preview = {
+			...tool,
+			detail: undefined,
+			rawArguments: JSON.stringify({
+				questions:
+					'<question type="input" placeholder="Details">Describe the task</question>',
+			}),
+		}
+		const { rerender } = render(
+			<AskUserToolCall toolData={preview} selectedTopic={topic} loading />,
+		)
+		fireEvent.change(screen.getByPlaceholderText("Details"), {
+			target: { value: "Unsaved draft" },
+		})
+		fireEvent.change(screen.getByTestId("ask-user-v2-card-remark-input"), {
+			target: { value: "Draft remark" },
+		})
+		rerender(
+			<AskUserToolCall
+				toolData={{
+					...preview,
+					detail: {
+						...tool.detail,
+						data: {
+							...tool.detail?.data,
+							questions: [
+								{
+									...question,
+									question: "Describe the task",
+									interaction_type: "input",
+									placeholder: "Details",
+								},
+							],
+						},
+					},
+				}}
+				selectedTopic={topic}
+				loading
+			/>,
+		)
+		expect(screen.getByPlaceholderText("Details")).toHaveValue("Unsaved draft")
+		expect(screen.getByTestId("ask-user-v2-card-remark-input")).toHaveValue("Draft remark")
+	})
+
+	it("renders all repaired questions and submits all position answers", async () => {
+		const questions = [
+			question,
+			{
+				...question,
+				sub_id: "choice-a",
+				question: "First choice",
+				interaction_type: "select",
+				options: ["A", "B", "Other"],
+			},
+			{
+				...question,
+				sub_id: "choice-b",
+				question: "Second choice",
+				interaction_type: "select",
+				options: ["C", "D", "Other"],
+			},
+		]
+		render(
+			<AskUserToolCall
+				toolData={{
+					...tool,
+					rawArguments: JSON.stringify({
+						questions:
+							'<question type="confirm">Continue?</question><question type="select">First choice<option>A</option><option>B</option></select><question type="select">Second choice<option>C</option><option>D</option></select></questions>',
+					}),
+					detail: { ...tool.detail, data: { ...tool.detail?.data, questions } },
+				}}
+				selectedTopic={topic}
+				loading
+			/>,
+		)
+		expect(screen.getByText("Second choice")).toBeInTheDocument()
+		fireEvent.click(screen.getByText("D"))
+		fireEvent.click(screen.getByText("是"))
+		fireEvent.click(screen.getByText("B"))
+		expect(screen.getByTestId("ask-user-v2-card-submit-button")).not.toBeDisabled()
+		fireEvent.click(screen.getByTestId("ask-user-v2-card-submit-button"))
+		await waitFor(() => expect(sendAskUserToolReply).toHaveBeenCalledOnce())
+		expect(sendAskUserToolReply).toHaveBeenCalledWith(
+			expect.objectContaining({
+				detail: expect.objectContaining({
+					answer: JSON.stringify({ "q-0": "是", "q-1": "B", "q-2": "D" }),
+				}),
+			}),
+		)
+	})
+
+	it.each(["select", "multi_select"])(
+		"normalizes reserved Other for %s defaults and answer display",
+		(type) => {
+			render(
+				<AskUserToolCall
+					toolData={{
+						...tool,
+						detail: {
+							...tool.detail,
+							data: {
+								...tool.detail?.data,
+								status: "answered",
+								questions: [
+									{
+										...question,
+										interaction_type: type,
+										options: ["A", "Other"],
+										default_value: "Other",
+									},
+								],
+								answers: {
+									"bound-question-uuid":
+										type === "select"
+											? "Custom answer"
+											: ["A", "Custom answer"],
+								},
+							},
+						},
+					}}
+					selectedTopic={topic}
+				/>,
+			)
+			expect(screen.queryByText("Other")).not.toBeInTheDocument()
+			expect(screen.getByDisplayValue("Custom answer")).toBeInTheDocument()
+		},
+	)
+
+	it("hides answer controls for an input error text detail", () => {
+		render(
+			<AskUserToolCall
+				toolData={{
+					...tool,
+					status: "error",
+					rawArguments: JSON.stringify({
+						questions: '<question type="confirm">Preview?</question>',
+					}),
+					detail: {
+						type: "text",
+						data: { message: "Mock localized input failure" },
+					},
+				}}
+				selectedTopic={topic}
+			/>,
+		)
+		expect(screen.getByText("Mock localized input failure")).toBeInTheDocument()
+		expect(screen.queryByTestId("ask-user-v2-card-submit-button")).not.toBeInTheDocument()
+	})
+	it.each(["select", "multi_select"])(
+		"uses one Other input and submits custom %s text",
+		async (type) => {
+			render(
+				<AskUserToolCall
+					toolData={{
+						...tool,
+						detail: {
+							...tool.detail,
+							data: {
+								...tool.detail?.data,
+								questions: [
+									{
+										...question,
+										interaction_type: type,
+										options: ["A", "Other"],
+										default_value: "Other",
+									},
+								],
+							},
+						},
+					}}
+					selectedTopic={topic}
+					loading
+				/>,
+			)
+			expect(screen.queryByText("Other")).not.toBeInTheDocument()
+			const prefix = type === "select" ? "select" : "multi-select"
+			const input = screen.getByTestId(
+				`ask-user-v2-card-${prefix}-other-input-bound-question-uuid`,
+			)
+			fireEvent.focus(input)
+			fireEvent.change(input, { target: { value: "Mock custom text" } })
+			fireEvent.click(screen.getByTestId("ask-user-v2-card-submit-button"))
+			await waitFor(() => expect(sendAskUserToolReply).toHaveBeenCalledOnce())
+			expect(sendAskUserToolReply).toHaveBeenCalledWith(
+				expect.objectContaining({
+					detail: expect.objectContaining({
+						answer: JSON.stringify({
+							"bound-question-uuid":
+								type === "select" ? "Mock custom text" : ["Mock custom text"],
+						}),
+					}),
+				}),
+			)
+		},
+	)
 })
