@@ -221,6 +221,8 @@ export default {
 			name: RouteName.AdminAIManage,
 			path: RoutePath.AIManage,
 			title: "nav.aiSubMenu.manage",
+			validateOrganization: ({ isOfficialOrg, isPersonalOrganization }) =>
+				!isOfficialOrg && !isPersonalOrganization,
 			validate: canAccessAIAppMenu,
 			children: [
 				{
@@ -229,7 +231,8 @@ export default {
 				},
 				{
 					name: RouteName.AdminAIAppMenu,
-					validateOrganization: ({ isOfficialOrg }) => !isOfficialOrg,
+					validateOrganization: ({ isOfficialOrg, isPersonalOrganization }) =>
+						!isOfficialOrg && !isPersonalOrganization,
 					path: RoutePath.AIAppMenu,
 					element: <AppMenuPage />,
 					title: "nav.aiSubMenu.applicationMenu",
