@@ -14,6 +14,7 @@ import {
 	platformAppMenuAccess,
 	platformCustomProviderLicenseAccess,
 	platformInfoAccess,
+	platformModelMultiplierAccess,
 	platformMaintenanceAccess,
 	platformResourceAlertsAccess,
 	platformMarketplaceAccess,
@@ -64,6 +65,12 @@ const PlatformPackageListPage = lazy(
 )
 const PlatformProviderListPage = lazy(
 	() => import("@magic-admin-v2/features/platform-provider-list/platform-provider-list-page"),
+)
+const PlatformModelMultiplierPage = lazy(
+	() =>
+		import(
+			"@magic-admin-v2/features/platform-model-multiplier/platform-model-multiplier-page"
+		),
 )
 const PlatformOfficialMarketplacePage = lazy(
 	() =>
@@ -184,6 +191,14 @@ function createBaseFeatureRoutes(mode: RuntimeMode): Route[] {
 		element: <PlatformProviderListPage />,
 		titleKey: "nav.item.providerList",
 		validate: platformModelAccess,
+		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
+	},
+	{
+		name: RouteName.PlatformModelMultiplier,
+		path: RoutePath.PlatformModelMultiplier,
+		element: <PlatformModelMultiplierPage />,
+		titleKey: "nav.item.modelMultiplier",
+		validate: platformModelMultiplierAccess,
 		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
 	},
 	{

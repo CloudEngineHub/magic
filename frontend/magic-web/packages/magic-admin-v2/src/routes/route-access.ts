@@ -15,6 +15,12 @@ export const platformInfoAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT,
 )
 
+/** 模型倍率使用独立权限，仍限定官方组织。 */
+export const platformModelMultiplierAccess = allowOfficialMagic(
+	PERMISSION_KEY_MAP.MODEL_MULTIPLIER_QUERY,
+	PERMISSION_KEY_MAP.MODEL_MULTIPLIER_EDIT,
+)
+
 export const platformAppMenuAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.APP_MENU_QUERY,
 	PERMISSION_KEY_MAP.APP_MENU_EDIT,

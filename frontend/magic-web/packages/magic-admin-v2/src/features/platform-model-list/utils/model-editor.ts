@@ -70,7 +70,8 @@ export function createEditorValues(records: ProviderModelRecord[]): ModelEditorV
   const config = representativeRecord.config;
   const fixedTemperature = config.temperature;
   const recommendedTemperature = config.creativity;
-  const temperatureMode = fixedTemperature !== null && fixedTemperature !== undefined ? "fixed" : "recommended";
+  const temperatureMode =
+    fixedTemperature !== null && fixedTemperature !== undefined ? "fixed" : "recommended";
   const temperature = temperatureMode === "fixed" ? fixedTemperature : recommendedTemperature;
 
   return {
@@ -78,11 +79,13 @@ export function createEditorValues(records: ProviderModelRecord[]): ModelEditorV
     name: representativeRecord.translate?.name?.zh_CN ?? representativeRecord.name,
     name_en: representativeRecord.translate?.name?.en_US ?? "",
     icon: representativeRecord.icon ?? "",
-    description: representativeRecord.translate?.description?.zh_CN ?? representativeRecord.description ?? "",
+    description:
+      representativeRecord.translate?.description?.zh_CN ?? representativeRecord.description ?? "",
     description_en: representativeRecord.translate?.description?.en_US ?? "",
-    category: representativeRecord.model_type === providerModelType.embedding
-      ? providerModelCategory.llm
-      : representativeRecord.category,
+    category:
+      representativeRecord.model_type === providerModelType.embedding
+        ? providerModelCategory.llm
+        : representativeRecord.category,
     model_type: representativeRecord.model_type,
     max_tokens: stringifyNumber(config.max_tokens),
     max_output_tokens: stringifyNumber(config.max_output_tokens),
@@ -93,6 +96,9 @@ export function createEditorValues(records: ProviderModelRecord[]): ModelEditorV
     support_function: Boolean(config.support_function),
     support_multi_modal: Boolean(config.support_multi_modal),
     support_deep_think: Boolean(config.support_deep_think),
+    // 历史配置由后端补齐，编辑器直接回显接口配置。
+    reasoning_effort_levels: config.reasoning_effort_levels,
+    reasoning_effort_default: config.reasoning_effort_default,
     providers: records.map((record) => ({
       client_key: record.id,
       record_id: record.id,
@@ -176,6 +182,8 @@ export function createEmptyValues(
     support_function: true,
     support_multi_modal: true,
     support_deep_think: false,
+    reasoning_effort_levels: ["low", "medium", "high"],
+    reasoning_effort_default: null,
     providers: [createBindingValues()],
   };
 }
@@ -205,9 +213,15 @@ export function getDefaultBillingType(category: ProviderModelCategory) {
 }
 
 export function getModelTypeOptions(category: ProviderModelCategory, t: (key: string) => string) {
-  const options: Record<ProviderModelCategory, Array<{ label: string; value: ProviderModelType }>> = {
+  const options: Record<
+    ProviderModelCategory,
+    Array<{ label: string; value: ProviderModelType }>
+  > = {
     [providerModelCategory.llm]: [
-      { label: t("modelList.type.largeLanguageModel"), value: providerModelType.largeLanguageModel },
+      {
+        label: t("modelList.type.largeLanguageModel"),
+        value: providerModelType.largeLanguageModel,
+      },
       { label: t("modelList.type.embedding"), value: providerModelType.embedding },
     ],
     [providerModelCategory.embedding]: [
@@ -216,7 +230,10 @@ export function getModelTypeOptions(category: ProviderModelCategory, t: (key: st
     [providerModelCategory.vlm]: [
       { label: t("modelList.type.textToImage"), value: providerModelType.textToImage },
       { label: t("modelList.type.imageToImage"), value: providerModelType.imageToImage },
-      { label: t("modelList.type.imageEnhancement"), value: providerModelType.imageEnhancement },
+      {
+        label: t("modelList.type.imageEnhancement"),
+        value: providerModelType.imageEnhancement,
+      },
     ],
     [providerModelCategory.vgm]: [
       { label: t("modelList.type.textToVideo"), value: providerModelType.textToVideo },
@@ -302,7 +319,9 @@ export function toSaveInputs(
       billing_currency: binding.billing_currency,
       billing_type: binding.billing_type || getDefaultBillingType(values.category),
       billing_tiers: billingTiers?.length ? billingTiers : null,
-      ...(runtimeVisibility.vectorSize && vectorSize !== undefined ? { vector_size: vectorSize } : {}),
+      ...(runtimeVisibility.vectorSize && vectorSize !== undefined
+        ? { vector_size: vectorSize }
+        : {}),
       ...(runtimeVisibility.maxTokens && maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
       ...(runtimeVisibility.maxOutputTokens && maxOutputTokens !== undefined
         ? { max_output_tokens: maxOutputTokens }
@@ -312,6 +331,8 @@ export function toSaveInputs(
             support_function: values.support_function,
             support_multi_modal: values.support_multi_modal,
             support_deep_think: values.support_deep_think,
+            reasoning_effort_levels: values.reasoning_effort_levels,
+            reasoning_effort_default: values.reasoning_effort_default,
           }
         : {}),
       ...(supportsChatApi ? { chat_api: values.chat_api } : {}),
@@ -332,8 +353,12 @@ export function toSaveInputs(
         name: values.name.trim(),
         ...(values.icon.trim() ? { icon: values.icon.trim() } : {}),
         ...(values.description.trim() ? { description: values.description.trim() } : {}),
-        ...(binding.visible_organizations ? { visible_organizations: binding.visible_organizations } : {}),
-        ...(binding.visible_applications ? { visible_applications: binding.visible_applications } : {}),
+        ...(binding.visible_organizations
+          ? { visible_organizations: binding.visible_organizations }
+          : {}),
+        ...(binding.visible_applications
+          ? { visible_applications: binding.visible_applications }
+          : {}),
         ...(binding.visible_packages ? { visible_packages: binding.visible_packages } : {}),
         category: persistedCategory,
         model_type: values.model_type,
@@ -350,7 +375,9 @@ export function toSaveInputs(
               },
             }
           : {}),
-        ...(loadBalancingWeight !== undefined ? { load_balancing_weight: loadBalancingWeight } : {}),
+        ...(loadBalancingWeight !== undefined
+          ? { load_balancing_weight: loadBalancingWeight }
+          : {}),
         translate: {
           name: {
             zh_CN: values.name.trim() || undefined,

@@ -46,6 +46,11 @@ export const PERMISSION_KEY_MAP = {
 	/** 平台模型管理-编辑。 */
 	PLATFORM_MODEL_MANAGEMENT_EDIT: "platform.ai.model_management.edit",
 
+	/** 模型倍率-查询。 */
+	MODEL_MULTIPLIER_QUERY: "platform.ai.model_multiplier.query",
+	/** 模型倍率-编辑。 */
+	MODEL_MULTIPLIER_EDIT: "platform.ai.model_multiplier.edit",
+
 	/* ---------- 平台管理：智能体增强 ---------- */
 
 	/** 系统智能体/模式管理/内置员工-查询。 */

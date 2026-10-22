@@ -41,6 +41,12 @@ const routes: Route[] = [
 	createRoute(RouteName.ModelGovernance, RouteSection.AiGovernance, RouteGroup.GovernancePolicies),
 	createRoute(RouteName.CustomModelList, RouteSection.AiGovernance, RouteGroup.CustomModels),
 	createRoute(RouteName.PlatformModelList, RouteSection.Platform, RouteGroup.ModelManagement),
+	createRoute(RouteName.PlatformProviderList, RouteSection.Platform, RouteGroup.ModelManagement),
+	createRoute(
+		RouteName.PlatformModelMultiplier,
+		RouteSection.Platform,
+		RouteGroup.ModelManagement,
+	),
 	createRoute(RouteName.PlatformOfficialMarketplace, RouteSection.Platform, RouteGroup.AgentManagement),
 	createRoute(RouteName.PlatformTenantCredits, RouteSection.Platform, RouteGroup.TenantManagement),
 	createRoute(RouteName.PlatformMaintenance, RouteSection.Platform, RouteGroup.OperationsSettings),

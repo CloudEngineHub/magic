@@ -1,3 +1,4 @@
+import type { ModelBillingMultiplierSettings as SharedModelBillingMultiplierSettings } from "../../../../model-billing-reference";
 import type { Language } from "@magic-admin-v2/i18n/resources";
 
 export type PlatformLocale = Language;
@@ -34,7 +35,11 @@ export type PlatformInfoWatermark = {
   depth: PlatformWatermarkDepth;
 };
 
+/** 价格原文透传；后端提供默认值与最终参考金额。 */
+export type ModelBillingMultiplierSettings = SharedModelBillingMultiplierSettings;
+
 export type PlatformInfoDetails = {
+  model_billing_multiplier?: ModelBillingMultiplierSettings;
   logo: PlatformLocalizedText;
   favicon: string | null;
   minimal_logo: string | null;
@@ -52,6 +57,7 @@ export type PlatformInfoDetails = {
 };
 
 export type PlatformInfoFormState = {
+  model_billing_multiplier: ModelBillingMultiplierSettings;
   logo: Record<PlatformLocale, string>;
   favicon: string;
   minimal_logo: string;
@@ -71,6 +77,7 @@ export type PlatformInfoFormState = {
 };
 
 export type UpdatePlatformInfoParams = {
+  model_billing_multiplier: Omit<ModelBillingMultiplierSettings, "base_price_cny">;
   logo_zh_url: string;
   logo_en_url: string;
   minimal_logo_url: string;

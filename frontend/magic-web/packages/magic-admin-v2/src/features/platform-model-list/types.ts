@@ -1,3 +1,15 @@
+/** 统一思考档位与显示顺序，与模型网关协议保持一致。 */
+export const reasoningEffortLevels = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
+export type ReasoningEffort = (typeof reasoningEffortLevels)[number];
+
 export const providerModelCategory = {
   llm: "llm",
   vlm: "vlm",
@@ -120,12 +132,7 @@ export type ProviderModelPricingRule = {
 };
 
 export type ProviderModelPricingMode =
-  | "fixed"
-  | "ladder"
-  | "input_token"
-  | "output_token"
-  | "cache_write_token"
-  | "cache_hit_token";
+  "fixed" | "ladder" | "input_token" | "output_token" | "cache_write_token" | "cache_hit_token";
 
 export type ProviderModelPricingStep = {
   max: string;
@@ -172,6 +179,9 @@ export type ProviderModelConfig = {
   support_function?: boolean;
   support_multi_modal?: boolean;
   support_deep_think?: boolean;
+  reasoning_effort_levels?: ReasoningEffort[] | null;
+  /** 空值表示跟随服务商默认，前端仅配置并保存该字段。 */
+  reasoning_effort_default?: ReasoningEffort | null;
   billing_currency: ProviderModelBillingCurrency;
   billing_type: string;
   billing_tiers?: ProviderModelBillingTier[] | null;
@@ -221,6 +231,11 @@ export type SaveProviderModelPayload = CreateProviderModelPayload & {
 };
 
 export type ProviderModelRecord = CreateProviderModelPayload & {
+  /** 接口始终返回完整思考配置，历史空值兼容由后端负责。 */
+  config: ProviderModelConfig & {
+    reasoning_effort_levels: ReasoningEffort[];
+    reasoning_effort_default: ReasoningEffort | null;
+  };
   id: string;
   status: ProviderModelStatus;
   provider_code?: string;
