@@ -918,7 +918,7 @@ class SuperMagicService {
 	 * 跳转回首页
 	 * @returns
 	 */
-	async navigateToHome(lastUsedWorkspaceId?: string | null) {
+	async navigateToHome(lastUsedWorkspaceId?: string | null, query?: Record<string, string>) {
 		projectStore.setSelectedProject(null)
 		this.topicStore.setSelectedTopic(null)
 
@@ -926,7 +926,7 @@ class SuperMagicService {
 		const shouldReplace = interfaceStore.isMobile
 		if (interfaceStore.isMobile) {
 			workspaceStore.setSelectedWorkspace(null)
-			this.route.navigateToHome(shouldReplace)
+			this.route.navigateToHome(shouldReplace, query)
 			return
 		}
 
@@ -973,10 +973,14 @@ class SuperMagicService {
 		}
 
 		if (workspaceId) {
-			this.route.navigateToWorkspace(workspaceId, shouldReplace)
+			if (query && Object.keys(query).length > 0) {
+				this.route.navigateToWorkspace(workspaceId, shouldReplace, query)
+			} else {
+				this.route.navigateToWorkspace(workspaceId, shouldReplace)
+			}
 		} else {
 			workspaceStore.setSelectedWorkspace(null)
-			this.route.navigateToHome(shouldReplace)
+			this.route.navigateToHome(shouldReplace, query)
 		}
 	}
 

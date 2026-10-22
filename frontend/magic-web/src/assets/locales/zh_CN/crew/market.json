@@ -279,6 +279,9 @@
 			"title": "添加员工"
 		},
 		"badgeUpdated": "待更新",
+		"copyUsageLink": "复制使用链接",
+		"copyUsageLinkFailed": "复制使用链接失败",
+		"copyUsageLinkSuccess": "使用链接已复制",
 		"crewType": {
 			"ariaLabel": "员工类型",
 			"collaborated": "我协作的",
