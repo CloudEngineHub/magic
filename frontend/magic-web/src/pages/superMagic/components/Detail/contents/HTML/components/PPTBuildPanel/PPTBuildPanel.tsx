@@ -17,12 +17,13 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowDown, ArrowUp, GripVertical, ListOrdered, Plus, X } from "lucide-react"
+import { ArrowDown, ArrowUp, GripVertical, ListOrdered, Plus, Redo2, Undo2, X } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import { cn } from "@/utils/cn"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
+import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
 import { useSelectedElement } from "../StylePanel/hooks/useSelectedElement"
 import { appendBuildStep, groupBuildQueue, reorderBuildQueue } from "./buildQueue"
 import { usePPTBuildQueue } from "./usePPTBuildQueue"
@@ -43,7 +44,8 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 }) {
 	const { t } = useTranslation("super")
 	const { selectedElement } = useSelectedElement(editorRef)
-	const { entries, loading, busy, failed, update, reload } = usePPTBuildQueue(
+	const { historyState } = useStylePanelStore()
+	const { entries, loading, busy, failed, update, travel, reload } = usePPTBuildQueue(
 		editorRef,
 		contentRevision,
 		onCommit,
@@ -77,18 +79,48 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 				<h3 className="flex items-center gap-2 text-sm font-medium">
 					<ListOrdered size={16} /> {t("ppt.build.title")}
 				</h3>
-				<MagicTooltip title={t("ppt.build.close")}>
-					<Button
-						variant="ghost"
-						size="icon"
-						className="size-7"
-						aria-label={t("ppt.build.close")}
-						onClick={onClose}
-						disabled={busy || disabled}
-					>
-						<X size={16} />
-					</Button>
-				</MagicTooltip>
+				<div className="flex items-center gap-0.5">
+					{[
+						{
+							key: "undo" as const,
+							icon: Undo2,
+							label: t("ppt.build.undo"),
+							enabled: historyState.canUndo,
+						},
+						{
+							key: "redo" as const,
+							icon: Redo2,
+							label: t("ppt.build.redo"),
+							enabled: historyState.canRedo,
+						},
+					].map(({ key, icon: Icon, label, enabled }) => (
+						<MagicTooltip key={key} title={label}>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-7"
+								aria-label={label}
+								data-testid={`ppt-build-${key}`}
+								disabled={locked || !enabled}
+								onClick={() => void travel(key)}
+							>
+								<Icon size={16} />
+							</Button>
+						</MagicTooltip>
+					))}
+					<MagicTooltip title={t("ppt.build.close")}>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							aria-label={t("ppt.build.close")}
+							onClick={onClose}
+							disabled={busy || disabled}
+						>
+							<X size={16} />
+						</Button>
+					</MagicTooltip>
+				</div>
 			</div>
 			<div className="space-y-2 border-b border-border p-3">
 				<Button

@@ -54,15 +54,15 @@ export function usePPTBuildQueue(
 	useEffect(() => {
 		void reload()
 	}, [contentRevision, reload])
-	const update = useCallback(
-		async (updates: PPTBuildUpdate[]) => {
-			if (pending.current || !updates.length || !editorRef.current) return
+	/** One serialized, persisted edit; a failed save rolls the editor back by one step. */
+	const runCommitted = useCallback(
+		async (apply: () => Promise<void>, rollback: () => Promise<void>) => {
+			if (pending.current || !editorRef.current) return
 			pending.current = true
 			setBusy(true)
-			const editor = editorRef.current
 			let needsRollback = false
 			try {
-				await editor.updatePPTBuilds(updates)
+				await apply()
 				needsRollback = Boolean(onCommit)
 				// Browsing has no save toolbar: persist each completed queue operation.
 				// A failed save rolls back this one atomic command rather than leaving
@@ -70,9 +70,9 @@ export function usePPTBuildQueue(
 				if (onCommit && !(await onCommit())) throw new Error("PPT_BUILD_SAVE_FAILED")
 				needsRollback = false
 				await reload()
-			} catch (error) {
+			} catch {
 				if (needsRollback) {
-					await editor.undo().catch(() => {
+					await rollback().catch(() => {
 						/* The slide may have been disposed. */
 					})
 					await reload()
@@ -85,5 +85,27 @@ export function usePPTBuildQueue(
 		},
 		[editorRef, reload, onCommit, t],
 	)
-	return { entries, loading, busy, failed, update, reload }
+	const update = useCallback(
+		async (updates: PPTBuildUpdate[]) => {
+			const editor = editorRef.current
+			if (!updates.length || !editor) return
+			await runCommitted(
+				() => editor.updatePPTBuilds(updates),
+				() => editor.undo(),
+			)
+		},
+		[editorRef, runCommitted],
+	)
+	const travel = useCallback(
+		async (direction: "undo" | "redo") => {
+			const editor = editorRef.current
+			if (!editor) return
+			await runCommitted(
+				() => editor[direction](),
+				() => editor[direction === "undo" ? "redo" : "undo"](),
+			)
+		},
+		[editorRef, runCommitted],
+	)
+	return { entries, loading, busy, failed, update, travel, reload }
 }

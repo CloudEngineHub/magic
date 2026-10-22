@@ -5222,12 +5222,14 @@
 			"progress": "Step {{step}}/{{total}}",
 			"queue": "Animation step queue",
 			"queueHint": "Click to advance. Elements in one step appear together. Drag steps or use the arrows to reorder.",
+			"redo": "Redo",
 			"remove": "Remove animation",
 			"retry": "Retry",
 			"saveFailed": "Could not update the animation. Try again.",
 			"step": "Step number",
 			"stepLabel": "Step {{step}}",
 			"title": "In-slide animation",
+			"undo": "Undo",
 			"updating": "Updating animations…"
 		},
 		"codeVersionCompare": {

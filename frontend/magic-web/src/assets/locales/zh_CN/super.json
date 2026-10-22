@@ -5220,12 +5220,14 @@
 			"progress": "步骤 {{step}}/{{total}}",
 			"queue": "动画步骤队列",
 			"queueHint": "单击依次播放；同一步同时出现。拖动步骤或用箭头调整顺序。",
+			"redo": "重做",
 			"remove": "移除动画",
 			"retry": "重试",
 			"saveFailed": "动画设置失败，请重试。",
 			"step": "第几步",
 			"stepLabel": "步骤 {{step}}",
 			"title": "页内动画",
+			"undo": "撤销",
 			"updating": "正在更新动画…"
 		},
 		"codeVersionCompare": {

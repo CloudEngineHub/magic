@@ -10,7 +10,11 @@ import { PPTBuildPanel } from "../PPTBuildPanel"
 
 const state = vi.hoisted(() => ({
 	selectedElement: null as null | { selector: string },
+	history: { canUndo: false, canRedo: false },
 	error: vi.fn(),
+}))
+vi.mock("../../../iframe-bridge/contexts/StylePanelContext", () => ({
+	useStylePanelStore: () => ({ historyState: state.history }),
 }))
 vi.mock("../../StylePanel/hooks/useSelectedElement", () => ({ useSelectedElement: () => state }))
 vi.mock("@/components/base/MagicToaster/utils", () => ({ default: { error: state.error } }))
@@ -36,6 +40,7 @@ function setup(initial = [make("first", 1), make("second", 2)], onCommit?: () =>
 		undo: vi.fn(async () => {
 			entries = previous
 		}),
+		redo: vi.fn(async () => {}),
 		getPPTBuilds: vi.fn(async () => entries),
 		setPPTBuildMarkers: vi.fn(async () => {}),
 		selectElement: vi.fn(async () => {}),
@@ -66,6 +71,7 @@ function setup(initial = [make("first", 1), make("second", 2)], onCommit?: () =>
 }
 beforeEach(() => {
 	state.selectedElement = null
+	state.history = { canUndo: false, canRedo: false }
 	state.error.mockClear()
 })
 afterEach(cleanup)
@@ -164,5 +170,25 @@ describe("PPT build panel", () => {
 			/>,
 		)
 		await screen.findByRole("button", { name: "restored ppt.build.fade" })
+	})
+
+	it("undoes and redoes through the editor and persists each result", async () => {
+		const onCommit = vi.fn(async () => true)
+		state.history = { canUndo: true, canRedo: true }
+		const { editor } = setup(undefined, onCommit)
+		await screen.findByText("first")
+		fireEvent.click(screen.getByTestId("ppt-build-undo"))
+		await waitFor(() => expect(editor.undo).toHaveBeenCalledTimes(1))
+		await waitFor(() => expect(onCommit).toHaveBeenCalledTimes(1))
+		fireEvent.click(screen.getByTestId("ppt-build-redo"))
+		await waitFor(() => expect(editor.redo).toHaveBeenCalledTimes(1))
+		await waitFor(() => expect(onCommit).toHaveBeenCalledTimes(2))
+	})
+
+	it("disables undo and redo when the editor has nothing to travel to", async () => {
+		setup()
+		await screen.findByText("first")
+		expect(screen.getByTestId("ppt-build-undo")).toBeDisabled()
+		expect(screen.getByTestId("ppt-build-redo")).toBeDisabled()
 	})
 })
