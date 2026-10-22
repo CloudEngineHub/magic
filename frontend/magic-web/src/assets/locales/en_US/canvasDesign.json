@@ -142,14 +142,29 @@
 		"unsupportedReferenceImageType": "Only image files can be added as reference images"
 	},
 	"elementBottomToolbar": {
+		"closeVersionPanel": "Close versions panel",
+		"collapseVersions": "Collapse versions",
 		"deleteVersion": "Delete version",
+		"deleteVersionNumber": "Delete V{{number}}",
 		"discardedDraft": "Discarded draft",
 		"label": "Element bottom toolbar",
 		"mainVersion": "Main version",
 		"nextVersion": "Next version",
 		"previousVersion": "Previous version",
 		"setMainVersion": "Set as main version",
-		"versionCount": "{{current}}/{{total}}"
+		"setMainVersionNumber": "Set V{{number}} as main version",
+		"switchToVersion": "Switch to V{{number}}",
+		"versionAudioLoadFailed": "{{name}} failed to load",
+		"versionAudioLoading": "Loading {{name}}",
+		"versionCount": "{{current}}/{{total}}",
+		"versionPanelTitle": "View versions",
+		"versionStatusEmpty": "No content",
+		"versionStatusGenerating": "Generating",
+		"versionStatusLoading": "Loading",
+		"versionStatusReplacing": "Replacing",
+		"versionStatusTerminated": "Terminated",
+		"versionStatusUploading": "Uploading",
+		"viewVersions": "View versions"
 	},
 	"elementConflict": {
 		"deleteElement": "Delete element",

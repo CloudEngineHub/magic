@@ -141,4 +141,66 @@ describe("CanvasUIProvider panel exclusivity", () => {
 			expect(ui?.canvasRenamingElementId).toBe("image-1")
 		})
 	})
+
+	it("keeps the version panel exclusive and closes it when the anchor is deselected", async () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		let ui: ReturnType<typeof useCanvasUI> | undefined
+		const onReady = (value: ReturnType<typeof useCanvasUI>) => {
+			ui = value
+		}
+
+		render(
+			<CanvasProvider>
+				<CanvasUIHarness canvas={canvas} onReady={onReady} />
+			</CanvasProvider>,
+		)
+
+		await waitFor(() => expect(ui).toBeDefined())
+
+		act(() => {
+			eventEmitter.emit({
+				type: "element:select",
+				data: { elementIds: ["image-1"] },
+			})
+			ui?.openMessageHistory("image-1", "content-1")
+			ui?.toggleVersionPanel("image-1")
+		})
+
+		await waitFor(() => {
+			expect(ui?.messageHistoryElementId).toBeNull()
+			expect(ui?.versionPanelElementId).toBe("image-1")
+		})
+
+		act(() => {
+			eventEmitter.emit({ type: "element:deselect", data: {} })
+		})
+
+		await waitFor(() => expect(ui?.versionPanelElementId).toBeNull())
+	})
+
+	it("closes the version panel when the document lifecycle changes", async () => {
+		const { canvas, eventEmitter } = createCanvasStub()
+		let ui: ReturnType<typeof useCanvasUI> | undefined
+		const onReady = (value: ReturnType<typeof useCanvasUI>) => {
+			ui = value
+		}
+
+		render(
+			<CanvasProvider>
+				<CanvasUIHarness canvas={canvas} onReady={onReady} />
+			</CanvasProvider>,
+		)
+		await waitFor(() => expect(ui).toBeDefined())
+
+		act(() => {
+			eventEmitter.emit({ type: "element:select", data: { elementIds: ["image-1"] } })
+			ui?.toggleVersionPanel("image-1")
+		})
+		await waitFor(() => expect(ui?.versionPanelElementId).toBe("image-1"))
+
+		act(() => {
+			eventEmitter.emit({ type: "document:loaded", data: undefined })
+		})
+		await waitFor(() => expect(ui?.versionPanelElementId).toBeNull())
+	})
 })

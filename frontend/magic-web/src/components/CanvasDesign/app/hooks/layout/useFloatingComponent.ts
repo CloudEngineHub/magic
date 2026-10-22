@@ -14,6 +14,7 @@ const POINTER_INTERACTIVE_SELECTOR = [
 	"[contenteditable='true']",
 	"[data-floating-pan-trap='true']",
 ].join(",")
+const POINTER_PAN_THROUGH_SELECTOR = "[data-floating-pan-through='true']"
 
 function isAxisScrollable(overflow: string, scrollSize: number, clientSize: number): boolean {
 	return OVERFLOW_SCROLL_VALUES.has(overflow) && scrollSize > clientSize + 1
@@ -79,12 +80,25 @@ function pointerShouldDeferToDomInteraction(container: HTMLElement, e: PointerEv
 	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
 	for (const node of path) {
 		if (!(node instanceof HTMLElement)) continue
-		if (node.matches(POINTER_INTERACTIVE_SELECTOR)) {
+		if (
+			node.matches(POINTER_INTERACTIVE_SELECTOR) &&
+			!node.matches(POINTER_PAN_THROUGH_SELECTOR)
+		) {
 			return true
 		}
 		if (node === container) {
 			break
 		}
+	}
+	return false
+}
+
+function pointerAllowsPanThrough(container: HTMLElement, e: PointerEvent): boolean {
+	const path = typeof e.composedPath === "function" ? (e.composedPath() as EventTarget[]) : []
+	for (const node of path) {
+		if (!(node instanceof HTMLElement)) continue
+		if (node.matches(POINTER_PAN_THROUGH_SELECTOR)) return true
+		if (node === container) break
 	}
 	return false
 }
@@ -192,7 +206,9 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 				return
 			}
 
-			e.preventDefault()
+			const panThrough = pointerAllowsPanThrough(container, e)
+			if (!panThrough) e.preventDefault()
+			let moved = false
 
 			const stage = canvas.stage
 			const startClient = { x: e.clientX, y: e.clientY }
@@ -200,6 +216,12 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 
 			pointerPanMoveHandlerRef.current = (ev: PointerEvent) => {
 				if (ev.pointerId !== e.pointerId) return
+				if (
+					Math.abs(ev.clientX - startClient.x) > 3 ||
+					Math.abs(ev.clientY - startClient.y) > 3
+				) {
+					moved = true
+				}
 				stage.setPointersPositions(ev)
 				const position = {
 					x: stageStart.x + ev.clientX - startClient.x,
@@ -212,6 +234,19 @@ export function useFloatingComponent(options: UseFloatingComponentOptions) {
 
 			pointerPanUpHandlerRef.current = (ev: PointerEvent) => {
 				if (ev.pointerId !== e.pointerId) return
+				if (moved) {
+					const suppressClick = (clickEvent: MouseEvent) => {
+						clickEvent.preventDefault()
+						clickEvent.stopPropagation()
+					}
+					container.addEventListener("click", suppressClick, {
+						capture: true,
+						once: true,
+					})
+					window.setTimeout(() => {
+						container.removeEventListener("click", suppressClick, { capture: true })
+					}, 0)
+				}
 				clearPointerPanSession()
 			}
 

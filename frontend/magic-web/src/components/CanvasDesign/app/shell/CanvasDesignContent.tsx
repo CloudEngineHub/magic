@@ -11,6 +11,7 @@ import { Canvas } from "../../runtime/core/Canvas"
 import ImageMessageEditor from "../../ui/element-tools/editors/image/index"
 import VideoGenerateEditor from "../../ui/element-tools/editors/video/index"
 import MessageHistory from "../../ui/panels/history/index"
+import ContentVersionPanel from "../../ui/panels/content-version/index"
 import VideoFullscreenOverlay from "../../ui/fullscreen/video/index"
 import ImageElementFullscreenOverlay from "../../ui/fullscreen/image-element/index"
 import AudioElementFullscreenOverlay from "../../ui/fullscreen/audio-element/index"
@@ -271,6 +272,7 @@ const CanvasDesignContent = forwardRef<CanvasDesignRef, CanvasDesignProps>((prop
 				{canWrite && <ImageExtendPanel />}
 				{canWrite && <ImageEraserPanel />}
 				<MessageHistory />
+				<ContentVersionPanel />
 				{/* Keep rename after editor surfaces so its temporary z-index promotion wins ties. */}
 				{canWrite && <ElementRenameOverlay />}
 				{fullscreenMediaElement?.type === "video" ? (

@@ -53,6 +53,9 @@ interface CanvasUIContextValue {
 	messageHistoryContentId?: string
 	openMessageHistory: (elementId: string, contentId?: string) => void
 	closeMessageHistory: () => void
+	versionPanelElementId: string | null
+	toggleVersionPanel: (elementId: string) => void
+	closeVersionPanel: () => void
 
 	// 当前全屏预览的媒体元素（null 表示不显示）
 	fullscreenMediaElement: FullscreenMediaElement | null
@@ -103,6 +106,9 @@ interface CanvasPanelUIContextValue {
 	messageHistoryContentId?: string
 	openMessageHistory: (elementId: string, contentId?: string) => void
 	closeMessageHistory: () => void
+	versionPanelElementId: string | null
+	toggleVersionPanel: (elementId: string) => void
+	closeVersionPanel: () => void
 	fullscreenMediaElement: FullscreenMediaElement | null
 	setFullscreenMediaElement: (element: FullscreenMediaElement | null) => void
 	storyboardReferenceImagePreview: StoryboardReferenceImagePreview | null
@@ -147,10 +153,10 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	}>({ elementId: null })
 	const messageHistoryElementId = messageHistory.elementId
 	const messageHistoryContentId = messageHistory.contentId
+	const [versionPanelElementId, setVersionPanelElementId] = useState<string | null>(null)
 	const closeCanvasRename = useCallback(() => {
-		// History and rename are mutually exclusive surfaces. Clear the React state and
-		// the runtime rename session together so the label does not remain editable
-		// after the rename panel is unmounted.
+		// History, versions and rename are mutually exclusive surfaces. Clear the React
+		// state and runtime rename session together so no stale panel remains mounted.
 		setCanvasRenamingElementId(null)
 		canvas?.elementRenameManager.cancelRename()
 	}, [canvas])
@@ -158,22 +164,43 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 	const closeMessageHistory = useCallback(() => {
 		setMessageHistory({ elementId: null })
 	}, [])
+	const closeVersionPanel = useCallback(() => {
+		setVersionPanelElementId(null)
+	}, [])
+	const openVersionPanel = useCallback(
+		(elementId: string) => {
+			setMessageHistory({ elementId: null })
+			setCanvasRenamingElementId(null)
+			canvas?.elementRenameManager.cancelRename()
+			setVersionPanelElementId(elementId)
+		},
+		[canvas],
+	)
+	const toggleVersionPanel = useCallback(
+		(elementId: string) => {
+			if (versionPanelElementId === elementId) closeVersionPanel()
+			else openVersionPanel(elementId)
+		},
+		[closeVersionPanel, openVersionPanel, versionPanelElementId],
+	)
 
 	const openCanvasRename = useCallback(
 		(elementId: string) => {
 			closeMessageHistory()
+			closeVersionPanel()
 			setCanvasRenamingElementId(elementId)
 		},
-		[closeMessageHistory],
+		[closeMessageHistory, closeVersionPanel],
 	)
 
-	// 元素和版本作为一次查看一起更新，打开历史前同时关闭画布重命名，避免两个面板重叠。
+	// 元素和版本作为一次查看一起更新，打开历史前关闭其它选中元素面板，避免重叠。
 	const openMessageHistory = useCallback(
 		(elementId: string, contentId?: string) => {
 			closeCanvasRename()
+			closeVersionPanel()
 			setMessageHistory({ elementId, contentId })
 		},
-		[closeCanvasRename],
+		[closeCanvasRename, closeVersionPanel],
 	)
 	const [fullscreenMediaElement, setFullscreenMediaElement] =
 		useState<FullscreenMediaElement | null>(null)
@@ -338,6 +365,10 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		[closeCanvasRename],
 	)
 
+	useCanvasEvent("document:loaded", () => closeVersionPanel(), [closeVersionPanel])
+	useCanvasEvent("document:restored", () => closeVersionPanel(), [closeVersionPanel])
+	useCanvasEvent("canvas:clear", () => closeVersionPanel(), [closeVersionPanel])
+
 	useCanvasEvent(
 		"element:deleted",
 		({ data }) => {
@@ -345,6 +376,7 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			// runtime-only removals do not have a usable selection at all). Clear both
 			// selection-owned surfaces here so they cannot retain a deleted element ID.
 			if (messageHistoryElementId === data.elementId) closeMessageHistory()
+			if (versionPanelElementId === data.elementId) closeVersionPanel()
 			if (
 				canvasRenamingElementId === data.elementId ||
 				canvas?.elementRenameManager.getRenamingElementId() === data.elementId
@@ -357,7 +389,9 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			canvasRenamingElementId,
 			closeCanvasRename,
 			closeMessageHistory,
+			closeVersionPanel,
 			messageHistoryElementId,
+			versionPanelElementId,
 		],
 	)
 
@@ -368,7 +402,20 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		) {
 			closeMessageHistory()
 		}
-	}, [canvas, closeMessageHistory, messageHistoryElementId, selectedElementIds])
+		if (
+			versionPanelElementId &&
+			!isOnlySelectedElement(selectedElementIds, versionPanelElementId)
+		) {
+			closeVersionPanel()
+		}
+	}, [
+		canvas,
+		closeMessageHistory,
+		closeVersionPanel,
+		messageHistoryElementId,
+		selectedElementIds,
+		versionPanelElementId,
+	])
 
 	useEffect(() => {
 		if (canWrite && canGenerate) return
@@ -384,6 +431,11 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			setErasingElementId(null)
 		}
 	}, [canGenerate, canWrite, closeCanvasRename])
+
+	useEffect(() => {
+		if (canvas?.permissionManager.can("interaction.switchContent")) return
+		closeVersionPanel()
+	}, [canvas, closeVersionPanel])
 
 	useCanvasEvent("permission:changed", () => forceAccessUpdate(), [])
 
@@ -417,6 +469,9 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 			messageHistoryContentId,
 			openMessageHistory,
 			closeMessageHistory,
+			versionPanelElementId,
+			toggleVersionPanel,
+			closeVersionPanel,
 			fullscreenMediaElement,
 			setFullscreenMediaElement,
 			storyboardReferenceImagePreview,
@@ -427,6 +482,9 @@ export function CanvasUIProvider({ children }: CanvasUIProviderProps) {
 		messageHistoryContentId,
 		openMessageHistory,
 		closeMessageHistory,
+		versionPanelElementId,
+		toggleVersionPanel,
+		closeVersionPanel,
 		fullscreenMediaElement,
 		storyboardReferenceImagePreview,
 	])
