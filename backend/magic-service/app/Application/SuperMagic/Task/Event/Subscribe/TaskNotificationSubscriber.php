@@ -15,6 +15,7 @@ use App\Application\SuperMagic\Task\Service\TaskNotificationLabelResolver;
 use App\Domain\SuperMagic\Task\Entity\ValueObject\TaskStatus;
 use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
 use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
+use Hyperf\Contract\ConfigInterface;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 use Hyperf\Logger\LoggerFactory;
@@ -37,11 +38,20 @@ final class TaskNotificationSubscriber implements ListenerInterface
 
     public function listen(): array
     {
+        if (! $this->container->get(ConfigInterface::class)->get('notification.task_enabled', false)) {
+            return [];
+        }
+
         return [RunTaskCallbackEvent::class];
     }
 
     public function process(object $event): void
     {
+        // 订阅关闭前已入队的回调仍可能到达；在查询任务文案和发布通知事件前结束。
+        if (! $this->container->get(ConfigInterface::class)->get('notification.task_enabled', false)) {
+            return;
+        }
+
         if (! $event instanceof RunTaskCallbackEvent) {
             return;
         }
