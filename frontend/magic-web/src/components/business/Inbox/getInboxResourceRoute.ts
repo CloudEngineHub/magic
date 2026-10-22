@@ -109,7 +109,7 @@ function resolveApprovalRoute(message: InboxMessage) {
 	if (message.type === "agent_approved") {
 		if (resourceType !== "agent" || !code) return undefined
 		return {
-			path: buildRoute(RouteName.CrewConversation, { code }),
+			path: buildRoute(RouteName.CrewEdit, { id: code }),
 			nameFields: RESOURCE_NAME_FIELDS,
 		}
 	}
