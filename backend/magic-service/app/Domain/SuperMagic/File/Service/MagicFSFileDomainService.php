@@ -31,6 +31,16 @@ use Throwable;
 
 class MagicFSFileDomainService
 {
+    /**
+     * Collision policy: reject the rename when the destination exists.
+     */
+    public const RENAME_ON_EXISTS_FAIL = 'fail';
+
+    /**
+     * Collision policy: the destination absorbs the source and survives.
+     */
+    public const RENAME_ON_EXISTS_REPLACE = 'replace';
+
     protected LoggerInterface $logger;
 
     public function __construct(
@@ -766,6 +776,121 @@ class MagicFSFileDomainService
     }
 
     /**
+     * Rename one file onto a destination, with an explicit collision policy.
+     *
+     * This is a separate operation from updateFile on purpose. A rename carries
+     * an identity decision that a partial update cannot express — "the
+     * destination is occupied, whose row survives?" — and expressing it as one
+     * forced the answer to be inferred from which fields happened to be set.
+     *
+     * Replacement semantics ({@see self::RENAME_ON_EXISTS_REPLACE}):
+     *
+     *   - the DESTINATION keeps its row: same file_id, same file_key, same
+     *     version chain. Only its content pointer and size move to the source's
+     *     bytes.
+     *   - the SOURCE row is soft-deleted.
+     *
+     * The alternative — delete the destination, then move the source onto its
+     * name — is what updateFile used to do implicitly, and it swaps which
+     * file_id owns the path. Everything that references a file by id
+     * (checkpoint snapshots, mentions, cross-project links) would then point at
+     * a deleted row, and the destination's version chain would be orphaned
+     * after a single save.
+     *
+     * @param string $sourceFileId source file id
+     * @param string $newName destination name
+     * @param null|int $newParentId destination parent; null keeps the current one
+     * @param string $onExists replace|fail
+     * @return TaskFileEntity the surviving destination entity
+     */
+    public function renameFile(
+        string $sourceFileId,
+        string $newName,
+        ?int $newParentId = null,
+        string $onExists = self::RENAME_ON_EXISTS_REPLACE
+    ): TaskFileEntity {
+        $source = $this->getFileById($sourceFileId);
+
+        $newName = trim($newName);
+        if ($newName === '') {
+            ExceptionBuilder::throw(MagicFSErrorCode::NAME_IS_REQUIRED, 'magicfs.name_is_required');
+        }
+        if (! in_array($onExists, [self::RENAME_ON_EXISTS_REPLACE, self::RENAME_ON_EXISTS_FAIL], true)) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::OPERATION_FAILED,
+                'magicfs.invalid_on_exists',
+                ['on_exists' => $onExists]
+            );
+        }
+
+        $targetParentId = $newParentId ?? $source->getParentId();
+        if ($targetParentId === null) {
+            // A mounted tree has exactly one immutable root; detaching it would
+            // create a second root with no durable head identity.
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::PARENT_DIRECTORY_NOT_FOUND,
+                'magicfs.parent_directory_not_found',
+                ['parent_id' => '']
+            );
+        }
+
+        // Resolve the destination directory by id. A pure rename keeps the
+        // source's parent, but that directory's row still has to be fetched:
+        // reusing the source entity here made the source file stand in for its
+        // own parent, which then failed the "parent must be a directory" check.
+        $targetParent = $this->taskFileRepository->getFileTreeFileById($targetParentId);
+        if ($targetParent === null) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::PARENT_DIRECTORY_NOT_FOUND,
+                'magicfs.parent_directory_not_found',
+                ['parent_id' => (string) $targetParentId]
+            );
+        }
+        if (! $targetParent->getIsDirectory()) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::PARENT_NOT_DIRECTORY,
+                'magicfs.parent_not_directory',
+                ['parent_id' => (string) $targetParentId]
+            );
+        }
+
+        $existing = $this->getExistingChildInParent(
+            $targetParentId,
+            $newName,
+            $targetParent,
+            $targetParent->getUserId(),
+            $targetParent->getOrganizationCode()
+        );
+        if ($existing !== null && $existing->getFileId() === $source->getFileId()) {
+            // Renaming onto itself is a no-op, not a collision.
+            $existing = null;
+        }
+
+        if ($existing === null) {
+            return $this->renameOntoVacantName($source, $newName, $targetParentId);
+        }
+
+        if ($existing->getIsDirectory()) {
+            // POSIX: renaming a file onto a directory is EISDIR; replacing a
+            // whole subtree is a different operation and never implicit.
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::FILE_ALREADY_EXISTS,
+                'magicfs.file_already_exists',
+                ['name' => $newName]
+            );
+        }
+        if ($onExists === self::RENAME_ON_EXISTS_FAIL) {
+            ExceptionBuilder::throw(
+                MagicFSErrorCode::FILE_ALREADY_EXISTS_IN_TARGET,
+                'magicfs.file_already_exists_in_target',
+                ['name' => $newName]
+            );
+        }
+
+        return $this->renameOntoOccupiedFile($source, $existing);
+    }
+
+    /**
      * 删除文件或目录（软删除）.
      *
      * 默认只删除节点自身（unlink/rmdir 语义）。
@@ -924,29 +1049,14 @@ class MagicFSFileDomainService
     }
 
     /**
-     * Advance the metadata versions of the nodes a mutation just touched.
+     * Bump the file-tree version of each given node in one statement.
      *
-     * The caller names the nodes whose cached representation became stale:
+     * Version bumps are cache invalidations, not change events: this advances
+     * metadata_version without journalling a mutation, so readers that cache a
+     * directory listing notice it is stale without subscribers being told a
+     * file changed.
      *
-     *   - the mutated node itself, when its journal row is appended after the
-     *     bump so the row carries the post-bump version (a reader compares the
-     *     version in the snapshot with the one it holds);
-     *   - every directory whose *direct* listing changed, i.e. the parent of a
-     *     created, removed or moved child, and both parents of a move.
-     *
-     * Ancestors above that set are deliberately absent. A child's change makes
-     * its grandparent's *recursive* view stale, but POSIX moves only the
-     * containing directory for a one-level change, and reporting the deeper
-     * levels is what turned a feed of node changes into a feed of directory
-     * bookkeeping: consumers derive "this listing changed" from the child row's
-     * `parent_id`, which the mutation already publishes, so the ancestor rows
-     * carried nothing they could not compute while multiplying the window by
-     * tree depth (see TaskFileRepository::bumpMetadataVersions).
-     *
-     * Nothing here writes a journal row: a bump is cache invalidation, the row
-     * belongs to the mutation.
-     *
-     * @param array<null|int|string> $fileIds nodes whose version must advance
+     * @param array<int|string> $fileIds
      */
     public function bumpFileTreeVersions(array $fileIds): void
     {
@@ -1027,20 +1137,6 @@ class MagicFSFileDomainService
     }
 
     /**
-     * 重命名文件或目录（文件系统语义）.
-     *
-     * 等价于 rename(old, new)，目标已存在则覆盖。
-     *
-     * @param string $fileId 文件ID
-     * @param string $newName 新文件名
-     * @return TaskFileEntity 更新后的文件实体
-     */
-    public function renameFile(string $fileId, string $newName): TaskFileEntity
-    {
-        return $this->updateFile($fileId, ['name' => $newName]);
-    }
-
-    /**
      * 恢复软删除的文件：清除 deleted_at 并将 file_size 置 0，其他字段原样保留。
      *
      * 语义（checkpoint 撤回取消撤回 / 复用已删除 file_id 场景）：
@@ -1089,6 +1185,29 @@ class MagicFSFileDomainService
         });
     }
 
+    /**
+     * Advance the metadata versions of the nodes a mutation just touched.
+     *
+     * The caller names the nodes whose cached representation became stale:
+     *
+     *   - the mutated node itself, when its journal row is appended after the
+     *     bump so the row carries the post-bump version (a reader compares the
+     *     version in the snapshot with the one it holds);
+     *   - every directory whose *direct* listing changed, i.e. the parent of a
+     *     created, removed or moved child, and both parents of a move.
+     *
+     * Ancestors above that set are deliberately absent. A child's change makes
+     * its grandparent's *recursive* view stale, but POSIX moves only the
+     * containing directory for a one-level change, and reporting the deeper
+     * levels is what turned a feed of node changes into a feed of directory
+     * bookkeeping: consumers derive "this listing changed" from the child row's
+     * `parent_id`, which the mutation already publishes, so the ancestor rows
+     * carried nothing they could not compute while multiplying the window by
+     * tree depth (see TaskFileRepository::bumpMetadataVersions).
+     *
+     * Nothing here writes a journal row: a bump is cache invalidation, the row
+     * belongs to the mutation.
+     */
     /**
      * Bounded breadth-first traversal for the legacy tree endpoint.
      *
@@ -1332,6 +1451,91 @@ class MagicFSFileDomainService
             $projectId,
             $spaceType
         );
+    }
+
+    /**
+     * Vacant destination: identity, bytes and version chain travel with the
+     * source row, which simply changes name/parent.
+     */
+    private function renameOntoVacantName(TaskFileEntity $source, string $newName, int $targetParentId): TaskFileEntity
+    {
+        $oldParentId = $source->getParentId();
+        $parentChanged = $oldParentId !== $targetParentId;
+
+        return Db::transaction(function () use ($source, $newName, $targetParentId, $oldParentId, $parentChanged) {
+            $before = $this->taskFileRepository->getById((int) $source->getFileId());
+
+            $source->setFileName($newName);
+            $source->setFileExtension(pathinfo($newName, PATHINFO_EXTENSION));
+            $source->setParentId($targetParentId);
+            $source->setUpdatedAt(date('Y-m-d H:i:s'));
+            $source->setIsHidden($this->determineIsHidden($newName, $targetParentId, $source->getProjectId()));
+
+            $this->taskFileRepository->updateById($source, null, false);
+            $this->bumpFileTreeVersions(
+                $parentChanged ? [$source->getFileId(), $oldParentId, $targetParentId] : [$source->getFileId()]
+            );
+
+            $updated = $this->getFileById((string) $source->getFileId());
+            $this->taskFileRepository->appendFileTreeMutation($before, $updated);
+
+            return $updated;
+        });
+    }
+
+    /**
+     * Occupied destination: the destination row survives and adopts the
+     * source's content; the source row is retired.
+     *
+     * The content hand-off keeps the destination's file_key and copies the
+     * source's bytes onto it, rather than pointing the destination at the
+     * source's key. Two reasons:
+     *
+     *  1. file_key is UNIQUE across the table and soft-deleted rows still hold
+     *     their value, so the destination cannot take the source's key until the
+     *     source row is gone — which happens later, in the transaction.
+     *  2. a soft-deleted row keeps a usable file_key so restoreFile() can bring
+     *     it back. Re-pointing keys around would leave the retired row referring
+     *     to an object nobody owns.
+     *
+     * The cost is one server-side object copy per replacement.
+     */
+    private function renameOntoOccupiedFile(TaskFileEntity $source, TaskFileEntity $destination): TaskFileEntity
+    {
+        $sourceKey = $source->getFileKey();
+        $destinationKey = $destination->getFileKey();
+
+        if ($sourceKey !== '' && $sourceKey !== $destinationKey) {
+            // Signature: (prefix, organizationCode, sourceKey, destinationKey, ...).
+            // The prefix scopes the temporary credential to this organization's
+            // work dir; the keys themselves are already fully qualified.
+            $this->cloudFileRepository->copyObjectByCredential(
+                '',
+                $destination->getOrganizationCode(),
+                $sourceKey,
+                $destinationKey,
+                StorageBucketType::SandBox
+            );
+        }
+
+        return Db::transaction(function () use ($source, $destination) {
+            $beforeDst = $this->taskFileRepository->getById((int) $destination->getFileId());
+
+            $destination->setFileSize($source->getFileSize());
+            $destination->setUpdatedAt(date('Y-m-d H:i:s'));
+            $this->taskFileRepository->updateById($destination, null, false);
+
+            // Soft-delete the source inside the same transaction: a partial
+            // commit would leave two live rows under different names but the
+            // same bytes, and a retry would then copy onto itself.
+            $this->taskFileRepository->deleteById((int) $source->getFileId(), false);
+
+            $this->bumpFileTreeVersions([$destination->getFileId()]);
+            $updated = $this->getFileById((string) $destination->getFileId());
+            $this->taskFileRepository->appendFileTreeMutation($beforeDst, $updated);
+
+            return $updated;
+        });
     }
 
     private function getExistingChildInParent(
