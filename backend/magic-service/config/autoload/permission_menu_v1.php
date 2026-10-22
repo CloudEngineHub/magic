@@ -188,6 +188,14 @@ return [
             ],
             'tag' => '智能体增强',
         ],
+        'platform.setting.asset' => [
+            'path' => [
+                ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
+                ['key' => 'agent_enhancement', 'label' => '智能体增强', 'order' => 3],
+                ['key' => 'asset_library', 'label' => '素材库', 'order' => 3],
+            ],
+            'tag' => '智能体增强',
+        ],
         'platform.agent.official' => [
             'path' => [
                 ['key' => 'platform_management', 'label' => '平台管理', 'order' => 1],
