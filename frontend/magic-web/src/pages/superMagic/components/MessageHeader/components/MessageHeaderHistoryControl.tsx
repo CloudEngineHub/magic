@@ -7,8 +7,13 @@ export interface MessageHeaderHistoryControlProps {
 	isHistoryButtonActive: boolean
 	tooltipTitle: string
 	onToggleHistoryPanel?: () => void
+	/** Notified after the history control has already toggled. */
+	onTriggerAction?: () => Promise<void> | void
 	triggerRef?: RefObject<HTMLButtonElement>
-	dropdownProps?: Omit<ComponentProps<typeof TopicHistoryDropdown>, "children">
+	dropdownProps?: Omit<
+		ComponentProps<typeof TopicHistoryDropdown>,
+		"children" | "onTriggerAction"
+	>
 }
 
 export function MessageHeaderHistoryControl({
@@ -16,6 +21,7 @@ export function MessageHeaderHistoryControl({
 	isHistoryButtonActive,
 	tooltipTitle,
 	onToggleHistoryPanel,
+	onTriggerAction,
 	triggerRef,
 	dropdownProps,
 }: MessageHeaderHistoryControlProps) {
@@ -28,10 +34,14 @@ export function MessageHeaderHistoryControl({
 			isActive={isHistoryButtonActive}
 			tooltipTitle={tooltipTitle}
 			onToggle={onToggleHistoryPanel}
+			onTriggerAction={onTriggerAction}
 			renderDropdown={
 				historyTriggerMode === "dropdown" && dropdownProps
 					? (trigger) => (
-							<TopicHistoryDropdown {...dropdownProps}>
+							<TopicHistoryDropdown
+								{...dropdownProps}
+								onTriggerAction={onTriggerAction}
+							>
 								{trigger}
 							</TopicHistoryDropdown>
 						)

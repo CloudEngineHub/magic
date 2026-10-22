@@ -34,6 +34,82 @@ const validOptions: MagicWidget.MountOptions = {
 		shell: { appSidebar: false },
 		conversation: { projectFiles: false, topicHistory: true, autoHire: false },
 		responsive: { mobileDetection: "device-and-viewport" },
+		header: {
+			visible: true,
+			title: "Mock Assistant",
+			topicName: { mode: "current" },
+			actions: {
+				fullscreen: true,
+				pin: true,
+				newTopic: true,
+				history: true,
+				share: false,
+				more: true,
+				close: true,
+			},
+		},
+		panel: {
+			projectFiles: false,
+			uploadFiles: false,
+			otherProjectFiles: false,
+			digitalEmployees: false,
+			microApps: false,
+			workflows: false,
+			connectors: false,
+			skills: false,
+			canvasElements: false,
+			customGroups: [
+				{
+					id: "group-typecheck",
+					label: "Typecheck group",
+					items: [
+						{
+							id: "content-typecheck",
+							type: "card",
+							text: "Typecheck fixture",
+							data: { source: "fixture" },
+						},
+					],
+				},
+			],
+		},
+		bottom: {
+			internetSearch: { enabled: true, buttonVisible: false },
+			plugin: { enabled: false, buttonVisible: false },
+			upload: { enabled: false, buttonVisible: false },
+			voice: { enabled: true, buttonVisible: true },
+			model: { buttonVisible: false },
+		},
+		window: { closable: false },
+	},
+	headerActions: {
+		fullscreen: async ({ action }) => {
+			void action
+		},
+		pin: async ({ topicId }) => {
+			void topicId
+		},
+		newTopic: async ({ topicName }) => {
+			void topicName
+		},
+		close: async ({ topicId, topicName }) => {
+			void topicId
+			void topicName
+		},
+	},
+	customMentionSearch: async ({ query, scope, signal }) => {
+		const result: MagicWidget.CustomMentionSearchResult = {
+			groupId: scope.type === "group" ? scope.groupId : "group-typecheck",
+			items: [
+				{
+					id: "dynamic-typecheck",
+					type: "card",
+					text: `Result for ${query}`,
+				},
+			],
+		}
+		void signal
+		return [result]
 	},
 }
 
@@ -58,6 +134,18 @@ const unsubscribePreviewFullscreen = window.MagicWidget?.on(
 	},
 )
 void unsubscribePreviewFullscreen
+
+const unsubscribeConfigWarning = window.MagicWidget?.on("config.warning", (warning) => {
+	const code: "CUSTOM_MENTION_FILTERED" = warning.code
+	const droppedGroups: number = warning.details.droppedGroups
+	const droppedItems: number = warning.details.droppedItems
+	const reasons: MagicWidget.ConfigWarningReason[] = warning.details.reasons
+	void code
+	void droppedGroups
+	void droppedItems
+	void reasons
+})
+void unsubscribeConfigWarning
 
 const unsubscribeMessageStreamStarted = window.MagicWidget?.on(
 	"message.stream.started",
@@ -239,6 +327,35 @@ const invalidIframeTitleOptions: MagicWidget.MountOptions = {
 }
 
 void invalidIframeTitleOptions
+
+const hiddenTitleOptions: MagicWidget.MountOptions = {
+	page: {
+		type: "crew",
+		crewId: "crew-001",
+	},
+	config: {
+		header: {
+			title: { mode: "hidden" },
+			topicName: { mode: "current" },
+		},
+	},
+}
+
+void hiddenTitleOptions
+
+const staticTitleOptions: MagicWidget.MountOptions = {
+	page: {
+		type: "crew",
+		crewId: "crew-001",
+	},
+	config: {
+		header: {
+			title: { mode: "static", text: "Mock Assistant" },
+		},
+	},
+}
+
+void staticTitleOptions
 
 void window.MagicWidget?.setInput({
 	blocks: [

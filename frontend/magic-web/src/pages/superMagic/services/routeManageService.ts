@@ -435,7 +435,7 @@ class RouteManageService {
 		return ProjectTopicMapCache.get(userInfo, projectId)
 	}
 
-	navigateToHome(replace?: boolean) {
+	navigateToHome(replace?: boolean, query?: Record<string, string>) {
 		// 更新缓存：清空所有状态
 		const userInfo = userStore.user.userInfo
 		WorkspaceStateCache.set(userInfo, {
@@ -444,16 +444,19 @@ class RouteManageService {
 			topicId: null,
 		})
 		UserWorkspaceMapCache.set(userInfo, null)
+		const queryProps = query && Object.keys(query).length > 0 ? { query } : {}
 
 		if (interfaceStore.isMobile) {
 			this.safeNavigate({
 				name: RouteName.MobileHome,
+				...queryProps,
 				viewTransition: false,
 				replace,
 			})
 		} else {
 			this.safeNavigate({
 				name: this.getRouteName(RouteName.Super),
+				...queryProps,
 				viewTransition: false,
 				replace,
 			})
@@ -515,8 +518,9 @@ class RouteManageService {
 	/**
 	 * Navigate to workspace page
 	 * @param workspaceId Workspace ID
+	 * @param query Search params that must survive the navigation (for example agentCode)
 	 */
-	navigateToWorkspace(workspaceId: string, replace?: boolean) {
+	navigateToWorkspace(workspaceId: string, replace?: boolean, query?: Record<string, string>) {
 		const { workspaceId: param_workspaceId, projectId: param_projectId } =
 			this.getCurrentRouteParams()
 
@@ -547,6 +551,7 @@ class RouteManageService {
 			this.safeNavigate({
 				name: RouteName.MobileTabs,
 				query: {
+					...query,
 					tab: currentTab,
 				},
 				viewTransition,
@@ -558,6 +563,7 @@ class RouteManageService {
 				params: {
 					workspaceId,
 				},
+				...(query && Object.keys(query).length > 0 ? { query } : {}),
 				viewTransition,
 				replace,
 			})
@@ -929,6 +935,9 @@ class RouteManageService {
 		// redirecting away from non-workspace routes (e.g. /market/crew).
 		if (!this.isSuperRoute()) return
 		if (interfaceStore.isMobile && this.isCurrentMobileHomeRoute()) return
+		// Keep the deep-link query until the homepage hook has resolved access and
+		// hired the employee; rewriting the route here would erase the request first.
+		if (new URLSearchParams(baseHistory.location.search).has("agentCode")) return
 
 		const currentWorkspace = workspaceStore.selectedWorkspace
 		const currentProject = projectStore.selectedProject

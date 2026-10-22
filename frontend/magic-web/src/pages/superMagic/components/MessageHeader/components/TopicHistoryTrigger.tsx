@@ -9,6 +9,8 @@ export interface TopicHistoryTriggerProps {
 	isActive: boolean
 	tooltipTitle: string
 	onToggle?: () => void
+	/** Notified after the history control has already toggled. */
+	onTriggerAction?: () => Promise<void> | void
 	renderDropdown?: (trigger: ReactNode) => ReactNode
 	triggerRef?: RefObject<HTMLButtonElement>
 }
@@ -21,6 +23,7 @@ export function TopicHistoryTrigger({
 	isActive,
 	tooltipTitle,
 	onToggle,
+	onTriggerAction,
 	renderDropdown,
 	triggerRef,
 }: TopicHistoryTriggerProps) {
@@ -32,7 +35,17 @@ export function TopicHistoryTrigger({
 			size="icon-sm"
 			className={cn(headerIconButtonClassName, isActive && "bg-accent")}
 			data-testid="message-header-history-button"
-			onClick={mode === "layout" ? onToggle : undefined}
+			onClick={
+				mode === "layout"
+					? () => {
+							onToggle?.()
+							if (!onTriggerAction) return
+							void Promise.resolve(onTriggerAction()).catch(() => {
+								// A host callback failure must not undo the history toggle.
+							})
+						}
+					: undefined
+			}
 		>
 			<History size={16} className="shrink-0 text-foreground" />
 		</Button>
