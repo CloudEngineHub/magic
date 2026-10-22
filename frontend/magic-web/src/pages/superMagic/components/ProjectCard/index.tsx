@@ -1,17 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import { Check, ChevronDown, Ellipsis, Layers, PanelLeftClose, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { cn } from "@/utils/cn"
 import type { ProjectCardProps, SeparatorProps } from "./types"
 import { IconShare3 } from "@tabler/icons-react"
 import { Button } from "@/components/shadcn-ui/button"
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/shadcn-ui/dropdown-menu"
+import IconShareCog from "@/enhance/tabler/icons-react/icons/iconShareCog"
 import PinnedTag from "../EmptyWorkspacePanel/components/ProjectItem/components/PinnedTag"
 import CollaborationProjectTag from "../CollaborationProjectTag"
 import { isCollaborationProject } from "../../constants"
 import { canManageProject, isReadOnlyProject } from "../../utils/permission"
 import ProjectCardShareSection from "./components/ProjectCardShareSection"
 import ProjectCardInviteButton from "./components/ProjectCardInviteButton"
-import { openShareManagementModal } from "../ShareManagement/openShareManagementModal"
 import { isAiCanvasProject } from "../../utils/isAiCanvasProject"
 import MagicFileIcon from "@/components/base/MagicFileIcon"
 import IconWorkspaceProjectFolder from "@/enhance/tabler/icons-react/icons/IconWorkspaceProjectFolder"
@@ -22,6 +28,10 @@ import { Input } from "@/components/shadcn-ui/input"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/shadcn-ui/tooltip"
 import { openProjectInNewTab } from "../../utils/project"
 import type { CollaborationProjectListItem, ProjectListItem } from "../../pages/Workspace/types"
+
+const ProjectShareManagementDialog = lazy(
+	() => import("../ShareManagement/ProjectShareManagementDialog"),
+)
 
 /**
  * Separator component for dividing sections
@@ -58,6 +68,8 @@ function ProjectCard({
 	const isCompact = variant === "compact"
 	const { t } = useTranslation("super")
 	const [menuOpen, setMenuOpen] = useState(false)
+	// Compact card only: this project's share manager (like the recording detail's).
+	const [shareManagementOpen, setShareManagementOpen] = useState(false)
 	useEffect(() => {
 		if (!isPanelVisible) setMenuOpen(false)
 	}, [isPanelVisible])
@@ -132,11 +144,22 @@ function ProjectCard({
 			}
 		: undefined
 
-	// The compact card floats where the project sidebar (and its share tab) is missing, so its menu
-	// carries share management. AI canvas projects stay in their dedicated workspace: no "move to".
+	// AI canvas projects stay in their dedicated workspace: no "move to".
 	const canMoveProject = !isAiCanvasProject(selectedProject)
-	const handleOpenShareManagement =
-		isCompact && canShare ? () => openShareManagementModal(selectedProject.id) : undefined
+
+	const shareIconButton = (
+		<Button
+			variant="ghost"
+			size="icon"
+			className="h-7 w-7 text-muted-foreground"
+			onClick={isCompact ? undefined : onShareClick}
+			aria-label={t("common.share")}
+			title={t("common.share")}
+			data-testid="share-button"
+		>
+			<IconShare3 size={16} className="text-foreground" />
+		</Button>
+	)
 
 	// Share and more actions: on the workspace row by default, beside the name when compact.
 	const actionButtons = (
@@ -144,20 +167,33 @@ function ProjectCard({
 			{isCompact && canManage ? (
 				<ProjectCardInviteButton onInviteClick={onInviteClick} />
 			) : null}
-			{/* Share Icon */}
-			{canShare && (
-				<Button
-					variant="ghost"
-					size="icon"
-					className="h-7 w-7 text-muted-foreground"
-					onClick={onShareClick}
-					aria-label={t("common.share")}
-					title={t("common.share")}
-					data-testid="share-button"
-				>
-					<IconShare3 size={16} className="text-foreground" />
-				</Button>
-			)}
+			{/* Share: a plain button on the workspace row. The compact card floats where the project
+			    sidebar (and its share tab) is missing, so, like the recording detail, its button
+			    opens "create share" and "manage shares" (this project's shares only). */}
+			{canShare &&
+				(isCompact ? (
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>{shareIconButton}</DropdownMenuTrigger>
+						<DropdownMenuContent align="end" className="min-w-[140px]">
+							<DropdownMenuItem
+								onSelect={() => onShareClick?.()}
+								data-testid="project-card-share-menu-share"
+							>
+								<IconShare3 size={16} />
+								{t("project.createShare")}
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onSelect={() => setShareManagementOpen(true)}
+								data-testid="project-card-share-menu-management"
+							>
+								<IconShareCog size={16} color="currentColor" />
+								{t("project.manageShare")}
+							</DropdownMenuItem>
+						</DropdownMenuContent>
+					</DropdownMenu>
+				) : (
+					shareIconButton
+				))}
 
 			<ProjectActionsDropdown
 				open={isPanelVisible && menuOpen}
@@ -173,7 +209,6 @@ function ProjectCard({
 				onCopyCollaborationLink={handleCopyCollaborationLink}
 				onTransferProject={handleTransferProject}
 				onMoveProject={canMoveProject ? handleMoveProject : undefined}
-				onOpenShareManagement={handleOpenShareManagement}
 				onAddCollaborators={onAddCollaborators}
 				onCancelWorkspaceShortcut={handleCancelWorkspaceShortcutForMenu}
 				onDeleteProject={handleDeleteProjectConfirm}
@@ -376,6 +411,15 @@ function ProjectCard({
 			)}
 
 			{projectModals}
+			{shareManagementOpen ? (
+				<Suspense fallback={null}>
+					<ProjectShareManagementDialog
+						open={shareManagementOpen}
+						projectId={selectedProject.id}
+						onClose={() => setShareManagementOpen(false)}
+					/>
+				</Suspense>
+			) : null}
 		</div>
 	)
 }

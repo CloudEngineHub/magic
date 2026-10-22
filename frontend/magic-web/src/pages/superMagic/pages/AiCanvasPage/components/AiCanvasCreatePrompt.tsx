@@ -5,21 +5,31 @@ import { SuperMagicApi } from "@/apis"
 import magicToast from "@/components/base/MagicToaster/utils"
 import EditorLayout from "@/pages/superMagic/components/MainInputContainer/scenes/EditorLayout"
 import type { SceneEditorContext } from "@/pages/superMagic/components/MainInputContainer/components/editors/types"
-import { createSceneStateStore } from "@/pages/superMagic/components/MainInputContainer/stores"
+import {
+	SceneStateProvider,
+	createSceneStateStore,
+	sceneStateStore as sharedSceneStateStore,
+} from "@/pages/superMagic/components/MainInputContainer/stores"
+import { ScenePanelVariant } from "@/pages/superMagic/components/MainInputContainer/components/LazyScenePanel/types"
+import { createMessageEditorDraftKey } from "@/pages/superMagic/components/MessageEditor/utils/draftKey"
+import { ToolbarButton } from "@/pages/superMagic/components/MessageEditor/types"
+import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
 import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import type { CreatedProject, Workspace } from "@/pages/superMagic/pages/Workspace/types"
-import { projectStore, topicStore } from "@/pages/superMagic/stores/core"
-import SuperMagicService from "@/pages/superMagic/services"
+import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import {
 	buildAiCanvasMention,
 	createAiCanvasDocument,
 	getAiCanvasDefaultFolderName,
 } from "@/pages/superMagic/pages/TopicPage/utils/aiCanvas"
+import { openAiCanvasProject } from "../utils/openAiCanvasProject"
 
 interface AiCanvasCreatePromptProps {
 	/** The ai-canvas workspace; sending is disabled until it is loaded. */
 	workspace: Workspace | null
+	/** H5: the mobile composer docked at the bottom of the page instead of the desktop one. */
+	mobile?: boolean
 }
 
 const noopTopicModeChange = () => undefined
@@ -33,11 +43,17 @@ const noopTopicModeChange = () => undefined
  * create the ai-canvas project → create its default canvas → bind that canvas as an implicit
  * mention → send with the design mode → open the project. If the canvas cannot be created the
  * send is aborted, so the agent never starts without a canvas path.
+ *
+ * On H5 the same creation flow drives the mobile composer, which (like the micro-app H5 home)
+ * expects a complete editor context and the shared scene state the mobile composer reads.
  */
-function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
+function AiCanvasCreatePrompt({ workspace, mobile = false }: AiCanvasCreatePromptProps) {
 	const { t } = useTranslation("aiCanvas")
-	// Isolated scene state: the home composer must not share playbook state with other pages.
-	const [sceneStateStore] = useState(() => createSceneStateStore())
+	// Desktop gets isolated scene state so the home composer shares no playbook state with other
+	// pages; the mobile composer works on the shared store.
+	const [sceneStateStore] = useState(() =>
+		mobile ? sharedSceneStateStore : createSceneStateStore(),
+	)
 	// Canvas mention per created project, consumed by getImplicitMentionItems in the same send.
 	const canvasMentionsRef = useRef(new Map<string, MentionListItem>())
 
@@ -88,12 +104,59 @@ function AiCanvasCreatePrompt({ workspace }: AiCanvasCreatePromptProps) {
 			onSendSuccess: ({ currentProject }) => {
 				if (!currentProject) return
 				canvasMentionsRef.current.delete(String(currentProject.id))
-				// ai-canvas projects open in the normal project route, which renders the canvas layout.
-				void SuperMagicService.switchProjectInDesktop(currentProject)
+				void openAiCanvasProject(currentProject)
 			},
 		}),
 		[t, workspace],
 	)
+
+	const mobileEditorContext = useMemo<SceneEditorContext>(
+		() => ({
+			...editorContext,
+			selectedWorkspace: workspace,
+			selectedProject: null,
+			selectedTopic: null,
+			draftKey: createMessageEditorDraftKey({
+				selectedWorkspace: workspace,
+				selectedProject: null,
+				selectedTopic: null,
+			}),
+			setSelectedWorkspace: workspaceStore.setSelectedWorkspace,
+			setSelectedProject: projectStore.setSelectedProject,
+			setSelectedTopic: topicStore.setSelectedTopic,
+			topicMode: TopicMode.Design,
+			enableMessageSendByContent: true,
+			size: "mobile",
+			showModelSelector: true,
+			layoutConfig: {
+				topBarLeft: [ToolbarButton.AT],
+				bottomLeft: [ToolbarButton.MODEL_SWITCH],
+				bottomRight: [
+					ToolbarButton.UPLOAD,
+					ToolbarButton.DIVIDER,
+					ToolbarButton.VOICE_INPUT,
+					ToolbarButton.SEND_BUTTON,
+				],
+			},
+			modules: {
+				upload: { confirmDelete: false },
+			},
+		}),
+		[editorContext, workspace],
+	)
+
+	if (mobile) {
+		return (
+			<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.Mobile}>
+				<div className="w-full" data-testid="ai-canvas-create-prompt-mobile">
+					{/* Same draft-key reason as desktop: mount once the workspace is known. */}
+					{workspace ? (
+						<MobileInputContainer editorContext={mobileEditorContext} />
+					) : null}
+				</div>
+			</SceneStateProvider>
+		)
+	}
 
 	return (
 		<div className="w-full" data-testid="ai-canvas-create-prompt">

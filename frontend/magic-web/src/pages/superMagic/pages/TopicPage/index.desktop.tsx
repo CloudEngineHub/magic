@@ -169,6 +169,8 @@ interface TopicPageDesktopProps {
 function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const isSingleTopicChat = pageVariant === "singleTopicChat"
 	const { t } = useTranslation("super")
+	// AI canvas composers share the AI canvas home's prompt hint.
+	const { t: tAiCanvas } = useTranslation("aiCanvas")
 	// Get workspace and project state from stores
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedProject = projectStore.selectedProject
@@ -869,6 +871,7 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
 				isChatDetail={isSingleTopicChat}
 				lockedTopicMode={isAiCanvas ? TopicMode.Design : undefined}
+				placeholder={isAiCanvas ? tAiCanvas("home.placeholder") : undefined}
 				getImplicitMentionItems={isAiCanvas ? getAiCanvasMentionItems : undefined}
 			/>
 		),

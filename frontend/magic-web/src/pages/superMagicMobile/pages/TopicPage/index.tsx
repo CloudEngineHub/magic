@@ -73,6 +73,9 @@ import {
 } from "../shared/topicPageCapabilities"
 import { useCreateTopicListener } from "@/pages/superMagic/components/TopicMode/useCreateTopicListener"
 import { Ellipsis } from "lucide-react"
+import { isAiCanvasProject } from "@/pages/superMagic/utils/isAiCanvasProject"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+import { useAiCanvasDocument } from "@/pages/superMagic/pages/TopicPage/hooks/useAiCanvasDocument"
 import { useTranslation } from "react-i18next"
 import { Button } from "@/components/shadcn-ui/button"
 import { PORTAL_IDS } from "@/constants"
@@ -110,6 +113,15 @@ interface TopicPageProps {
 	onInitialMessagesReadyChange?: (isReady: boolean) => void
 }
 
+const noopOpenCanvas = () => undefined
+
+/** AI canvas topics always talk to the design employee: the mode cannot be switched. */
+const AI_CANVAS_TOPIC_MODE_LOGIC = {
+	topicMode: TopicMode.Design,
+	setTopicMode: () => undefined,
+	recoverTopicMode: () => undefined,
+}
+
 function TopicPage({
 	onHistoryClick,
 	className,
@@ -127,6 +139,8 @@ function TopicPage({
 }: TopicPageProps = {}) {
 	const { t } = useTranslation("super")
 	const { t: tMainInput } = useTranslation("super/mainInput")
+	// AI canvas composers share the AI canvas home's prompt hint.
+	const { t: tAiCanvas } = useTranslation("aiCanvas")
 	const { styles, cx } = useStyles()
 	const isMobile = useIsMobile()
 	const location = useLocation()
@@ -148,6 +162,23 @@ function TopicPage({
 	// Get state from stores
 	const selectedTopic = topicStore.selectedTopic
 	const selectedProject = projectStore.selectedProject
+	const isAiCanvas = isAiCanvasProject(selectedProject)
+	// Same canvas binding as the desktop topic page: ensures the project's canvas exists and
+	// renames it whenever the project is renamed (including the automatic rename after the first
+	// message). The canvas is shown on the project page, so nothing is opened here.
+	const aiCanvasDocument = useAiCanvasDocument({
+		enabled: isAiCanvas,
+		projectId: selectedProject?.id,
+		projectName: selectedProject?.project_name,
+		isReadOnly: isReadOnlyProject(selectedProject?.user_role),
+		attachments: projectFilesStore.workspaceFileTree,
+		attachmentLoadState: projectFilesStore.attachmentLoadState,
+		projectFilesStore,
+		openCanvas: noopOpenCanvas,
+	})
+	// AI canvas topics bind the project's canvas to every send, as on desktop. Read at send time
+	// so a canvas created after the page opened is found too.
+	const getAiCanvasMentionItems = useMemoizedFn(() => aiCanvasDocument.canvasMentionItems)
 	const { switchToProjectTopic } = useMobileProjectTopicSwitch({
 		projectId: selectedProject?.id,
 	})
@@ -674,22 +705,34 @@ function TopicPage({
 							onFileClick={onFileClick}
 							selectedWorkspace={selectedWorkspace}
 							// Chat details use the same model-only selector as the chat home.
-							showModeToggle={isSingleTopicChat ? false : undefined}
-							showModelSelector={isSingleTopicChat ? true : undefined}
+							// AI canvas topics are locked to the design employee, as on desktop: no mode
+							// switch, only the model selector.
+							showModeToggle={isSingleTopicChat || isAiCanvas ? false : undefined}
+							showModelSelector={isSingleTopicChat || isAiCanvas ? true : undefined}
+							agentCode={isAiCanvas ? null : undefined}
+							getImplicitMentionItems={
+								isAiCanvas ? getAiCanvasMentionItems : undefined
+							}
 							placeholder={
 								isSingleTopicChat
 									? tMainInput("mobileHome.chatPlaceholder")
-									: undefined
+									: isAiCanvas
+										? tAiCanvas("home.placeholder")
+										: undefined
 							}
 							attachments={attachments}
 							isShowLoadingInit={isShowLoadingInit}
 							enableReEditMessageFromPubSub
 							onSendComplete={handleEditorSendComplete}
-							topicModeLogic={{
-								topicMode,
-								setTopicMode,
-								recoverTopicMode,
-							}}
+							topicModeLogic={
+								isAiCanvas
+									? AI_CANVAS_TOPIC_MODE_LOGIC
+									: {
+											topicMode,
+											setTopicMode,
+											recoverTopicMode,
+										}
+							}
 						/>
 					</div>
 				</div>

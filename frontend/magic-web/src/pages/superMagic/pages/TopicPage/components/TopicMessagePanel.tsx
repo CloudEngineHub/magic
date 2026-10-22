@@ -141,6 +141,8 @@ interface TopicMessagePanelProps {
 	lockedTopicMode?: TopicMode
 	/** Mentions bound to every sent message, e.g. the AI canvas folder. */
 	getImplicitMentionItems?: ProjectPageInputContainerProps["getImplicitMentionItems"]
+	/** Overrides the mode placeholder, e.g. the AI canvas home's prompt hint. */
+	placeholder?: string
 }
 
 function TopicMessagePanel({
@@ -177,6 +179,7 @@ function TopicMessagePanel({
 	isChatDetail = false,
 	lockedTopicMode,
 	getImplicitMentionItems,
+	placeholder,
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
@@ -405,6 +408,7 @@ function TopicMessagePanel({
 			}}
 			showModeToggle={isComposerModeLocked ? false : undefined}
 			getImplicitMentionItems={getImplicitMentionItems}
+			placeholder={placeholder}
 			size={detailPanelVisible ? "small" : "default"}
 		/>
 	)

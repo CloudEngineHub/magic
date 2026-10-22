@@ -74,6 +74,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		onPreviewFileChange,
 		onPreviewFullscreenChange,
 		zIndex,
+		inline = false,
 	} = props
 
 	const isMobile = useIsMobile()
@@ -90,7 +91,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 	const fileApi = useFileApi()
 	const [previewDetail, setPreviewDetail] = useState<PreviewDetail>()
 	const [visible, setVisible] = useState(false)
-	const shouldOwnOverlayLayer = visible && !isFileShare
+	const shouldOwnOverlayLayer = visible && !isFileShare && !inline
 	const { overlayZIndex, releaseOverlayZIndex } = useOverlayZIndex({
 		open: shouldOwnOverlayLayer,
 		zIndex,
@@ -116,7 +117,8 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 		) => {
 			// Exiting PPT fullscreen may leave the viewport in landscape. Keep the route and
 			// sheet mounted until this preview closes, so its file, slide and draft state survive.
-			if (isMobile && !isFileShare) {
+			// Inline previews live inside the page and never close, so they hold no layout lock.
+			if (isMobile && !isFileShare && !inline) {
 				releaseMobileLayoutRef.current ??= retainMobilePresentationLayout()
 			}
 			setPreviewDetail(options)
@@ -125,7 +127,7 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			setUserDetail(options)
 			setVisible(true)
 		},
-		[isMobile, isFileShare],
+		[isMobile, isFileShare, inline],
 	)
 
 	/** Keeps an open preview aligned with project attachment data loaded after first render. */
@@ -410,6 +412,17 @@ function PreviewDetailPopup(props: PreviewDetailPopupProps, ref: Ref<PreviewDeta
 			? OFFICE_DETAIL_TYPES.includes(correctedPreviewDetail.type as DetailType)
 			: false
 	}, [attachmentList, previewDetail])
+
+	if (inline) {
+		return (
+			<div
+				className="flex h-full min-h-0 w-full flex-col bg-background"
+				data-testid="inline-preview-detail-root"
+			>
+				{previewDetail ? RenderComponent : null}
+			</div>
+		)
+	}
 
 	if (isFileShare) {
 		return (

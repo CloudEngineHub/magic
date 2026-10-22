@@ -2,19 +2,22 @@ import { memo } from "react"
 import { useTranslation } from "react-i18next"
 import { Search, X } from "lucide-react"
 import { Input } from "@/components/shadcn-ui/input"
+import { cn } from "@/utils/cn"
 
 interface AiCanvasSearchInputProps {
 	value: string
 	onChange: (value: string) => void
+	/** Width override; the desktop header keeps a fixed width, H5 spans the row. */
+	className?: string
 }
 
 /** Name search of "My canvases": a pill input with a clear button once something is typed. */
-function AiCanvasSearchInput({ value, onChange }: AiCanvasSearchInputProps) {
+function AiCanvasSearchInput({ value, onChange, className }: AiCanvasSearchInputProps) {
 	const { t } = useTranslation("aiCanvas")
 	const placeholder = t("home.searchPlaceholder")
 
 	return (
-		<div className="relative w-56 shrink-0">
+		<div className={cn("relative w-56 shrink-0", className)}>
 			<Search
 				size={16}
 				className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"

@@ -1,15 +1,10 @@
 import { memo, useEffect, useRef, useState, type FormEvent } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, MoreHorizontal, Pencil, Pin, PinOff, Trash2 } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 import dayjs from "@/infrastructure/vendors/dayjs"
 import { Button } from "@/components/shadcn-ui/button"
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/shadcn-ui/dropdown-menu"
+import ProjectActionsDropdown from "@/pages/superMagic/components/ProjectActionsDropdown"
+import type { ProjectActionHandlers } from "@/pages/superMagic/components/ProjectActionsDropdown/types"
 import {
 	Dialog,
 	DialogContent,
@@ -25,6 +20,11 @@ import CanvasMediaImage from "./CanvasMediaImage"
 import EmptyCanvasCover from "./EmptyCanvasCover"
 import { cn } from "@/utils/cn"
 
+export type AiCanvasCardMenuActions = Pick<
+	ProjectActionHandlers<ProjectListItem>,
+	"onCopyCollaborationLink" | "onAddCollaborators" | "onTransferProject"
+>
+
 interface AiCanvasProjectCardProps {
 	project: ProjectListItem
 	/** Newest images (max four); undefined while resolving, null when the canvas has none. */
@@ -34,6 +34,13 @@ interface AiCanvasProjectCardProps {
 	onDelete: (project: ProjectListItem) => void
 	onOpenInNewWindow?: (project: ProjectListItem) => void
 	onTogglePin?: (project: ProjectListItem) => void
+	/**
+	 * The rest of the project detail menu (collaboration link, collaborators,
+	 * transfer). Collaboration actions come from the enterprise overlay and stay hidden without it.
+	 */
+	menuActions?: AiCanvasCardMenuActions
+	/** H5: the more button opens the mobile project action sheet instead of the dropdown. */
+	onOpenMenu?: (project: ProjectListItem) => void
 	onHover?: () => void
 	/** Called once when the card first nears the viewport; covers load from then on. */
 	onVisible?: (projectId: string) => void
@@ -86,6 +93,8 @@ function AiCanvasProjectCard({
 	onDelete,
 	onOpenInNewWindow,
 	onTogglePin,
+	menuActions,
+	onOpenMenu,
 	onHover,
 	onVisible,
 }: AiCanvasProjectCardProps) {
@@ -113,8 +122,6 @@ function AiCanvasProjectCard({
 	}, [onVisible, project.id])
 
 	const { t, i18n } = useTranslation("aiCanvas")
-	// Shared project action labels, as in the project card's menu.
-	const { t: tSuper } = useTranslation("super")
 	const [renaming, setRenaming] = useState(false)
 	const [draftName, setDraftName] = useState("")
 	const name = project.project_name || t("home.untitled")
@@ -160,51 +167,49 @@ function AiCanvasProjectCard({
 						</div>
 					) : null}
 				</div>
-				<DropdownMenu>
-					<DropdownMenuTrigger asChild>
-						<Button
-							variant="ghost"
-							size="icon"
-							className="size-7 shrink-0 text-muted-foreground"
-							aria-label={t("home.moreActions")}
-						>
-							<MoreHorizontal size={16} />
-						</Button>
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end">
-						{onOpenInNewWindow ? (
-							<DropdownMenuItem onSelect={() => onOpenInNewWindow(project)}>
-								<ExternalLink size={16} />
-								{tSuper("project.openInNewWindow")}
-							</DropdownMenuItem>
-						) : null}
-						{onTogglePin ? (
-							<DropdownMenuItem onSelect={() => onTogglePin(project)}>
-								{project.is_pinned ? <PinOff size={16} /> : <Pin size={16} />}
-								{project.is_pinned
-									? tSuper("project.unpin")
-									: tSuper("project.pin")}
-							</DropdownMenuItem>
-						) : null}
-						{onOpenInNewWindow || onTogglePin ? <DropdownMenuSeparator /> : null}
-						<DropdownMenuItem
-							onSelect={() => {
-								setDraftName(project.project_name || "")
-								setRenaming(true)
-							}}
-						>
-							<Pencil size={16} />
-							{t("home.rename")}
-						</DropdownMenuItem>
-						<DropdownMenuItem
-							className="text-destructive focus:text-destructive"
-							onSelect={() => onDelete(project)}
-						>
-							<Trash2 size={16} />
-							{t("home.delete")}
-						</DropdownMenuItem>
-					</DropdownMenuContent>
-				</DropdownMenu>
+				{onOpenMenu ? (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-7 shrink-0 text-muted-foreground"
+						aria-label={t("home.moreActions")}
+						onClick={() => onOpenMenu(project)}
+						data-testid="ai-canvas-card-more-button"
+					>
+						<MoreHorizontal size={16} />
+					</Button>
+				) : (
+					// Same menu as the canvas project page's card, plus "open in new window" first.
+					<ProjectActionsDropdown
+						item={project}
+						inCollaborationPanel={false}
+						trigger={["click"]}
+						placement="bottomRight"
+						onOpenInNewWindow={onOpenInNewWindow}
+						onPinProject={onTogglePin ? (item) => onTogglePin(item) : undefined}
+						onRenameStart={() => {
+							setDraftName(project.project_name || "")
+							setRenaming(true)
+						}}
+						onRenameProject={async ({ projectId, projectName }) => {
+							await onRename({ projectId, projectName })
+						}}
+						onDeleteProject={onDelete}
+						{...menuActions}
+					>
+						<span>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-7 shrink-0 text-muted-foreground"
+								aria-label={t("home.moreActions")}
+								data-testid="ai-canvas-card-more-button"
+							>
+								<MoreHorizontal size={16} />
+							</Button>
+						</span>
+					</ProjectActionsDropdown>
+				)}
 			</div>
 
 			<Dialog open={renaming} onOpenChange={setRenaming}>

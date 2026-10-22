@@ -36,11 +36,25 @@ import ProjectShareSheet from "@/pages/superMagicMobile/components/ProjectShareS
 import useCollaboratorUpdatePanel from "@/pages/superMagic/components/WithCollaborators/hooks/useCollaboratorUpdatePanel"
 import { resolveProjectDetailHeaderActions } from "@/pages/superMagicMobile/utils/sharedProjectActionPolicy"
 import MobileScheduledTasksPanel from "./components/MobileScheduledTasksPanel"
+import MobileAiCanvasPanel from "./components/MobileAiCanvasPanel"
+import { AI_CANVAS_HIDDEN_ACTION_KEYS } from "@/pages/superMagicMobile/utils/mobileProjectActionOrder"
+import { isAiCanvasProject } from "@/pages/superMagic/utils/isAiCanvasProject"
+import { useAiCanvasDocument } from "@/pages/superMagic/pages/TopicPage/hooks/useAiCanvasDocument"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import {
 	getProjectDetailTabs,
 	shouldKeepScheduledTasksPanelMounted,
 	type ProjectDetailTab,
 } from "./tab-config"
+
+const noopOpenCanvas = () => undefined
+
+/** AI canvas composers always talk to the design employee: the mode cannot be switched. */
+const AI_CANVAS_TOPIC_MODE_LOGIC = {
+	topicMode: TopicMode.Design,
+	setTopicMode: () => undefined,
+	recoverTopicMode: () => undefined,
+}
 
 function ProjectPage() {
 	return <ObservedLegacyProjectPage />
@@ -51,6 +65,8 @@ function ProjectPage() {
  */
 function LegacyProjectPage() {
 	const { t } = useTranslation("super")
+	// AI canvas composers share the AI canvas home's prompt hint.
+	const { t: tAiCanvas } = useTranslation("aiCanvas")
 	const { createTopicForProjectSend, handleSendComplete, handleSendSuccess } =
 		useProjectPageComposerContext()
 
@@ -64,12 +80,21 @@ function LegacyProjectPage() {
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedTopic = topicStore.selectedTopic
 	const isReadonly = isReadOnlyProject(selectedProject?.user_role)
+	// AI canvas projects keep this page's structure with only "Topics" and "Canvas" tabs.
+	const isAiCanvas = isAiCanvasProject(selectedProject)
 
 	/** 项目详情 tab 配置：复用 SmoothTabs 的滑块测量能力，并保留稳定测试选择器。 */
 	const projectDetailTabs = useMemo<Tab<ProjectDetailTab>[]>(
-		() => getProjectDetailTabs(t, isReadonly),
-		[isReadonly, t],
+		() => getProjectDetailTabs(t, isReadonly, isAiCanvas),
+		[isAiCanvas, isReadonly, t],
 	)
+
+	/** Falls back to topics when the current tab does not exist for this project. */
+	useEffect(() => {
+		if (!projectDetailTabs.some((tab) => tab.value === activeSiderTab)) {
+			setActiveSiderTab("topics")
+		}
+	}, [activeSiderTab, projectDetailTabs])
 
 	/** Returns users to the topics tab when the current project no longer permits task access. */
 	useEffect(() => {
@@ -142,6 +167,21 @@ function LegacyProjectPage() {
 	const attachmentTree = projectFilesStore.workspaceFileTree
 	const attachmentFlatList = projectFilesStore.workspaceFilesList
 
+	// Same canvas binding as the desktop page: finds the project's canvas, creates it when missing
+	// and keeps its name in step with the project. The canvas tab opens it itself when shown.
+	const aiCanvasDocument = useAiCanvasDocument({
+		enabled: isAiCanvas,
+		projectId: selectedProject?.id,
+		projectName: selectedProject?.project_name,
+		isReadOnly: isReadonly,
+		attachments: attachmentTree,
+		attachmentLoadState: projectFilesStore.attachmentLoadState,
+		projectFilesStore,
+		openCanvas: noopOpenCanvas,
+	})
+	// Read at send time so a new topic's first message binds the canvas, as on desktop.
+	const getAiCanvasMentionItems = useMemoizedFn(() => aiCanvasDocument.canvasMentionItems)
+
 	const [projectShareSheetOpen, setProjectShareSheetOpen] = useState(false)
 
 	useEffect(() => {
@@ -175,6 +215,9 @@ function LegacyProjectPage() {
 	} = useProjectListActions({
 		actionContext: "project-detail",
 		visibleActionKeys: projectDetailHeaderActions.visibleActionKeys,
+		// AI canvas: the same items as the web canvas project card (pin too, no move).
+		hiddenActionKeys: isAiCanvas ? AI_CANVAS_HIDDEN_ACTION_KEYS : undefined,
+		showPinInProjectDetail: isAiCanvas,
 	})
 
 	// Sending is handled by MessagePanel service now.
@@ -319,6 +362,29 @@ function LegacyProjectPage() {
 					)}
 				</div>
 				<div className="relative min-h-0 flex-1 overflow-hidden">
+					{activeSiderTab === "canvas" ? (
+						// Full width canvas below the tabs, with the same bottom gap as the other panels.
+						// Swipe guard: dragging the canvas pans it and must not open the shell sidebar.
+						<div
+							className="flex h-full min-h-0 flex-col overflow-hidden px-3 pb-2 pt-3"
+							data-testid="project-detail-canvas-panel"
+							data-mobile-shell-swipe-guard="true"
+						>
+							<div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border">
+								<MobileAiCanvasPanel
+									canvasFolder={aiCanvasDocument.canvasFolder}
+									isCreating={aiCanvasDocument.isCreating}
+									creationError={aiCanvasDocument.creationError}
+									onRetry={aiCanvasDocument.retry}
+									attachmentTree={attachmentTree}
+									attachmentList={attachmentFlatList}
+									selectedProject={selectedProject}
+									selectedTopic={selectedTopic}
+									setUserSelectDetail={setUserSelectDetail}
+								/>
+							</div>
+						</div>
+					) : null}
 					{activeSiderTab === "topicFiles" ? (
 						<div
 							className="flex h-full min-h-0 flex-col overflow-hidden px-3 pb-2"
@@ -402,6 +468,13 @@ function LegacyProjectPage() {
 						selectedWorkspace={selectedWorkspace}
 						attachments={attachmentTree}
 						isEmptyStatus
+						getImplicitMentionItems={isAiCanvas ? getAiCanvasMentionItems : undefined}
+						// Same locked design mode as the desktop canvas page and the topic page.
+						topicModeLogic={isAiCanvas ? AI_CANVAS_TOPIC_MODE_LOGIC : undefined}
+						agentCode={isAiCanvas ? null : undefined}
+						showModeToggle={isAiCanvas ? false : undefined}
+						showModelSelector={isAiCanvas ? true : undefined}
+						placeholder={isAiCanvas ? tAiCanvas("home.placeholder") : undefined}
 						createTopic={createTopicForProjectSend}
 						onSendComplete={handleSendComplete}
 						onSendSuccess={handleSendSuccess}

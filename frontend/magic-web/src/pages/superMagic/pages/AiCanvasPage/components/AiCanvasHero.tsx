@@ -55,7 +55,7 @@ interface AiCanvasHeroProps {
 	footer?: ReactNode
 }
 
-function ArtworkImage({ artwork, kind }: { artwork?: BoardArtwork; kind: ShowcaseKind }) {
+export function ArtworkImage({ artwork, kind }: { artwork?: BoardArtwork; kind: ShowcaseKind }) {
 	const fallback = <ArtworkPlaceholder kind={kind} className="size-full" />
 	if (artwork?.url) {
 		return <img src={artwork.url} alt="" draggable={false} className="size-full object-cover" />
@@ -811,7 +811,7 @@ const SCRIBBLE_TRANSITION: Transition = { duration: 1.2, ease: "easeInOut", dela
  * crisp like real highlighter ink; dark mode screens it instead, because multiply would vanish
  * on a dark board. The horizontal margin keeps the circle off the neighboring characters.
  */
-function ScribbleCircle({ children }: { children?: ReactNode }) {
+export function ScribbleCircle({ children }: { children?: ReactNode }) {
 	const animated = !useReducedMotion()
 	// Mask ids must be unique because the hero can mount more than once (e.g. route transitions).
 	const maskId = `scribble-${useId().replace(/:/g, "")}`

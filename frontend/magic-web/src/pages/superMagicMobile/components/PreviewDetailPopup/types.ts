@@ -46,4 +46,9 @@ export interface PreviewDetailPopupProps {
 	onPreviewFullscreenChange?: (isFullscreen: boolean) => void
 	/** Raise above another open dialog, such as the file manager or conversation sheet. */
 	zIndex?: number
+	/**
+	 * Renders the preview in place (filling its parent) instead of a bottom sheet, e.g. the AI
+	 * canvas tab of the H5 project page. It owns no overlay layer and has no close action.
+	 */
+	inline?: boolean
 }
