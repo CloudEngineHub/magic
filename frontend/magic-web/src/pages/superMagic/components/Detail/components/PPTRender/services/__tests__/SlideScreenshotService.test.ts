@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { SlideScreenshotService } from "../SlideScreenshotService"
 import { snapdom } from "@zumer/snapdom"
+import { prepareScreenshotAnimations } from "../prepareScreenshotAnimations"
+
+// jsdom has no layout/animation engine. The animation preparation contract is
+// exercised separately and in a real browser; these tests own capture/cache lifecycle.
+vi.mock("../prepareScreenshotAnimations", () => ({
+	prepareScreenshotAnimations: vi.fn(async () => undefined),
+}))
 
 vi.mock("../../../../contents/HTML/utils/full-content", () => ({
 	decodeHTMLEntities: (content: string) => content,
@@ -63,6 +70,7 @@ describe("SlideScreenshotService", () => {
 		service = new SlideScreenshotService()
 		snapdomMocks.resetCounter()
 		vi.clearAllMocks()
+		vi.mocked(prepareScreenshotAnimations).mockResolvedValue(undefined)
 	})
 
 	afterEach(() => {
@@ -71,6 +79,60 @@ describe("SlideScreenshotService", () => {
 	})
 
 	describe("generateScreenshot", () => {
+		it.each(["loading", "interactive"] as const)(
+			"continues from a parsed body when resources stall the iframe in %s",
+			async (readyState) => {
+				vi.useFakeTimers()
+				const iframe = document.createElement("iframe")
+				document.body.appendChild(iframe)
+				const doc = iframe.contentDocument
+				if (!doc) throw new Error("Missing iframe document")
+				vi.spyOn(doc, "readyState", "get").mockReturnValue(readyState)
+				// Model a stylesheet/image that never settles: no iframe load notification.
+				vi.spyOn(iframe, "addEventListener").mockImplementation(() => undefined)
+				const controller = new AbortController()
+				let settled = false
+				const setup = (
+					service as unknown as {
+						setupScreenshotIframe: (args: {
+							iframe: HTMLIFrameElement
+							content: string
+							signal: AbortSignal
+						}) => Promise<void>
+					}
+				).setupScreenshotIframe({
+					iframe,
+					content: "<html><head></head><body><h1>Ready slide</h1></body></html>",
+					signal: controller.signal,
+				})
+				void setup.then(
+					() => {
+						settled = true
+					},
+					() => undefined,
+				)
+				try {
+					await vi.advanceTimersByTimeAsync(2000)
+					expect(settled).toBe(true)
+				} finally {
+					controller.abort()
+					await setup.catch(() => undefined)
+					iframe.remove()
+					vi.restoreAllMocks()
+					vi.useRealTimers()
+				}
+			},
+		)
+		it("does not capture or cache a page whose content never becomes visible", async () => {
+			vi.mocked(prepareScreenshotAnimations).mockRejectedValueOnce(
+				new Error("Slide content stayed hidden"),
+			)
+			await expect(
+				service.generateScreenshot("hidden-slide", "<html><body>Hidden</body></html>"),
+			).rejects.toThrow("Slide content stayed hidden")
+			expect(snapdom).not.toHaveBeenCalled()
+			expect(service.hasCachedScreenshot("hidden-slide")).toBe(false)
+		})
 		it("should generate screenshot for HTML content", async () => {
 			const url = "https://example.com/slide1.html"
 			const content = "<html><body>Test Content</body></html>"
