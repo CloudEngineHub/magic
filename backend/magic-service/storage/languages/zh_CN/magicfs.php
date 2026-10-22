@@ -20,5 +20,6 @@ return [
 
     'invalid_file_key' => '参数无效',
     'topic_id_required' => '话题空间无法解析 topic_id',
+    'invalid_on_exists' => '重命名冲突策略无效：:on_exists（应为 replace 或 fail）',
     'unsupported_space_type' => '不支持的空间类型',
 ];
