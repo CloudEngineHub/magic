@@ -6,6 +6,7 @@ declare(strict_types=1);
  */
 return [
     'resource' => [
+        'model_multiplier' => 'Pengganda Model',
         'admin' => 'Backend pentadbiran',
         'admin_ai' => 'Pengurusan AI',
         'admin_safe' => 'Keselamatan & Kebenaran',

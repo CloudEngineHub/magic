@@ -284,6 +284,7 @@ export const RequestUrl = {
 	/** 平台信息 */
 	/** 获取平台信息 */
 	getPlatformInfo: "/api/v1/platform/setting",
+	modelBillingPreview: "/api/v1/platform/setting/model-billing-preview",
 	/** 修改平台信息 */
 	updatePlatformInfo: "/api/v1/platform/setting",
 

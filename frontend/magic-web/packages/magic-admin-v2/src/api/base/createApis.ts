@@ -3,6 +3,7 @@ import { createContactOrganizationApi } from "@magic-admin-v2/api/contact-organi
 import { createDataDashboardContactApi } from "@magic-admin-v2/api/data-dashboard-contact/api"
 import { createAppMenuApi } from "@magic-admin-v2/features/platform-app-menu/api"
 import { createPlatformCustomProviderLicenseApi } from "@magic-admin-v2/features/platform-custom-provider-license/api"
+import { createModelMultiplierApi } from "@magic-admin-v2/features/platform-model-multiplier/api"
 import { createPlatformInfoApi } from "@magic-admin-v2/features/platform-info/api"
 import { createPlatformMaintenanceApi } from "@magic-admin-v2/features/platform-maintenance/api"
 import { createPlatformModelApi } from "@magic-admin-v2/features/platform-model-list/api"
@@ -28,6 +29,7 @@ export function createBaseApis(clients: Pick<ApiClients, "magic">) {
 		dataDashboardContact: createDataDashboardContactApi(clients.magic),
 		platformCustomProviderLicense: createPlatformCustomProviderLicenseApi(clients.magic),
 		platformInfo: createPlatformInfoApi(clients.magic),
+		modelMultiplier: createModelMultiplierApi(clients.magic),
 		platformMaintenance: createPlatformMaintenanceApi(clients.magic),
 		platformModel: createPlatformModelApi(clients.magic),
 		officialMarketplace: createPlatformOfficialMarketplaceApi(clients.magic),

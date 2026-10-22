@@ -4,7 +4,7 @@ import ModelSwitch from "../index"
 
 const { addModelStore } = vi.hoisted(() => ({
 	addModelStore: {
-		myModels: [] as Array<{ model_type: number }>,
+		myModels: [] as Array<{ model_type: number; category?: string }>,
 		isLoadingMyModels: false,
 		hasLoadedMyModels: true,
 		loadMyModels: vi.fn(),
@@ -137,7 +137,8 @@ describe("ModelSwitch add model menu", () => {
 	})
 
 	it("keeps the image tab available when only a custom image model exists", () => {
-		addModelStore.myModels = [{ model_type: 0 }]
+		// 分页按 category 判断，model_type 不可靠（vlm 可能返回 1）。
+		addModelStore.myModels = [{ model_type: 1, category: "vlm" }]
 
 		render(<ModelSwitch modelList={[]} onAddModel={vi.fn()} />)
 
@@ -147,12 +148,22 @@ describe("ModelSwitch add model menu", () => {
 	})
 
 	it("keeps the video tab available when only a custom video model exists", () => {
-		addModelStore.myModels = [{ model_type: 5 }]
+		addModelStore.myModels = [{ model_type: 5, category: "vgm" }]
 
 		render(<ModelSwitch modelList={[]} onAddModel={vi.fn()} />)
 
 		fireEvent.click(screen.getByRole("button", { name: "Video tab" }))
 
 		expect(screen.getByTestId("model-list-content")).toBeInTheDocument()
+	})
+
+	it("does not count custom models without a category for the image or video tab", () => {
+		// 缺少 category 的模型不归入任何分页，生图、视频分页不会因为它出现。
+		addModelStore.myModels = [{ model_type: 0 }, { model_type: 5 }]
+
+		render(<ModelSwitch modelList={[]} />)
+
+		expect(screen.queryByRole("button", { name: "Image tab" })).toBeNull()
+		expect(screen.queryByRole("button", { name: "Video tab" })).toBeNull()
 	})
 })

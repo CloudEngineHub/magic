@@ -48,6 +48,10 @@ const getVitestBaseConfig = () => {
 					replacement: resolve(__dirname, "packages/html2image/src/index.ts"),
 				},
 				{
+					find: "@admin-components",
+					replacement: resolve(__dirname, "packages/magic-admin/components/index.ts"),
+				},
+				{
 					find: "@customer/",
 					replacement: `${resolve(__dirname, "customer/src")}/`,
 				},

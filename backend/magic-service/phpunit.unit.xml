@@ -26,5 +26,10 @@
         <testsuite name="沙箱重启集成">
             <directory suffix="Test.php">test/Cases/Integration/SuperMagic</directory>
         </testsuite>
+        <!-- 模型网关收尾测试与主线套件共存，不启动应用或真实模型。 -->
+        <testsuite name="模型请求SSE收尾">
+            <file>test/Cases/Interfaces/ModelGateway/Assembler/LLMAssemblerStreamTest.php</file>
+            <file>test/Cases/Infrastructure/ModelGateway/ModelGatewayEventStreamTest.php</file>
+        </testsuite>
     </testsuites>
 </phpunit>

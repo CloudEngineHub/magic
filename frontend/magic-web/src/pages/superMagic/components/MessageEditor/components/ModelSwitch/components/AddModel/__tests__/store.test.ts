@@ -78,10 +78,45 @@ describe("AddModelStore", () => {
 			name: "Video Model",
 			service_provider_config_id: "video-provider-1",
 			model_type: MODEL_TYPE_VIDEO,
+			category: "vgm",
 		})
 
 		expect(store.addModelType).toBe("video")
 		expect(store.category).toBe("vgm")
+	})
+
+	it("should infer the edit type from category even when model_type disagrees", () => {
+		const store = new ModelFormStore()
+
+		// 列表接口里 vlm 模型的 model_type 可能是 1，按 category 归为生图。
+		store.openEditModel({
+			id: "image-model-1",
+			model_id: "image-model",
+			model_version: "image-model-v1",
+			name: "Image Model",
+			service_provider_config_id: "image-provider-1",
+			model_type: 1,
+			category: "vlm",
+		})
+
+		expect(store.addModelType).toBe("image")
+		expect(store.category).toBe("vlm")
+	})
+
+	it("should keep the current type when editing a model without a category", () => {
+		const store = new ModelFormStore()
+		store.setAddModelType("image")
+
+		store.openEditModel({
+			id: "unknown-model-1",
+			model_id: "unknown-model",
+			name: "Unknown Model",
+			service_provider_config_id: "provider-1",
+			model_type: 3,
+		})
+
+		// 不按 model_type 猜成文本，保持原来的类型。
+		expect(store.addModelType).toBe("image")
 	})
 
 	it("should query video providers and templates with the vgm category", async () => {

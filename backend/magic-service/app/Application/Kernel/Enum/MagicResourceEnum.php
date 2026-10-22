@@ -44,6 +44,7 @@ enum MagicResourceEnum: string
     case PLATFORM_MODEL_TEXT = 'platform.model.text'; # 平台管理-平台模型-文本大模型
     case PLATFORM_MODEL_IMAGE = 'platform.model.image'; # 平台管理-平台模型-生图大模型
     case PLATFORM_MODEL_VIDEO = 'platform.model.video'; # 平台管理-平台模型-视频大模型
+    case PLATFORM_AI_MODEL_MULTIPLIER = 'platform.ai.model_multiplier'; # 平台管理-模型倍率
     case PLATFORM_AI_MODEL = 'platform.ai.model_management'; # 平台管理-AI管理-模型管理
     case PLATFORM_AI_IMAGE = 'platform.ai.image_generation'; # 平台管理-AI管理-智能绘图管理
     case PLATFORM_AI_MODEL_AUDIT_LOG = 'platform.ai.model_audit_log'; # 平台管理-AI管理-模型调用审计
@@ -96,6 +97,7 @@ enum MagicResourceEnum: string
             self::PLATFORM_MODEL_TEXT => 'permission.resource.platform_model_text',
             self::PLATFORM_MODEL_IMAGE => 'permission.resource.platform_model_image',
             self::PLATFORM_MODEL_VIDEO => 'permission.resource.platform_model_video',
+            self::PLATFORM_AI_MODEL_MULTIPLIER => 'permission.resource.model_multiplier',
             self::PLATFORM_AI_MODEL => 'permission.resource.ai_model',
             self::WORKSPACE_MODEL => 'permission.resource.workspace_model',
             self::WORKSPACE_MODEL_TEXT => 'permission.resource.workspace_model_text',
@@ -166,6 +168,7 @@ enum MagicResourceEnum: string
             self::PLATFORM_MODEL_TEXT,
             self::PLATFORM_MODEL_IMAGE,
             self::PLATFORM_MODEL_VIDEO => self::PLATFORM_MODEL,
+            self::PLATFORM_AI_MODEL_MULTIPLIER,
             self::PLATFORM_AI_MODEL,
             self::PLATFORM_AI_IMAGE,
             self::PLATFORM_AI_MODEL_AUDIT_LOG,

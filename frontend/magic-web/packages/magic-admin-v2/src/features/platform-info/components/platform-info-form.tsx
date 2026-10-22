@@ -73,7 +73,7 @@ export function PlatformInfoForm({
 						/>
 					) : null}
 
-					{activeSection === "basic" ? (
+                    {activeSection === "basic" ? (
 						<div className="space-y-8">
 							<div className="grid gap-4 sm:grid-cols-2">
 								<ImageUploadField

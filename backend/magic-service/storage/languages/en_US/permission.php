@@ -9,6 +9,7 @@ return [
     'magic_claw_reconciliation_busy' => 'Permissions are being updated. Please try again shortly.',
     'magic_claw_runtime_denied' => 'This claw has been disabled by an administrator. Start it manually after access is restored.',
     'resource' => [
+        'model_multiplier' => 'Model Multiplier',
         'admin' => 'Admin',
         'admin_ai' => 'AI Management',
         'admin_safe' => 'Security & Permission',
