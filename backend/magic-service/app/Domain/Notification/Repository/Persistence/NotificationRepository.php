@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -58,34 +57,6 @@ final class NotificationRepository implements NotificationRepositoryInterface
             }
             throw $throwable;
         }
-    }
-
-    private function restoreWithdrawn(
-        NotificationDataIsolation $dataIsolation,
-        NotificationEntity $entity
-    ): void {
-        $this->organizationQuery($dataIsolation)
-            ->where('source_event_key', $entity->getSourceEventKey())
-            ->where('recipient_user_id', $entity->getRecipientUserId())
-            ->where('message_status', NotificationMessageStatus::WITHDRAWN->value)
-            ->update([
-                'category' => $entity->getCategory()?->value,
-                'type' => $entity->getType(),
-                'template_version' => $entity->getTemplateVersion(),
-                'payload' => json_encode($entity->getPayload(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
-                'source_domain' => $entity->getSourceDomain(),
-                'source_type' => $entity->getSourceType(),
-                'source_id' => $entity->getSourceId(),
-                'source_version' => $entity->getSourceVersion(),
-                'message_status' => NotificationMessageStatus::ACTIVE->value,
-                'read_at' => null,
-                'action_status' => $entity->getActionStatus()->value,
-                'business_result' => null,
-                'actioned_at' => null,
-                'actioned_by' => null,
-                'created_at' => $this->now(),
-                'updated_at' => $this->now(),
-            ]);
     }
 
     public function findById(
@@ -338,6 +309,34 @@ final class NotificationRepository implements NotificationRepositoryInterface
             ]);
     }
 
+    private function restoreWithdrawn(
+        NotificationDataIsolation $dataIsolation,
+        NotificationEntity $entity
+    ): void {
+        $this->organizationQuery($dataIsolation)
+            ->where('source_event_key', $entity->getSourceEventKey())
+            ->where('recipient_user_id', $entity->getRecipientUserId())
+            ->where('message_status', NotificationMessageStatus::WITHDRAWN->value)
+            ->update([
+                'category' => $entity->getCategory()?->value,
+                'type' => $entity->getType(),
+                'template_version' => $entity->getTemplateVersion(),
+                'payload' => json_encode($entity->getPayload(), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'source_domain' => $entity->getSourceDomain(),
+                'source_type' => $entity->getSourceType(),
+                'source_id' => $entity->getSourceId(),
+                'source_version' => $entity->getSourceVersion(),
+                'message_status' => NotificationMessageStatus::ACTIVE->value,
+                'read_at' => null,
+                'action_status' => $entity->getActionStatus()->value,
+                'business_result' => null,
+                'actioned_at' => null,
+                'actioned_by' => null,
+                'created_at' => $this->now(),
+                'updated_at' => $this->now(),
+            ]);
+    }
+
     private function scopedQuery(NotificationDataIsolation $dataIsolation): Builder
     {
         return $this->organizationQuery($dataIsolation)
@@ -381,7 +380,7 @@ final class NotificationRepository implements NotificationRepositoryInterface
         return date('Y-m-d H:i:s');
     }
 
-    /** @return array{created_at:string,id:string}|null */
+    /** @return null|array{created_at:string,id:string} */
     private function decodeCursor(?string $cursor): ?array
     {
         if ($cursor === null || $cursor === '') {

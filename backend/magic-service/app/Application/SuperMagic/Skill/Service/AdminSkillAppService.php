@@ -7,8 +7,8 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Skill\Service;
 
-use App\Application\SuperMagic\Skill\Assembler\AdminSkillAssembler;
 use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
+use App\Application\SuperMagic\Skill\Assembler\AdminSkillAssembler;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
 use App\Domain\Permission\Service\ResourceVisibilityDomainService;
@@ -59,6 +59,9 @@ class AdminSkillAppService extends AbstractSkillAppService
 
     private const VECTOR_REINDEX_EVENT_BATCH_SIZE = 100;
 
+    #[Inject]
+    protected ContainerInterface $container;
+
     public function __construct(
         protected SkillDomainService $skillDomainService,
         protected SkillVersionDomainService $skillVersionDomainService,
@@ -69,9 +72,6 @@ class AdminSkillAppService extends AbstractSkillAppService
         private readonly SkillMarketVectorIndexDomainService $skillMarketVectorIndexDomainService,
     ) {
     }
-
-    #[Inject]
-    protected ContainerInterface $container;
 
     public function queryVersions(
         RequestContext $requestContext,

@@ -1,13 +1,16 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Application\SuperMagic\Task\Service;
 
+use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
-use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
 use App\Domain\SuperMagic\Task\Entity\TaskEntity;
 use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
 use App\Domain\SuperMagic\Topic\Entity\TopicEntity;
@@ -35,7 +38,7 @@ final class TaskNotificationLabelResolver
         LoggerFactory $loggerFactory,
         private readonly ?MagicClawDomainService $magicClawDomainService = null,
     ) {
-        $this->logger = $loggerFactory->get(static::class);
+        $this->logger = $loggerFactory->get(self::class);
     }
 
     /**
@@ -151,7 +154,7 @@ final class TaskNotificationLabelResolver
     }
 
     /**
-     * @param array<int, int|string|null> $candidates
+     * @param array<int, null|int|string> $candidates
      */
     private function firstPositiveId(array $candidates): string
     {

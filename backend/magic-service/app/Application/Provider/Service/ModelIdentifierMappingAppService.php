@@ -113,5 +113,4 @@ class ModelIdentifierMappingAppService
             $authorization->getMagicId(),
         );
     }
-
 }

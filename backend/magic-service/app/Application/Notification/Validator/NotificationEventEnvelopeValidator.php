@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -23,10 +22,10 @@ final readonly class NotificationEventEnvelopeValidator
     /**
      * Validate the boundary contract before an event is persisted.
      *
-     * @param EventEnvelope|array<string, mixed> $envelope
+     * @param array<string, mixed>|EventEnvelope $envelope
      * @return array<string, mixed>
      */
-    public function validate(EventEnvelope|array $envelope): array
+    public function validate(array|EventEnvelope $envelope): array
     {
         $data = $envelope instanceof EventEnvelope ? $envelope->toArray() : $envelope;
         foreach (['event_id', 'event_type', 'occurred_at', 'producer', 'organization_code', 'source', 'recipients', 'payload', 'schema_version'] as $field) {

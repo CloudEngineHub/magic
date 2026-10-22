@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Unit\Notification;
 
@@ -9,9 +12,9 @@ use App\Application\Notification\Contract\NotificationEventPublisherInterface;
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
+use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use App\Domain\SuperMagic\Agent\Entity\AgentVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
-use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use PHPUnit\Framework\TestCase;
 
 /** @internal */
@@ -22,7 +25,7 @@ final class ReviewNotificationAppServiceTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 (new NotificationEventEnvelopeValidator(
                     new NotificationEventTypeRegistry(new DefaultNotificationCatalogStrategy())
@@ -54,7 +57,7 @@ final class ReviewNotificationAppServiceTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
             }

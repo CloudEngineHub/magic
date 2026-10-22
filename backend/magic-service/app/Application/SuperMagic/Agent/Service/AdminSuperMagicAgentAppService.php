@@ -40,8 +40,8 @@ use App\Interfaces\SuperMagic\Agent\DTO\Response\QueryAgentVersionsResponseAdmin
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
-use Qbhy\HyperfAuth\Authenticatable;
 use Psr\Container\ContainerInterface;
+use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
 /**

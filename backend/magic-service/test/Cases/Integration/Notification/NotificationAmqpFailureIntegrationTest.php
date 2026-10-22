@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Integration\Notification;
 
@@ -29,6 +32,7 @@ use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Throwable;
 
 /** @internal */
 final class NotificationAmqpFailureIntegrationTest extends TestCase
@@ -197,7 +201,7 @@ final class NotificationAmqpFailureIntegrationTest extends TestCase
         try {
             $consumer->consume($event->getEventId());
             self::fail('An unsupported schema must fail without an automatic retry.');
-        } catch (\Throwable $throwable) {
+        } catch (Throwable $throwable) {
             self::assertSame(35007, $throwable->getCode());
         }
 
@@ -309,7 +313,7 @@ final class NotificationAmqpFailureIntegrationTest extends TestCase
         }
         $id = (int) Db::table('async_event_records')->insertGetId([
             'event' => EventEnvelope::class,
-            'listener' => 'App\\Application\\Notification\\Event\\NotificationEventConsumeListener',
+            'listener' => 'App\Application\Notification\Event\NotificationEventConsumeListener',
             'status' => 0,
             'retry_times' => $retryTimes,
             'args' => serialize(['event_id' => $eventId]),

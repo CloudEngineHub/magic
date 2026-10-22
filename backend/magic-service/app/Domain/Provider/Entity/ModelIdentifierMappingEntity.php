@@ -127,7 +127,7 @@ class ModelIdentifierMappingEntity extends AbstractEntity
     /**
      * 设置映射组状态。
      */
-    public function setStatus(Status|int|string $status): self
+    public function setStatus(int|Status|string $status): self
     {
         $this->status = $status instanceof Status ? $status : (Status::tryFrom((int) $status) ?? Status::Enabled);
         return $this;
@@ -144,7 +144,7 @@ class ModelIdentifierMappingEntity extends AbstractEntity
     /**
      * 设置创建时间。
      */
-    public function setCreatedAt(DateTime|string|null $createdAt): self
+    public function setCreatedAt(null|DateTime|string $createdAt): self
     {
         $this->createdAt = $createdAt instanceof DateTime ? $createdAt : ($createdAt ? new DateTime($createdAt) : null);
         return $this;
@@ -161,7 +161,7 @@ class ModelIdentifierMappingEntity extends AbstractEntity
     /**
      * 设置更新时间。
      */
-    public function setUpdatedAt(DateTime|string|null $updatedAt): self
+    public function setUpdatedAt(null|DateTime|string $updatedAt): self
     {
         $this->updatedAt = $updatedAt instanceof DateTime ? $updatedAt : ($updatedAt ? new DateTime($updatedAt) : null);
         return $this;
@@ -178,7 +178,7 @@ class ModelIdentifierMappingEntity extends AbstractEntity
     /**
      * 设置软删除时间。
      */
-    public function setDeletedAt(DateTime|string|null $deletedAt): self
+    public function setDeletedAt(null|DateTime|string $deletedAt): self
     {
         $this->deletedAt = $deletedAt instanceof DateTime ? $deletedAt : ($deletedAt ? new DateTime($deletedAt) : null);
         return $this;

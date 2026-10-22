@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Application\Notification\Service;
 
@@ -16,11 +19,6 @@ final readonly class NotificationTemplateAppService
 {
     private const DEFAULT_LOCALE = 'zh-CN';
 
-    /**
-     * @param NotificationTemplateRepositoryInterface $templates
-     * @param NotificationCatalogStrategyInterface $catalog
-     * @param ConfigInterface $config
-     */
     public function __construct(
         private NotificationTemplateRepositoryInterface $templates,
         private NotificationCatalogStrategyInterface $catalog,

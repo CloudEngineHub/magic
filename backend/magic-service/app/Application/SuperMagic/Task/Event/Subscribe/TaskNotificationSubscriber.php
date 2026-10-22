@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Application\SuperMagic\Task\Event\Subscribe;
 
@@ -29,7 +32,7 @@ final class TaskNotificationSubscriber implements ListenerInterface
         private readonly ContainerInterface $container,
         LoggerFactory $loggerFactory,
     ) {
-        $this->logger = $loggerFactory->get(static::class);
+        $this->logger = $loggerFactory->get(self::class);
     }
 
     public function listen(): array
@@ -109,5 +112,4 @@ final class TaskNotificationSubscriber implements ListenerInterface
             'recipient_user_id' => $recipientUserId,
         ]);
     }
-
 }

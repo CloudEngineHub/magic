@@ -1,12 +1,14 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Unit\Notification;
 
-use App\Application\Notification\Contract\EventEnvelope;
-use App\Application\Notification\Service\NotificationEventAppService;
 use App\Application\Notification\Service\NotificationErrorFormatter;
+use App\Application\Notification\Service\NotificationEventAppService;
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Domain\Notification\Entity\NotificationEventEntity;

@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Application\SuperMagic\Common\Share\Service;
 
@@ -11,13 +14,14 @@ use App\Application\Notification\Contract\NotificationEventPublisherInterface;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Service\MagicDepartmentUserDomainService;
 use App\Domain\Contact\Service\MagicUserDomainService;
+use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
 use App\Domain\SuperMagic\Common\Share\Constant\ResourceType;
 use App\Domain\SuperMagic\Common\Share\Constant\ShareAccessType;
 use App\Domain\SuperMagic\Common\Share\Entity\ResourceShareEntity;
-use App\Domain\SuperMagic\Agent\Service\MagicClawDomainService;
-use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
+use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
+use Throwable;
 
 /** 将项目、文件团队分享转换为统一站内信事件。 */
 final readonly class ShareNotificationAppService
@@ -288,7 +292,7 @@ final readonly class ShareNotificationAppService
                 $projectMode,
                 trim($this->magicClawDomainService->getByProjectId($projectId)?->getCode() ?? ''),
             ];
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return ['', ''];
         }
     }

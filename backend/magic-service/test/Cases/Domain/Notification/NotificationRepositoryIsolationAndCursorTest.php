@@ -1,19 +1,18 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
 
 namespace HyperfTest\Cases\Domain\Notification;
 
-use App\Domain\Notification\Constant\NotificationCategory;
 use App\Domain\Notification\Constant\NotificationActionStatus;
+use App\Domain\Notification\Constant\NotificationCategory;
 use App\Domain\Notification\Constant\NotificationMessageStatus;
 use App\Domain\Notification\Entity\NotificationEntity;
-use App\Domain\Notification\Repository\Persistence\NotificationRepository;
 use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
+use App\Domain\Notification\Repository\Persistence\NotificationRepository;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
 use Hyperf\Database\Schema\Schema;
 use Hyperf\DbConnection\Db;

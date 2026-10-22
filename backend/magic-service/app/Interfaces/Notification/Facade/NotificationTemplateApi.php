@@ -1,14 +1,17 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace App\Interfaces\Notification\Facade;
 
 use App\Application\Notification\Service\NotificationTemplateAppService;
-use App\Infrastructure\Core\AbstractApi;
-use Dtyq\ApiResponse\Annotation\ApiResponse;
 use App\ErrorCode\GenericErrorCode;
+use App\Infrastructure\Core\AbstractApi;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
 
 #[ApiResponse('low_code')]

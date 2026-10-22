@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Unit\Notification;
 
@@ -11,8 +14,8 @@ use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Application\SuperMagic\Task\Event\Subscribe\TaskNotificationSubscriber;
 use App\Application\SuperMagic\Task\Service\TaskNotificationLabelResolver;
 use App\Domain\Notification\Service\NotificationEventTypeRegistry;
-use App\Domain\SuperMagic\Message\Entity\ValueObject\MessagePayload;
 use App\Domain\SuperMagic\Message\Entity\ValueObject\MessageMetadata;
+use App\Domain\SuperMagic\Message\Entity\ValueObject\MessagePayload;
 use App\Domain\SuperMagic\Project\Entity\ProjectEntity;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Task\Event\RunTaskCallbackEvent;
@@ -25,6 +28,7 @@ use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
+use RuntimeException;
 
 /** @internal */
 final class TaskNotificationSubscriberTest extends TestCase
@@ -35,7 +39,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 (new NotificationEventEnvelopeValidator(
@@ -67,7 +71,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -85,12 +89,19 @@ final class TaskNotificationSubscriberTest extends TestCase
         self::assertSame('task failed', $published[0]->payload['error_message']);
     }
 
+    public static function errorStatuses(): iterable
+    {
+        yield 'error' => ['error'];
+        yield 'stopped' => ['stopped'];
+        yield 'suspended' => ['suspended'];
+    }
+
     public function testFinishedTaskIncludesWorkspaceAndProjectLabels(): void
     {
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -112,7 +123,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -133,7 +144,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -168,7 +179,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -190,13 +201,6 @@ final class TaskNotificationSubscriberTest extends TestCase
         self::assertSame('Workspace', $published[0]->payload['workspace_name']);
     }
 
-    public static function errorStatuses(): iterable
-    {
-        yield 'error' => ['error'];
-        yield 'stopped' => ['stopped'];
-        yield 'suspended' => ['suspended'];
-    }
-
     public function testNonTerminalTaskStatusDoesNotPublish(): void
     {
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
@@ -212,7 +216,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::exactly(2))
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return [
@@ -313,7 +317,7 @@ final class TaskNotificationSubscriberTest extends TestCase
                     TopicDomainService::class => $topicService,
                     ProjectDomainService::class => $projectService,
                     WorkspaceDomainService::class => $workspaceService,
-                    default => throw new \RuntimeException("Unexpected service: {$id}"),
+                    default => throw new RuntimeException("Unexpected service: {$id}"),
                 };
             });
         } else {

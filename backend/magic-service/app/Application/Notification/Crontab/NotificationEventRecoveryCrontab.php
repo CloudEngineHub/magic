@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -10,6 +9,7 @@ namespace App\Application\Notification\Crontab;
 
 use App\Application\Notification\Event\NotificationEventConsumeRequested;
 use App\Domain\Notification\Repository\Facade\NotificationEventRepositoryInterface;
+use Hyperf\Contract\ConfigInterface;
 use Hyperf\Crontab\Annotation\Crontab;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
@@ -35,7 +35,7 @@ final readonly class NotificationEventRecoveryCrontab
         private NotificationEventRepositoryInterface $events,
         private EventDispatcherInterface $dispatcher,
         private LoggerInterface $logger,
-        private \Hyperf\Contract\ConfigInterface $config,
+        private ConfigInterface $config,
     ) {
     }
 

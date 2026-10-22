@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -37,7 +36,9 @@ use Throwable;
 final readonly class NotificationConsumerService
 {
     private const LEASE_SECONDS = 300;
+
     private const MAX_ATTEMPTS = 3;
+
     private const RETRY_DELAY_SECONDS = 10;
 
     private LoggerInterface $logger;

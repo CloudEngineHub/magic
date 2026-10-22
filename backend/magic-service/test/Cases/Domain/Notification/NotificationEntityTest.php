@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Domain\Notification;
 
@@ -17,6 +20,9 @@ use App\Domain\Notification\Entity\NotificationEventEntity;
 use App\Domain\Notification\Entity\NotificationTemplateEntity;
 use PHPUnit\Framework\TestCase;
 
+/**
+ * @internal
+ */
 final class NotificationEntityTest extends TestCase
 {
     public function testNotificationEntityHydratesPublicEnumsAndJsonPayload(): void

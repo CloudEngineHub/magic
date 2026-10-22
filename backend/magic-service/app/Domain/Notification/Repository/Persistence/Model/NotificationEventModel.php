@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -12,9 +11,12 @@ use App\Infrastructure\Core\AbstractModel;
 
 final class NotificationEventModel extends AbstractModel
 {
-    protected ?string $table = 'magic_notification_events';
     public bool $timestamps = false;
+
     public bool $incrementing = false;
+
+    protected ?string $table = 'magic_notification_events';
+
     protected string $keyType = 'string';
 
     protected array $fillable = [

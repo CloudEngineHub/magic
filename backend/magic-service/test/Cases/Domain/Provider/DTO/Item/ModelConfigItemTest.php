@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace HyperfTest\Cases\Domain\Provider\DTO\Item;
 
 use App\Domain\Provider\DTO\Item\ModelConfigItem;
+use App\Domain\Provider\Entity\ProviderModelConfigVersionEntity;
 use Hyperf\Odin\Constants\ChatApi;
 use PHPUnit\Framework\TestCase;
 
@@ -43,6 +44,7 @@ class ModelConfigItemTest extends TestCase
         $config->setChatApi('');
         $this->assertSame(ChatApi::CHAT_COMPLETIONS, $config->getChatApi());
     }
+
     /** 历史模型缺失档位时默认三档，关闭开关不丢失配置。 */
     public function testReasoningLevelsPreserveLegacyAndDisabledSemantics(): void
     {
@@ -63,7 +65,7 @@ class ModelConfigItemTest extends TestCase
     public function testReasoningLevelsSurviveVersionRoundTrip(): void
     {
         foreach ([null, [], ['low', 'high']] as $levels) {
-            $version = new \App\Domain\Provider\Entity\ProviderModelConfigVersionEntity(['reasoning_effort_levels' => $levels]);
+            $version = new ProviderModelConfigVersionEntity(['reasoning_effort_levels' => $levels]);
             $restored = new ModelConfigItem(['support_deep_think' => true, 'reasoning_effort_levels' => $version->toArray()['reasoning_effort_levels']]);
             $this->assertSame($levels, $restored->getReasoningEffortLevels());
         }

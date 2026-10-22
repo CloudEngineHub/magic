@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Unit\Notification;
 
@@ -13,6 +16,7 @@ use Hyperf\Crontab\Annotation\Crontab;
 use PHPUnit\Framework\TestCase;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
+use ReflectionClass;
 
 /** @internal */
 final class NotificationEventRecoveryCrontabTest extends TestCase
@@ -72,7 +76,7 @@ final class NotificationEventRecoveryCrontabTest extends TestCase
 
     public function testCrontabKeepsFixedRecoveryScheduleAndDistributedLockOptions(): void
     {
-        $attributes = (new \ReflectionClass(NotificationEventRecoveryCrontab::class))
+        $attributes = (new ReflectionClass(NotificationEventRecoveryCrontab::class))
             ->getAttributes(Crontab::class);
         self::assertCount(1, $attributes);
 

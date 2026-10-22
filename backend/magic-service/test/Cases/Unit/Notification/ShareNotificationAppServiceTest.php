@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace HyperfTest\Cases\Unit\Notification;
 
@@ -22,7 +25,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -83,7 +86,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -117,7 +120,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -145,7 +148,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -168,7 +171,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -203,7 +206,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -229,7 +232,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -258,7 +261,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::once())->method('publish')->willReturnCallback(
-            function (EventEnvelope|array $envelope) use (&$published): array {
+            function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -286,7 +289,7 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::exactly(2))
             ->method('publish')
-            ->willReturnCallback(function (EventEnvelope|array $envelope) use (&$published): array {
+            ->willReturnCallback(function (array|EventEnvelope $envelope) use (&$published): array {
                 self::assertInstanceOf(EventEnvelope::class, $envelope);
                 $published[] = $envelope;
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
@@ -313,7 +316,7 @@ final class ShareNotificationAppServiceTest extends TestCase
 
     private function share(string $resourceId, int $resourceType, string $name, string $range): ResourceShareEntity
     {
-        $share = new ResourceShareEntity([
+        return new ResourceShareEntity([
             'id' => $resourceType,
             'resource_id' => $resourceId,
             'resource_type' => $resourceType,
@@ -324,7 +327,5 @@ final class ShareNotificationAppServiceTest extends TestCase
             'share_type' => 2,
             'share_range' => $range,
         ]);
-        return $share;
     }
-
 }

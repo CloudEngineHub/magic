@@ -70,8 +70,7 @@ class ModelIdentifierMappingDomainService
         array $sourceModelIds,
         string $targetModelId,
         ?string $groupId = null,
-    ): array
-    {
+    ): array {
         $this->assertOfficialOrganization($dataIsolation);
         $this->validateGroup($dataIsolation, $groupName, $sourceModelIds, $targetModelId, $groupId);
         $groupId ??= IdGenerator::getUniqueId32();
@@ -162,8 +161,7 @@ class ModelIdentifierMappingDomainService
         array $sourceModelIds,
         string $targetModelId,
         ?string $groupId = null,
-    ): void
-    {
+    ): void {
         if ($groupName === '') {
             ExceptionBuilder::throw(ServiceProviderErrorCode::InvalidParameter, 'service_provider.model_identifier_mapping.group_name_required');
         }

@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -37,7 +36,7 @@ final readonly class NotificationEventAppService implements NotificationEventPub
     }
 
     /** @return array{event_id:string,status:string,accepted:bool,duplicate:bool,queued:bool,code:?int} */
-    public function publish(EventEnvelope|array $envelope): array
+    public function publish(array|EventEnvelope $envelope): array
     {
         $data = $this->validator->validate($envelope);
         $eventId = (string) $data['event_id'];

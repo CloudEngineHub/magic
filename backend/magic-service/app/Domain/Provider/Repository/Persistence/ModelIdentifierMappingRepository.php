@@ -251,7 +251,7 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
     /**
      * 将持久化记录转换为领域实体。
      *
-     * @param array<int, object|array<string, mixed>> $rows
+     * @param array<int, array<string, mixed>|object> $rows
      * @return ModelIdentifierMappingEntity[]
      */
     private function toEntities(array $rows): array

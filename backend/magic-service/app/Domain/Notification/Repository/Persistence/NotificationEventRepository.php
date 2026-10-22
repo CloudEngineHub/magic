@@ -1,7 +1,6 @@
 <?php
 
 declare(strict_types=1);
-
 /**
  * Copyright (c) The Magic , Distributed under the software license
  */
@@ -253,7 +252,10 @@ final class NotificationEventRepository implements NotificationEventRepositoryIn
         ];
     }
 
-    private function now(): string { return date('Y-m-d H:i:s'); }
+    private function now(): string
+    {
+        return date('Y-m-d H:i:s');
+    }
 
     private function truncateErrorMessage(string $message): string
     {

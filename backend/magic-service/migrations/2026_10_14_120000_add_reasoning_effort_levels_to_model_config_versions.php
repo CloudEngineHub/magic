@@ -1,12 +1,14 @@
 <?php
 
 declare(strict_types=1);
-
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 use Hyperf\Database\Migrations\Migration;
 use Hyperf\Database\Schema\Blueprint;
 use Hyperf\Database\Schema\Schema;
 
-/** 为模型配置版本保存思考档位，历史数据保持空值。 */
+/* 为模型配置版本保存思考档位，历史数据保持空值。 */
 return new class extends Migration {
     /** 增加可空字段，不回填历史记录。 */
     public function up(): void
