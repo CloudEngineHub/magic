@@ -253,6 +253,33 @@ final class ShareNotificationAppServiceTest extends TestCase
         self::assertSame('15', $published[0]->payload['share_id']);
     }
 
+    public function testShareWithoutPersistedCodeDoesNotFabricateShareRoute(): void
+    {
+        $published = [];
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::once())->method('publish')->willReturnCallback(
+            function (EventEnvelope|array $envelope) use (&$published): array {
+                self::assertInstanceOf(EventEnvelope::class, $envelope);
+                $published[] = $envelope;
+                return ['event_id' => '1', 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
+            }
+        );
+        $users = $this->createMock(MagicUserDomainService::class);
+        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
+        $users->method('getActiveUsersByIds')->willReturn([]);
+        $service = new ShareNotificationAppService(
+            $publisher,
+            $users,
+            new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
+        );
+
+        $share = $this->share('file-resource-id', 15, 'File 1', 'all');
+        $share->setShareCode('');
+        $service->publishRecipientsAdded(null, $share);
+
+        self::assertArrayNotHasKey('share_code', $published[0]->payload);
+    }
+
     public function testAllTeamShareSplitsLargeRecipientSetsIntoBoundedEvents(): void
     {
         $published = [];

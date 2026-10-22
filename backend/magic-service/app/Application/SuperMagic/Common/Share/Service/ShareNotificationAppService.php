@@ -79,16 +79,18 @@ final readonly class ShareNotificationAppService
         $kind = $this->resourceKind($after);
         $payload = [
             'share_id' => (string) $after->getId(),
-            // The public share page resolves a share_code, not the share row ID.
-            // Keep the business resource fields intact for message rendering, while
-            // giving both project and file shares an explicit navigation identifier.
-            'share_code' => $after->getShareCode() !== '' ? $after->getShareCode() : $after->getResourceId(),
             'resource_name' => $after->getResourceName() !== '' ? $after->getResourceName() : $after->getResourceId(),
             'share_scope' => $after->getShareRange() === 'all' ? '全员' : '指定成员/部门',
             'sharer_name' => $sharerName !== '' ? $sharerName : $this->resolveSharerName($after),
             'resource_id' => $after->getResourceId(),
             'resource_type' => $kind,
         ];
+        // Share routes accept only the persisted share code. A resource ID is
+        // not a valid substitute for historical records that lack one.
+        $shareCode = trim($after->getShareCode());
+        if ($shareCode !== '') {
+            $payload['share_code'] = $shareCode;
+        }
         [$projectMode, $resourceCode] = $this->resolveProjectNotificationContext($after->getProjectId());
         $payload['project_mode'] = $projectMode;
         $payload['resource_code'] = $resourceCode;

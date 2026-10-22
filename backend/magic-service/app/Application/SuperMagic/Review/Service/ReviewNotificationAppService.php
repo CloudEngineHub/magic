@@ -78,6 +78,9 @@ final readonly class ReviewNotificationAppService
         $payload = [
             'review_id' => $versionId,
             'resource_id' => $resourceId,
+            // The inbox route selects Agent and Skill detail pages by this
+            // stable resource category before it reads resource_code.
+            'resource_type' => $resourceType,
             // Detail routes resolve Agent/Skill by code, never by the database ID.
             'resource_code' => $resourceCode,
             'resource_name' => $resourceName,

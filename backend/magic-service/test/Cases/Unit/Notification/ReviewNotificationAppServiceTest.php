@@ -44,6 +44,7 @@ final class ReviewNotificationAppServiceTest extends TestCase
         self::assertSame('review.agent.version_approved', $published[0]->eventType);
         self::assertSame('review:ORG:agent:1001:2002:user-1:approved', $published[0]->recipients[0]->sourceEventKey);
         self::assertSame('1001', $published[0]->payload['resource_id']);
+        self::assertSame('agent', $published[0]->payload['resource_type']);
         self::assertSame('agent-code', $published[0]->payload['resource_code']);
         self::assertSame('2002', $published[0]->payload['version_id']);
     }
@@ -70,6 +71,7 @@ final class ReviewNotificationAppServiceTest extends TestCase
         (new ReviewNotificationAppService($publisher))->publishSkillApproved($version, '1002');
 
         self::assertSame('review.skill.version_approved', $published[0]->eventType);
+        self::assertSame('skill', $published[0]->payload['resource_type']);
         self::assertSame('Web Search', $published[0]->payload['resource_name']);
         self::assertSame('skill-code', $published[0]->payload['resource_code']);
         self::assertSame('review:ORG:skill:1002:3003:user-2:approved', $published[0]->recipients[0]->sourceEventKey);

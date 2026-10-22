@@ -80,6 +80,10 @@ final class TaskNotificationSubscriber implements ListenerInterface
             'workspace_name' => $labels['workspace_name'],
             'project_id' => $labels['project_id'],
             'project_name' => $labels['project_name'],
+            // Inbox routing needs the host mode and Claw code in addition to
+            // the project/topic pair; the same payload serves both task states.
+            'project_mode' => $labels['project_mode'],
+            'resource_code' => $labels['resource_code'],
             'status' => $status->value,
             'error_message' => $status === TaskStatus::FINISHED
                 ? null
