@@ -36,8 +36,7 @@ class ModelIdentifierMappingDomainService
      */
     public function replaceModelIdentifier(ProviderDataIsolation $dataIsolation, string $modelId): string
     {
-        $mappingMap = $this->mappingRepository->getActiveMappingMap($dataIsolation);
-        return $mappingMap[$modelId] ?? $modelId;
+        return $this->mappingRepository->findActiveTargetModelId($dataIsolation, $modelId) ?? $modelId;
     }
 
     /**

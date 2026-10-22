@@ -149,23 +149,16 @@ class ModelIdentifierMappingRepository extends AbstractRepository implements Mod
     }
 
     /**
-     * 读取全局启用映射，供模型网关解析所有组织的模型标识。
-     *
-     * @param ProviderDataIsolation $dataIsolation 全局读取时应传入已禁用组织隔离的数据隔离对象
+     * 查询指定源模型当前启用的目标模型标识。
      */
-    public function getActiveMappingMap(ProviderDataIsolation $dataIsolation): array
+    public function findActiveTargetModelId(ProviderDataIsolation $dataIsolation, string $sourceModelId): ?string
     {
-        $builder = $this->createBuilder($dataIsolation, ModelIdentifierMappingModel::query());
-        $rows = $builder
+        $targetModelId = $this->createBuilder($dataIsolation, ModelIdentifierMappingModel::query())
+            ->where('source_model_id', $sourceModelId)
             ->where('status', Status::Enabled->value)
             ->whereNull('deleted_at')
-            ->get(['source_model_id', 'target_model_id'])
-            ->all();
-        $map = [];
-        foreach ($rows as $row) {
-            $map[(string) $row->source_model_id] = (string) $row->target_model_id;
-        }
-        return $map;
+            ->value('target_model_id');
+        return $targetModelId === null ? null : (string) $targetModelId;
     }
 
     /**

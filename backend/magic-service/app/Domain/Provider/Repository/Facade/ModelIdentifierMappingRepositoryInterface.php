@@ -38,9 +38,9 @@ interface ModelIdentifierMappingRepositoryInterface
     public function findConflictingSourceModelIds(ProviderDataIsolation $dataIsolation, array $sourceModelIds, ?string $excludeGroupId = null, array $excludeIds = []): array;
 
     /**
-     * @return array<string, string>
+     * 查询指定源模型当前启用的目标模型标识。
      */
-    public function getActiveMappingMap(ProviderDataIsolation $dataIsolation): array;
+    public function findActiveTargetModelId(ProviderDataIsolation $dataIsolation, string $sourceModelId): ?string;
 
     /**
      * 保存一个按源模型标识拆分的映射组。
