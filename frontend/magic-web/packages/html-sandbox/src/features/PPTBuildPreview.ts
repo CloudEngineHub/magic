@@ -10,13 +10,28 @@ const PREVIEW_STYLE_ATTRIBUTE = "data-magic-ppt-build-preview"
 export class PPTBuildPreview {
 	private style: HTMLStyleElement | null = null
 
-	/** `steps` is the number of display steps already revealed (0 hides every configured element). */
-	show(steps: number): void {
+	/**
+	 * `steps` is the number of display steps already revealed (0 hides every configured element).
+	 * With `animate`, elements revealed by this call fade in like they do in a presentation.
+	 */
+	show(steps: number, animate = false): void {
 		const builds = collectPPTBuilds(document)
 		const order = [...new Set(builds.map(({ build }) => build.step))].sort((a, b) => a - b)
 		this.ensureStyle()
-		for (const { element, build } of builds)
-			element.toggleAttribute(HIDDEN_MARKER, order.indexOf(build.step) + 1 > steps)
+		const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+		for (const { element, build } of builds) {
+			const wasHidden = element.hasAttribute(HIDDEN_MARKER)
+			const hidden = order.indexOf(build.step) + 1 > steps
+			element.toggleAttribute(HIDDEN_MARKER, hidden)
+			if (animate && wasHidden && !hidden && build.effect === "fade" && !reduceMotion)
+				element.animate?.(
+					[{ opacity: 0 }, { opacity: getComputedStyle(element).opacity }],
+					{
+						duration: 250,
+						easing: "ease-out",
+					},
+				)
+		}
 	}
 
 	clear(): void {

@@ -341,13 +341,13 @@ export function useHTMLEditorV2(options: UseHTMLEditorV2Options) {
 					throw new Error("PPT_BUILD_EDITOR_NOT_READY")
 				await bridge.request(EditorMessageType.SET_PPT_BUILD_MARKERS, { visible })
 			},
-			previewPPTBuild: async (steps: number | null) => {
+			previewPPTBuild: async (steps: number | null, animate = false) => {
 				const bridge = getActiveBridge()
 				if (!bridge) {
 					if (steps === null) return
 					throw new Error("PPT_BUILD_EDITOR_NOT_READY")
 				}
-				await bridge.request(EditorMessageType.PREVIEW_PPT_BUILD, { steps })
+				await bridge.request(EditorMessageType.PREVIEW_PPT_BUILD, { steps, animate })
 			},
 			save: async () => {
 				console.log("[useHTMLEditorV2] save content", fileId)

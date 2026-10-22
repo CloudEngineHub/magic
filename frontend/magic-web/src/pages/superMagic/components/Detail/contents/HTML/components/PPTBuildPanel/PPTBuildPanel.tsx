@@ -32,8 +32,10 @@ import {
 	EyeOff,
 	GripVertical,
 	ListOrdered,
+	Play,
 	Plus,
 	Redo2,
+	Square,
 	Undo2,
 	X,
 } from "lucide-react"
@@ -54,6 +56,7 @@ import {
 	resolveItemDrop,
 	setGroupAutoDelay,
 } from "./buildQueue"
+import { usePPTBuildPlayPreview } from "./usePPTBuildPlayPreview"
 import { usePPTBuildQueue } from "./usePPTBuildQueue"
 import { PPTBuildQueueItem } from "./PPTBuildQueueItem"
 
@@ -86,7 +89,12 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	)
 	// Display number of the step the canvas is previewed up to; null shows the full page.
 	const [previewSteps, setPreviewSteps] = useState<number | null>(null)
+	const { playing, play, stop } = usePPTBuildPlayPreview(
+		editorRef,
+		groups.map((group) => groupAutoDelay(group.items)),
+	)
 	const togglePreview = (steps: number) => {
+		if (playing) void stop()
 		const next = previewSteps === steps ? null : steps
 		setPreviewSteps(next)
 		void editorRef.current?.previewPPTBuild(next).catch(() => setPreviewSteps(null))
@@ -94,7 +102,8 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	// Any queue change (edit, undo, reload) invalidates what the preview showed.
 	useEffect(() => {
 		setPreviewSteps(null)
-	}, [entries])
+		void stop()
+	}, [entries, stop])
 	useEffect(
 		() => () => {
 			void editorRef.current?.previewPPTBuild(null).catch(() => {
@@ -150,6 +159,26 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 					<ListOrdered size={16} /> {t("ppt.build.title")}
 				</h3>
 				<div className="flex items-center gap-0.5">
+					<MagicTooltip
+						title={playing ? t("ppt.build.stopPlayback") : t("ppt.build.playPreview")}
+					>
+						<Button
+							variant="ghost"
+							size="icon"
+							className="size-7"
+							aria-label={
+								playing ? t("ppt.build.stopPlayback") : t("ppt.build.playPreview")
+							}
+							data-testid="ppt-build-play"
+							disabled={!playing && (locked || !groups.length)}
+							onClick={() => {
+								setPreviewSteps(null)
+								void (playing ? stop() : play())
+							}}
+						>
+							{playing ? <Square size={14} /> : <Play size={16} />}
+						</Button>
+					</MagicTooltip>
 					{[
 						{
 							key: "undo" as const,

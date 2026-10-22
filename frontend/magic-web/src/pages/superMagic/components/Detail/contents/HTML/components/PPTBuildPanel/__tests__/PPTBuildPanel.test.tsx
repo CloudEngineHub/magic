@@ -215,4 +215,13 @@ describe("PPT build panel", () => {
 			]),
 		)
 	})
+
+	it("plays the steps on the canvas and stops on request", async () => {
+		const { editor } = setup()
+		await screen.findByText("first")
+		fireEvent.click(screen.getByTestId("ppt-build-play"))
+		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenCalledWith(0))
+		fireEvent.click(screen.getByTestId("ppt-build-play"))
+		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenLastCalledWith(null))
+	})
 })

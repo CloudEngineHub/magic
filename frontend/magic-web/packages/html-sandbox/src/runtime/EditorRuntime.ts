@@ -190,7 +190,7 @@ export class EditorRuntime {
 				throw new Error("PPT_BUILD_INVALID")
 			if (!this.isEditMode && !this.isPPTBuildMode)
 				throw new Error("PPT_BUILD_EDIT_MODE_REQUIRED")
-			this.pptBuildPreview.show(steps)
+			this.pptBuildPreview.show(steps, (payload as { animate?: unknown })?.animate === true)
 			return { success: true }
 		})
 		this.bridge.onRequest("SET_PPT_BUILD_MARKERS", (payload) => {
