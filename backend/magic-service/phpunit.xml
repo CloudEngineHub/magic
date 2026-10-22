@@ -22,6 +22,7 @@
       <file>test/Cases/Infrastructure/ExternalAPI/Search/DeepSeekSearchAdapterTest.php</file>
       <file>test/Cases/Infrastructure/ExternalAPI/Search/DeepSeekSearchTest.php</file>
       <file>test/Cases/Infrastructure/ExternalAPI/WebScrape/DeepSeekWebScrapeTest.php</file>
+      <file>test/Cases/Domain/Provider/Entity/AiAbilityEntityTest.php</file>
     </testsuite>
     <testsuite name="登录测试">
       <directory suffix="Test.php">test/Cases/Api/Login</directory>

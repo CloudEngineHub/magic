@@ -92,6 +92,29 @@ final class DeepSeekSearchTest extends TestCase
         self::assertCount(2, $history);
     }
 
+    public function testSequentialSearchesUseLatestApiKey(): void
+    {
+        $endpoint = 'https://deepseek.example.com/v1/tools/search';
+        $history = [];
+        $handler = HandlerStack::create(new MockHandler([
+            new Response(200, [], '{"results":[]}'),
+            new Response(200, [], '{"results":[]}'),
+        ]));
+        $handler->push(Middleware::history($history));
+
+        $search = new DeepSeekSearch(
+            $this->createConfig($endpoint),
+            new Client(['handler' => $handler])
+        );
+        $search->logger = new NullLogger();
+
+        $search->search('first request', 'first-key');
+        $search->search('second request', 'updated-key');
+
+        self::assertSame('Bearer first-key', $history[0]['request']->getHeaderLine('Authorization'));
+        self::assertSame('Bearer updated-key', $history[1]['request']->getHeaderLine('Authorization'));
+    }
+
     public function testAuthenticationFailureIsNotRetried(): void
     {
         $endpoint = 'https://deepseek.example.com/v1/tools/search';
