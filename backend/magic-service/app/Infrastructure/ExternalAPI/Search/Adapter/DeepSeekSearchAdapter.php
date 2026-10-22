@@ -119,12 +119,11 @@ class DeepSeekSearchAdapter implements SearchEngineAdapterInterface
     }
 
     /**
-     * 只有同时配置请求地址和密钥时才允许工厂选择 DeepSeek，避免空配置发起外部请求。
+     * 请求地址可回退到默认端点，因此只要求配置密钥。
      */
     public function isAvailable(): bool
     {
-        return ! empty($this->providerConfig['request_url'])
-            && ! empty($this->providerConfig['api_key']);
+        return trim((string) ($this->providerConfig['api_key'] ?? '')) !== '';
     }
 
     /**

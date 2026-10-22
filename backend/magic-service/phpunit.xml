@@ -19,6 +19,9 @@
   <testsuites>
     <testsuite name="大模型网关测试">
       <directory suffix="Test.php">test/Cases/Api/ModelGateway</directory>
+      <file>test/Cases/Infrastructure/ExternalAPI/Search/DeepSeekSearchAdapterTest.php</file>
+      <file>test/Cases/Infrastructure/ExternalAPI/Search/DeepSeekSearchTest.php</file>
+      <file>test/Cases/Infrastructure/ExternalAPI/WebScrape/DeepSeekWebScrapeTest.php</file>
     </testsuite>
     <testsuite name="登录测试">
       <directory suffix="Test.php">test/Cases/Api/Login</directory>

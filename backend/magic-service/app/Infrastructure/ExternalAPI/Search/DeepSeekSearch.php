@@ -8,9 +8,10 @@ declare(strict_types=1);
 namespace App\Infrastructure\ExternalAPI\Search;
 
 use App\Infrastructure\Core\Traits\HasLogger;
-use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Exception\TransferException;
+use GuzzleHttp\Psr7\Request;
 use Hyperf\Codec\Json;
 use Hyperf\Contract\ConfigInterface;
 use RuntimeException;
@@ -29,8 +30,10 @@ class DeepSeekSearch
     /**
      * 负责调用 DeepSeek Search API，并只对官方建议的临时错误重试一次。
      */
-    public function __construct(protected readonly ConfigInterface $config)
-    {
+    public function __construct(
+        private readonly ConfigInterface $config,
+        private readonly ClientInterface $httpClient,
+    ) {
     }
 
     /**
@@ -61,15 +64,17 @@ class DeepSeekSearch
         $lastException = null;
         for ($attempt = 0; $attempt < self::MAX_ATTEMPTS; ++$attempt) {
             try {
-                $response = (new Client())->post($requestUrl, [
-                    'headers' => [
+                $response = $this->httpClient->send(
+                    new Request('POST', $requestUrl, [
                         'Authorization' => 'Bearer ' . $apiKey,
                         'Content-Type' => 'application/json',
-                    ],
-                    'json' => $payload,
-                    'timeout' => self::DEFAULT_SEARCH_ENGINE_TIMEOUT,
-                    'http_errors' => true,
-                ]);
+                    ], Json::encode($payload)),
+                    [
+                        'timeout' => self::DEFAULT_SEARCH_ENGINE_TIMEOUT,
+                        'connect_timeout' => 5,
+                        'http_errors' => true,
+                    ]
+                );
 
                 $decoded = Json::decode($response->getBody()->getContents());
                 if (! is_array($decoded)) {

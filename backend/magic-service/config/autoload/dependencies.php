@@ -359,6 +359,7 @@ use App\Infrastructure\Util\Video\VideoFrameExtractorInterface;
 use App\Interfaces\MCP\Facade\HttpTransportHandler\ApiKeyProviderAuthenticator;
 use Dtyq\PhpMcp\Shared\Auth\AuthenticatorInterface;
 use Dtyq\PhpMcp\Shared\Kernel\Packer\PackerInterface;
+use GuzzleHttp\ClientInterface as GuzzleClientInterface;
 use Hyperf\Config\ProviderConfig;
 use Hyperf\Crontab\Strategy\CoroutineStrategy;
 use Hyperf\Crontab\Strategy\StrategyInterface;
@@ -534,6 +535,7 @@ $dependencies = [
     PermissionLabelServiceInterface::class => PermissionLabelService::class,
 
     // system
+    GuzzleClientInterface::class => SimpleClientFactory::class,
     ClientInterface::class => SimpleClientFactory::class,
     StrategyInterface::class => CoroutineStrategy::class,
 
