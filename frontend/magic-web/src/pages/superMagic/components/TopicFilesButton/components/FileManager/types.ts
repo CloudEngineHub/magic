@@ -52,6 +52,8 @@ export interface FileManagerPathItem {
 }
 
 export interface FileManagerProps {
+	/** 宿主提供独立回收站 Tab 时，管理器只请求打开，不切换自身内容。 */
+	onOpenRecycle?: () => void
 	hidePlaces?: boolean
 	defaultView?: FileManagerView
 	defaultWritePath?: string

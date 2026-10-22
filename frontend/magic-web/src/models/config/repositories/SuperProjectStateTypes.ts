@@ -83,6 +83,9 @@ export interface CachedFileTab {
 /** 界面 Tab 没有文件 ID，不能按文件缓存校验或发送给文件接口。 */
 export interface CachedFileManagerTab {
 	type: "file_manager"
+	/** 项目回收站独立保存标签位置，不覆盖文件管理器的浏览快照。 */
+	area?: "recycle"
+	identityKey?: string
 	id: string
 	title: string
 	active: boolean

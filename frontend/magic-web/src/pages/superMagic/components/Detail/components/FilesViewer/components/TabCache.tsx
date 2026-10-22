@@ -27,6 +27,9 @@ import type { ProjectFileManagerProps } from "../../../../TopicFilesButton/compo
 const ProjectFileManager = lazy(
 	() => import("../../../../TopicFilesButton/components/ProjectFileManager"),
 )
+const ProjectRecycleBin = lazy(
+	() => import("../../../../TopicFilesButton/components/ProjectRecycleBin"),
+)
 const UserSpaceFileManager = lazy(() => import("../../../../UserSpace/UserSpaceFileManager"))
 
 type CachedTab = Partial<TabItem> & {
@@ -36,6 +39,7 @@ type CachedTab = Partial<TabItem> & {
 }
 
 interface TabCacheProps {
+	onOpenProjectRecycle?: (projectId: string) => void
 	managerProps: Omit<ProjectFileManagerProps, "projectId" | "initialDirectoryId">
 	getFileManagerState: (context: FileManagerContext) => FileManagerSnapshot | undefined
 	onFileManagerStateChange: (
@@ -69,6 +73,7 @@ const TabCache = memo(
 	({
 		tab,
 		managerProps,
+		onOpenProjectRecycle,
 		getFileManagerState,
 		onFileManagerStateChange,
 		isActive,
@@ -211,9 +216,19 @@ const TabCache = memo(
 								projectName={managerProps.selectedProject?.project_name}
 								topicId={managerProps.selectedTopic?.id}
 							/>
+						) : tab.fileManager.area === "recycle" ? (
+							<ProjectRecycleBin
+								projectId={tab.fileManager.projectId}
+								onPreviewFile={managerProps.onPreviewFile}
+								onPreviewRemoved={managerProps.onPreviewRemoved}
+							/>
 						) : (
 							<ProjectFileManager
 								{...managerProps}
+								onOpenRecycle={() => {
+									if (tab.fileManager?.spaceType === "project")
+										onOpenProjectRecycle?.(tab.fileManager.projectId)
+								}}
 								initialState={
 									managerState?.spaceType === "project" ? managerState : undefined
 								}

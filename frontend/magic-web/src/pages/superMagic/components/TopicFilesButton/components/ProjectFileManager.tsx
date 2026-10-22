@@ -11,6 +11,7 @@ import type { FileManagerStateChangeOptions } from "../../Detail/components/File
 import type { ProjectFilesStore } from "@/stores/projectFiles"
 
 export interface ProjectFileManagerProps {
+	onOpenRecycle?: () => void
 	projectId: string
 	initialDirectoryId?: string
 	attachments: AttachmentItem[]

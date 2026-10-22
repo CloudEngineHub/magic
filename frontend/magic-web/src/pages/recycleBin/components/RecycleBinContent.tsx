@@ -216,6 +216,15 @@ export function RecycleBinContent({
 		autoSelectLoaded: !isProject,
 		resetKey: isProject ? projectQuery.scopeKey : undefined,
 	})
+	const refresh = useMemoizedFn(() => {
+		if (isProject) {
+			selection.clearSelection()
+			projectQuery.refresh()
+			return
+		}
+		run(queryParams)
+		refreshTabCounts().catch((error) => console.error(error))
+	})
 	const actions = useRecycleBinActions({
 		onRecordsChanged: handleRecordsChanged,
 		onMutationComplete,
@@ -223,15 +232,7 @@ export function RecycleBinContent({
 		setItems,
 		selectedIds: selection.selectedIds,
 		hasMixedSelectionTypes: selection.hasMixedSelectionTypes,
-		onRefresh: () => {
-			if (isProject) {
-				selection.clearSelection()
-				projectQuery.refresh()
-				return
-			}
-			run(queryParams)
-			refreshTabCounts().catch((error) => console.error(error))
-		},
+		onRefresh: refresh,
 	})
 	const busy = Boolean(
 		actions.restoreTarget ||
@@ -257,6 +258,15 @@ export function RecycleBinContent({
 			data-testid="recycle-bin-content"
 		>
 			<RecycleBinToolbar
+				onRefresh={refresh}
+				refreshing={
+					loading ||
+					isLoadingMore ||
+					projectQuery.status === "loading" ||
+					projectQuery.status === "searching" ||
+					projectQuery.loadingMore
+				}
+				refreshDisabled={busy}
 				fileView={isProject ? fileView : undefined}
 				onFileViewChange={(next) => {
 					if (next === "location" || fileView === "location") selection.clearSelection()

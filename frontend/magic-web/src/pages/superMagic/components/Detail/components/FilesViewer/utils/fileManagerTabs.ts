@@ -15,8 +15,9 @@ export function createFileManagerTab(
 	title: string,
 	returnTabId?: string,
 ): TabItem {
+	const isProjectRecycle = context.spaceType === "project" && context.area === "recycle"
 	return {
-		id: `file-manager:${context.spaceType}`,
+		id: `file-manager:${context.spaceType}${isProjectRecycle ? ":recycle" : ""}`,
 		type: "file_manager",
 		title,
 		active: true,

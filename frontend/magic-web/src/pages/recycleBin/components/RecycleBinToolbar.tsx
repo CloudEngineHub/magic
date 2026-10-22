@@ -1,12 +1,16 @@
 import { useId, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
-import { FolderSearch, LayoutGrid, List, RotateCcw, Search, Trash2 } from "lucide-react"
+import { FolderSearch, LayoutGrid, List, RotateCcw, Search, Trash2, RefreshCw } from "lucide-react"
+import MagicTooltip from "@/components/base/MagicTooltip"
 import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/shadcn-ui/input-group"
 import type { RecycleBinFileView } from "./recycle-bin-file-view"
 
 interface RecycleBinToolbarProps {
+	onRefresh?: () => void
+	refreshing?: boolean
+	refreshDisabled?: boolean
 	title: string
 	searchValue: string
 	hasSelection: boolean
@@ -28,6 +32,9 @@ interface RecycleBinToolbarProps {
 }
 
 export function RecycleBinToolbar({
+	onRefresh,
+	refreshing = false,
+	refreshDisabled = false,
 	title,
 	searchValue,
 	hasSelection,
@@ -49,6 +56,22 @@ export function RecycleBinToolbar({
 }: RecycleBinToolbarProps) {
 	const { t } = useTranslation("super")
 	const selectionId = useId()
+	const refreshButton = onRefresh && (
+		<MagicTooltip title={t("fileViewer.tabs.refresh")}>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-8 shrink-0"
+				aria-label={t("fileViewer.tabs.refresh")}
+				disabled={refreshing || refreshDisabled}
+				onClick={onRefresh}
+				data-testid="recycle-bin-refresh"
+			>
+				<RefreshCw size={16} className={refreshing ? "animate-spin" : undefined} />
+			</Button>
+		</MagicTooltip>
+	)
 	if (fileView) {
 		return (
 			<>
@@ -89,25 +112,28 @@ export function RecycleBinToolbar({
 							</Button>
 						))}
 					</div>
-					<InputGroup className="h-9 w-full sm:w-56">
-						<InputGroupAddon>
-							<Search size={16} />
-						</InputGroupAddon>
-						<InputGroupInput
-							type="search"
-							value={searchValue}
-							disabled={searchDisabled}
-							aria-label={t("recycleBin.project.namePlaceholder")}
-							placeholder={t("recycleBin.project.namePlaceholder")}
-							onChange={(event) => onSearchChange(event.target.value)}
-							onKeyDown={(event) => {
-								if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-									event.preventDefault()
-									onSearchSubmit?.()
-								}
-							}}
-						/>
-					</InputGroup>
+					<div className="flex w-full items-center gap-2 sm:w-auto">
+						<InputGroup className="h-9 flex-1 sm:w-56">
+							<InputGroupAddon>
+								<Search size={16} />
+							</InputGroupAddon>
+							<InputGroupInput
+								type="search"
+								value={searchValue}
+								disabled={searchDisabled}
+								aria-label={t("recycleBin.project.namePlaceholder")}
+								placeholder={t("recycleBin.project.namePlaceholder")}
+								onChange={(event) => onSearchChange(event.target.value)}
+								onKeyDown={(event) => {
+									if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+										event.preventDefault()
+										onSearchSubmit?.()
+									}
+								}}
+							/>
+						</InputGroup>
+						{refreshButton}
+					</div>
 				</div>
 				{queryForm}
 				<div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
@@ -164,8 +190,9 @@ export function RecycleBinToolbar({
 	}
 	return (
 		<>
-			<div className="flex w-full items-stretch gap-3.5 rounded-[10px] bg-card px-3 py-2">
+			<div className="flex w-full items-center justify-between gap-3.5 rounded-[10px] bg-card px-3 py-2">
 				<h2 className="text-lg font-medium leading-normal text-foreground">{title}</h2>
+				{refreshButton}
 			</div>
 
 			<div className="flex w-full items-center justify-between gap-[12px] rounded-[10px] bg-card px-3 py-2">
