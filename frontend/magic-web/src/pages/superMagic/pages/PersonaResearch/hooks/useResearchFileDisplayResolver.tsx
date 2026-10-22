@@ -1,5 +1,18 @@
 import { useMemo } from "react"
-import { FlaskConical, LayoutTemplate, Layers, Users } from "lucide-react"
+import {
+	ClipboardList,
+	FileText,
+	FlaskConical,
+	Layers,
+	LayoutTemplate,
+	ListChecks,
+	MessageSquareQuote,
+	MessagesSquare,
+	Search,
+	Split,
+	UserRound,
+	Users,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 import type { ProjectFileDisplayResolver } from "@/components/business/MentionPanel/types"
 import { usePersonaResearchStore } from "../context"
@@ -39,6 +52,19 @@ export function useResearchFileDisplayResolver(): ProjectFileDisplayResolver {
 					panels: <Layers size={16} />,
 					studies: <FlaskConical size={16} />,
 					templates: <LayoutTemplate size={16} />,
+					study: <FlaskConical size={16} />,
+					interviews: <MessagesSquare size={16} />,
+					discussions: <Split size={16} />,
+					persona: <UserRound size={16} />,
+					interview: <MessageSquareQuote size={16} />,
+					template: <LayoutTemplate size={16} />,
+					studyFiles: {
+						report: <FileText size={16} />,
+						plan: <ClipboardList size={16} />,
+						deskResearch: <Search size={16} />,
+						validation: <ListChecks size={16} />,
+						panel: <Users size={16} />,
+					},
 				},
 				{
 					// Read at render time from what the store has already parsed; the library may be

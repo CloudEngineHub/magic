@@ -40,20 +40,31 @@ export interface ResearchFileDisplayLookups {
 }
 
 export interface ResearchFileDisplayIcons {
+	/** Top-level folders. */
 	personas?: ReactNode
 	panels?: ReactNode
 	studies?: ReactNode
 	templates?: ReactNode
+	/** studies/<slug>/ and its interviews/ · discussions/ folders. */
+	study?: ReactNode
+	interviews?: ReactNode
+	discussions?: ReactNode
+	/** Single files: a persona, an interview, a report template. */
+	persona?: ReactNode
+	interview?: ReactNode
+	template?: ReactNode
+	/** Named study files, keyed like ResearchFileDisplayLabels["study"]. */
+	studyFiles?: Partial<Record<keyof ResearchFileDisplayLabels["study"], ReactNode>>
 }
 
 /** Study files with a readable name, keyed by their name inside studies/<slug>/. */
-function studyFileLabel(name: string, labels: ResearchFileDisplayLabels["study"]) {
-	const byName: Record<string, string> = {
-		"report.html": labels.report,
-		"plan.md": labels.plan,
-		"desk-research.md": labels.deskResearch,
-		"validation-questionnaire.md": labels.validation,
-		"panel.json": labels.panel,
+function studyFileKey(name: string): keyof ResearchFileDisplayLabels["study"] | undefined {
+	const byName: Record<string, keyof ResearchFileDisplayLabels["study"]> = {
+		"report.html": "report",
+		"plan.md": "plan",
+		"desk-research.md": "deskResearch",
+		"validation-questionnaire.md": "validation",
+		"panel.json": "panel",
 	}
 	return byName[name]
 }
@@ -99,18 +110,20 @@ export function createResearchFileDisplayResolver(
 			}
 			if (`${segments[0]}/` === STUDIES_DIR && segments.length === 2) {
 				const title = lookups.studyTitle?.(normalized)
-				return title ? { name: title } : null
+				return title ? { name: title, icon: icons.study } : null
 			}
 			if (`${segments[0]}/` === STUDIES_DIR && segments.length === 3) {
-				if (name === "interviews") return { name: labels.interviews }
-				if (name === "discussions") return { name: labels.discussions }
+				if (name === "interviews")
+					return { name: labels.interviews, icon: icons.interviews }
+				if (name === "discussions")
+					return { name: labels.discussions, icon: icons.discussions }
 			}
 			return null
 		}
 
 		if (`${segments[0]}/` === PERSONAS_DIR && segments.length === 2) {
 			const personaName = lookups.personaName?.(normalized)
-			return personaName ? { name: personaName } : null
+			return personaName ? { name: personaName, icon: icons.persona } : null
 		}
 
 		if (
@@ -119,7 +132,7 @@ export function createResearchFileDisplayResolver(
 			segments[2] === "interviews"
 		) {
 			const label = lookups.interviewLabel?.(normalized)
-			return label ? { name: label } : null
+			return label ? { name: label, icon: icons.interview } : null
 		}
 
 		if (`${segments[0]}/` === TEMPLATES_DIR && segments.length === 2) {
@@ -129,12 +142,13 @@ export function createResearchFileDisplayResolver(
 					normalized === DEFAULT_REPORT_TEMPLATE_PATH
 						? labels.defaultTemplate
 						: reportTemplateName(normalized),
+				icon: icons.template,
 			}
 		}
 
 		if (`${segments[0]}/` === STUDIES_DIR && segments.length === 3) {
-			const label = studyFileLabel(name, labels.study)
-			return label ? { name: label } : null
+			const key = studyFileKey(name)
+			return key ? { name: labels.study[key], icon: icons.studyFiles?.[key] } : null
 		}
 
 		return null

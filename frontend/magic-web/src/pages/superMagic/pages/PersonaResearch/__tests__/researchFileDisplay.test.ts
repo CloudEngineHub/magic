@@ -18,7 +18,13 @@ const resolve = createResearchFileDisplayResolver(
 			panel: "受访者名单",
 		},
 	},
-	{ studies: "studies-icon" },
+	{
+		studies: "studies-icon",
+		study: "study-icon",
+		interviews: "interviews-icon",
+		persona: "persona-icon",
+		studyFiles: { report: "report-icon" },
+	},
 	{
 		personaName: (path) => (path === "personas/p_a.json" ? "王浩" : undefined),
 		interviewLabel: (path) =>
@@ -58,25 +64,36 @@ describe("createResearchFileDisplayResolver", () => {
 	})
 
 	it("names a study folder by its title once known, else keeps the slug", () => {
-		expect(dir("studies/x")).toEqual({ name: "AI 录音硬件" })
+		expect(dir("studies/x")).toMatchObject({ name: "AI 录音硬件" })
 		expect(dir("studies/y")).toBeNull()
 	})
 
+	it("gives study folders and files their own icons, leaving unlisted ones to the default", () => {
+		expect(dir("studies/x")).toEqual({ name: "AI 录音硬件", icon: "study-icon" })
+		expect(dir("studies/x/interviews")).toMatchObject({ icon: "interviews-icon" })
+		expect(file("studies/x/report.html")).toMatchObject({
+			name: "研究报告",
+			icon: "report-icon",
+		})
+		expect(file("studies/x/plan.md")?.icon).toBeUndefined()
+		expect(file("personas/p_a.json")).toMatchObject({ name: "王浩", icon: "persona-icon" })
+	})
+
 	it("names study files and sub folders only directly under studies/<slug>/", () => {
-		expect(file("studies/x/report.html")).toEqual({ name: "研究报告" })
-		expect(file("studies/x/plan.md")).toEqual({ name: "研究方案" })
-		expect(file("studies/x/desk-research.md")).toEqual({ name: "市场洞察" })
-		expect(file("studies/x/panel.json")).toEqual({ name: "受访者名单" })
-		expect(dir("studies/x/interviews")).toEqual({ name: "访谈记录" })
-		expect(dir("studies/x/discussions")).toEqual({ name: "小组讨论" })
+		expect(file("studies/x/report.html")).toMatchObject({ name: "研究报告" })
+		expect(file("studies/x/plan.md")).toMatchObject({ name: "研究方案" })
+		expect(file("studies/x/desk-research.md")).toMatchObject({ name: "市场洞察" })
+		expect(file("studies/x/panel.json")).toMatchObject({ name: "受访者名单" })
+		expect(dir("studies/x/interviews")).toMatchObject({ name: "访谈记录" })
+		expect(dir("studies/x/discussions")).toMatchObject({ name: "小组讨论" })
 		expect(file("studies/x/interviews/report.html")).toBeNull()
 		expect(file("studies/x/study.json")).toBeNull()
 	})
 
 	it("shows persona and interview names once parsed, otherwise the file name", () => {
-		expect(file("personas/p_a.json")).toEqual({ name: "王浩" })
+		expect(file("personas/p_a.json")).toMatchObject({ name: "王浩" })
 		expect(file("personas/p_b.json")).toBeNull()
-		expect(file("studies/x/interviews/p_a.json")).toEqual({ name: "王浩 · 访谈记录" })
+		expect(file("studies/x/interviews/p_a.json")).toMatchObject({ name: "王浩 · 访谈记录" })
 		expect(file("studies/x/interviews/p_b.json")).toBeNull()
 		expect(file("docs/personas/p_a.json")).toBeNull()
 	})
