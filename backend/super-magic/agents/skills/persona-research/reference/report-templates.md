@@ -29,11 +29,12 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 
 ### Build report.html From the Template File
 
-Never retype or rewrite a template: a full template is too long to reproduce, and a hand-written page loses its navigation, styles, scripts and structure. Build the report from the file itself:
+Never retype or rewrite a template: a full template is too long to reproduce, and a hand-written page loses its navigation, styles, scripts and structure. Build the report from the file itself, in a private draft, so the user never sees sample content in `report.html` while it is being edited:
 
-1. Copy the chosen template file to `studies/<slug>/report.html` with code, not by writing its text out. For example: `shutil.copyfile("templates/voices.html", "studies/<slug>/report.html")`.
-2. Edit the copy in place with `edit_file` or `multi_edit_file`, one section at a time. Replace only the sample content (text, quotes, citations, badges, figures); keep `<head>`, the `<style>` and `<script>` blocks, section ids, class names and data attributes. Duplicate a sample row for each extra item; delete a row or section only when it does not apply.
-3. Before sending `report_written`, search the file for sample leftovers (`Zhang Wei`, `Li Na`, `Illustrative`, `example.com`, `image-placeholder`) and for English badge text; fix anything found.
+1. Copy the chosen template file to a draft outside the workspace, with code, not by writing its text out. The draft lives in the sandbox-local runtime folder next to the workspace: `../.runtime/persona-report/<slug>.html` (relative to the workspace; create the folder first). For example: `shutil.copyfile("templates/voices.html", "../.runtime/persona-report/<slug>.html")`.
+2. Edit the draft in place with `edit_file` or `multi_edit_file` (both accept that path), one section at a time. Replace only the sample content (text, quotes, citations, badges, figures); keep `<head>`, the `<style>` and `<script>` blocks, section ids, class names and data attributes. Duplicate a sample row for each extra item; delete a row or section only when it does not apply.
+3. Before publishing, search the draft for sample leftovers (`Zhang Wei`, `Li Na`, `Illustrative`, `example.com`, `image-placeholder`) and for English badge text; fix anything found.
+4. Publish once: copy the finished draft to `studies/<slug>/report.html` with code, delete the draft, then send `report_written`. Never write a partly edited page to `report.html`; a rewrite of an existing report is built the same way and replaces the old file only when complete.
 
 A report whose HTML has none of the template's section ids, `<nav class="top-bar">`, contents list or script blocks was not built from the template; rebuild it.
 
