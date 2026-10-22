@@ -48,6 +48,7 @@ import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelConte
 import { useSelectedElement } from "../StylePanel/hooks/useSelectedElement"
 import {
 	appendBuildStep,
+	appendBuildStepGroup,
 	AUTO_DELAY_OPTIONS_MS,
 	groupAutoDelay,
 	groupBuildQueue,
@@ -75,7 +76,8 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 }) {
 	const { t } = useTranslation("super")
 	const { selectedElement } = useSelectedElement(editorRef)
-	const { historyState } = useStylePanelStore()
+	const stylePanelStore = useStylePanelStore()
+	const { historyState } = stylePanelStore
 	const { entries, loading, busy, failed, update, travel, reload } = usePPTBuildQueue(
 		editorRef,
 		contentRevision,
@@ -114,6 +116,10 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 		[editorRef],
 	)
 	const selected = entries.find((entry) => entry.selector === selectedElement?.selector)
+	// Shift-click on the canvas selects several elements; they become one step together.
+	const pendingSelectors = stylePanelStore
+		.getSelectedSelectors()
+		.filter((selector) => !entries.some((entry) => entry.selector === selector))
 	const move = (from: number, to: number) => void update(reorderBuildQueue(entries, from, to))
 	const [activeDrag, setActiveDrag] = useState<
 		{ type: "item"; selector: string } | { type: "group"; step: number } | null
@@ -227,21 +233,20 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 					variant="outline"
 					size="sm"
 					className="w-full"
-					disabled={
-						locked ||
-						!selectedElement?.selector ||
-						Boolean(selected) ||
-						groups.length >= 1000
-					}
-					onClick={() => {
-						if (!selectedElement) return
-						void update(appendBuildStep(entries, selectedElement.selector))
-					}}
+					disabled={locked || !pendingSelectors.length || groups.length >= 1000}
+					onClick={() => void update(appendBuildStepGroup(entries, pendingSelectors))}
 				>
-					<Plus size={16} /> {t("ppt.build.addSelected")}
+					<Plus size={16} />{" "}
+					{pendingSelectors.length > 1
+						? t("ppt.build.addSelectedMany", { count: pendingSelectors.length })
+						: t("ppt.build.addSelected")}
 				</Button>
 				<p className="text-xs text-muted-foreground">
-					{selected ? t("ppt.build.alreadyAdded") : t("ppt.build.pickElement")}
+					{pendingSelectors.length > 1
+						? t("ppt.build.manySelected")
+						: selected
+							? t("ppt.build.alreadyAdded")
+							: t("ppt.build.pickElement")}
 				</p>
 			</div>
 			<ScrollArea className="min-h-0 flex-1" viewportClassName="p-3 [&>div]:!block">

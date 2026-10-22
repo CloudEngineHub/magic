@@ -10,11 +10,17 @@ import { PPTBuildPanel } from "../PPTBuildPanel"
 
 const state = vi.hoisted(() => ({
 	selectedElement: null as null | { selector: string },
+	selectedSelectors: null as null | string[],
 	history: { canUndo: false, canRedo: false },
 	error: vi.fn(),
 }))
 vi.mock("../../../iframe-bridge/contexts/StylePanelContext", () => ({
-	useStylePanelStore: () => ({ historyState: state.history }),
+	useStylePanelStore: () => ({
+		historyState: state.history,
+		getSelectedSelectors: () =>
+			state.selectedSelectors ??
+			(state.selectedElement ? [state.selectedElement.selector] : []),
+	}),
 }))
 vi.mock("../../StylePanel/hooks/useSelectedElement", () => ({ useSelectedElement: () => state }))
 vi.mock("@/components/base/MagicToaster/utils", () => ({ default: { error: state.error } }))
@@ -72,6 +78,7 @@ function setup(initial = [make("first", 1), make("second", 2)], onCommit?: () =>
 }
 beforeEach(() => {
 	state.selectedElement = null
+	state.selectedSelectors = null
 	state.history = { canUndo: false, canRedo: false }
 	state.error.mockClear()
 })
@@ -246,6 +253,20 @@ describe("PPT build panel", () => {
 			expect(
 				screen.getByRole("button", { name: "ppt.build.addSelected" }),
 			).not.toBeDisabled(),
+		)
+	})
+
+	it("adds several shift-selected elements as one step", async () => {
+		state.selectedSelectors = ["x", "y", "first"]
+		const { editor } = setup()
+		await screen.findByText("first")
+		// "first" is already in the queue, so only the two new elements are added.
+		fireEvent.click(screen.getByRole("button", { name: "ppt.build.addSelectedMany" }))
+		await waitFor(() =>
+			expect(editor.updatePPTBuilds).toHaveBeenCalledWith([
+				{ selector: "x", build: { step: 3, effect: "fade" } },
+				{ selector: "y", build: { step: 3, effect: "fade" } },
+			]),
 		)
 	})
 })

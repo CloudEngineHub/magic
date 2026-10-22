@@ -97,3 +97,23 @@ export function setGroupAutoDelay(items: PPTBuildEntry[], delay: number | null):
 		return { selector: item.selector, build: delay === null ? rest : { ...rest, after: delay } }
 	})
 }
+
+/**
+ * Adds several elements at once as one new step: the first creates the step and the rest join it.
+ * Returns the combined updates so the whole addition is one undoable command.
+ */
+export function appendBuildStepGroup(
+	entries: PPTBuildEntry[],
+	selectors: string[],
+	effect: "appear" | "fade" = "fade",
+): PPTBuildUpdate[] {
+	const [first, ...rest] = selectors
+	if (first === undefined) return []
+	const updates = appendBuildStep(entries, first, effect)
+	const created = updates.find((update) => update.selector === first)?.build
+	if (!created) return []
+	return [
+		...updates,
+		...rest.map((selector) => ({ selector, build: { step: created.step, effect } })),
+	]
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { PPTBuildEntry } from "../../../iframe-bridge/types/props"
 import {
 	appendBuildStep,
+	appendBuildStepGroup,
 	groupBuildQueue,
 	NEW_STEP_DROP_ID,
 	reorderBuildQueue,
@@ -95,5 +96,15 @@ describe("build queue", () => {
 		expect(setGroupAutoDelay(auto, null)).toEqual([
 			{ selector: "a", build: { step: 1, effect: "fade" } },
 		])
+	})
+
+	it("adds several elements as one new last step", () => {
+		const entries = [entry("a", 1), entry("b", 4)]
+		expect(appendBuildStepGroup(entries, ["x", "y", "z"], "appear")).toEqual([
+			{ selector: "x", build: { step: 5, effect: "appear" } },
+			{ selector: "y", build: { step: 5, effect: "appear" } },
+			{ selector: "z", build: { step: 5, effect: "appear" } },
+		])
+		expect(appendBuildStepGroup(entries, [])).toEqual([])
 	})
 })
