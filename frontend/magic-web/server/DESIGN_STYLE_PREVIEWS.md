@@ -19,20 +19,24 @@ See [Safari 16.4 release notes](https://developer.apple.com/documentation/safari
 Safari 至少需要 16.4。内嵌客户端必须按实际内核和请求头验证，不能只看客户端版本。
 这是一项功能级限制，不能从项目 Browserslist 推断其兼容性。
 
-Missing or inconsistent metadata intentionally returns 403. There is no Referer
-or missing-header fallback, because that would weaken the iframe-only policy.
-Login cookies alone cannot distinguish an iframe from direct navigation.
+Legacy fallback: when a browser sends neither header (Safari before 16.4), the
+request is allowed only if its `Referer` host equals the `Host` header. If either
+header is present, the strict check above applies and Referer is ignored. A
+missing or cross-host Referer still returns 403. Referer can be forged or stripped
+by privacy settings, so this is a compatibility measure, not a security boundary.
 
-缺失或不符合要求的请求头会返回 403，不使用 Referer 或缺头放行兜底。
-如需支持旧客户端，应单独评审兼容方案；仅增加登录态无法判断是否由 iframe 打开。
+缺失或不符合要求的请求头会返回 403。旧版兼容：浏览器两个请求头都不发送（Safari 16.4 以前）
+时，仅当 `Referer` 的主机与 `Host` 一致才放行；只要任一请求头存在，就按上述严格规则判断，
+不看 Referer。Referer 缺失或跨主机仍返回 403。Referer 可被伪造或被隐私设置去除，
+因此这只是兼容手段，不是安全边界。
 
 ## Security and caching / 安全与缓存
 
 Fetch Metadata is a browser restriction, not authentication or download protection:
 non-browser clients can forge these headers, and authorized viewers can inspect
 responses. Preview responses use `private, no-cache` and vary on both metadata
-headers. Rejected requests use `no-store`. Reverse proxies/CDNs must honor these
-headers and must not force shared caching of previews. This policy belongs to the
+headers (and `Referer` for the legacy fallback). Rejected requests use
+`no-store`. Reverse proxies/CDNs must honor these headers and must not force shared caching of previews. This policy belongs to the
 Express deployment server; it does not configure Vite's development server.
 
 这不是鉴权或防下载机制：非浏览器工具可以伪造请求头，能够预览的用户仍可查看响应。
