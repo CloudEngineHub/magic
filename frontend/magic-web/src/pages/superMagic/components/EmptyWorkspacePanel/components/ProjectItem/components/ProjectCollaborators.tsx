@@ -59,7 +59,6 @@ function ProjectCollaborators<T extends ProjectListItem>({
 					<div
 						className={cn(
 							"text-[10px] font-normal leading-[13px] text-muted-foreground empty:block",
-							compact && !list && "hidden",
 							list && "shrink-0 text-xs [@container_(min-width:800px)]:sr-only",
 						)}
 						data-testid="project-item-creator-label"
@@ -97,7 +96,6 @@ function ProjectCollaborators<T extends ProjectListItem>({
 				<div
 					className={cn(
 						"text-[10px] font-normal leading-[13px] text-muted-foreground empty:block",
-						compact && !list && "hidden",
 						list && "shrink-0 text-xs [@container_(min-width:800px)]:sr-only",
 					)}
 					data-testid="project-item-members-label"

@@ -45,6 +45,8 @@ interface Props {
 	cut?: boolean
 	menuItems?: TopicFilesMenuItem[]
 	onCheck?: () => void
+	readOnly?: boolean
+	disabled?: boolean
 	tag?: ReactNode
 	onSelect: (event: MouseEvent<HTMLElement>) => void
 	onOpen: () => void
@@ -67,6 +69,8 @@ export const FileManagerItem = memo(function FileManagerItem({
 	cut,
 	menuItems,
 	onCheck,
+	readOnly = false,
+	disabled = false,
 	tag,
 	onSelect,
 	onOpen,
@@ -81,16 +85,25 @@ export const FileManagerItem = memo(function FileManagerItem({
 			id={id}
 			role="option"
 			aria-selected={selected}
+			aria-disabled={disabled || undefined}
 			aria-label={name}
-			draggable={!onCheck && !rename}
+			draggable={!readOnly && !onCheck && !rename}
 			data-manager-item={item.file_id}
 			data-manager-target={isDirectory ? item.file_id : undefined}
 			onClick={(event) => {
-				if (event.target instanceof Node && event.currentTarget.contains(event.target))
+				if (
+					!disabled &&
+					event.target instanceof Node &&
+					event.currentTarget.contains(event.target)
+				)
 					onSelect(event)
 			}}
 			onDoubleClick={(event) => {
-				if (event.target instanceof Node && event.currentTarget.contains(event.target))
+				if (
+					!disabled &&
+					event.target instanceof Node &&
+					event.currentTarget.contains(event.target)
+				)
 					onOpen()
 			}}
 			style={!grid ? { gridTemplateColumns: "var(--manager-columns)" } : undefined}
@@ -107,6 +120,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 							: "hover:bg-muted/40"),
 				!grid && focused && !selected && "bg-muted/60",
 				cut && "opacity-45",
+				disabled && "cursor-not-allowed opacity-40",
 				"data-[manager-drop-target=true]:bg-blue-500/10 data-[manager-drop-target=true]:ring-1 data-[manager-drop-target=true]:ring-inset data-[manager-drop-target=true]:ring-blue-500",
 			)}
 		>
@@ -124,7 +138,9 @@ export const FileManagerItem = memo(function FileManagerItem({
 							"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded disabled:cursor-not-allowed",
 							!row?.expandable && "invisible",
 						)}
-						disabled={!row?.expandable || item.directoryLoadState === "loading"}
+						disabled={
+							disabled || !row?.expandable || item.directoryLoadState === "loading"
+						}
 						aria-expanded={row?.expanded}
 						aria-label={t(
 							item.directoryLoadState === "error"
@@ -269,7 +285,7 @@ export const FileManagerItem = memo(function FileManagerItem({
 			)}
 		</div>
 	)
-	return onCheck ? (
+	return readOnly || onCheck ? (
 		rowElement
 	) : (
 		<MagicDropdown

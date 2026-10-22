@@ -133,7 +133,7 @@ export default function ProjectMetadata({
 	return (
 		<div
 			className={cn(
-				"flex min-w-0 flex-col gap-1 text-xs leading-5 text-muted-foreground",
+				"flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs leading-5 text-muted-foreground",
 				list && "col-start-2 row-start-2 [@container_(min-width:800px)]:contents",
 			)}
 		>
@@ -141,7 +141,7 @@ export default function ProjectMetadata({
 			{recent && (
 				<div
 					className={cn(
-						"flex min-w-0 items-center gap-1",
+						"flex w-full min-w-0 items-center gap-1",
 						list &&
 							"[@container_(min-width:800px)]:col-start-[location] [@container_(min-width:800px)]:row-start-1",
 					)}
@@ -169,7 +169,11 @@ export default function ProjectMetadata({
 						timeLabel
 					)}
 				</span>
-				<SmartTooltip className="min-w-0 text-xs" data-testid="project-item-time">
+				<SmartTooltip
+					className="min-w-0 text-xs"
+					maxLines={0}
+					data-testid="project-item-time"
+				>
 					{time.value}
 				</SmartTooltip>
 			</div>
