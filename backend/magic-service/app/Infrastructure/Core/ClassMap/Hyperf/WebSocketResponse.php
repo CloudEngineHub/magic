@@ -9,6 +9,7 @@ namespace Hyperf\Engine\WebSocket;
 
 use Hyperf\Engine\Contract\WebSocket\FrameInterface;
 use Hyperf\Engine\Contract\WebSocket\ResponseInterface;
+use Swow\Psr7\Message\WebSocketFrame;
 use Swow\Psr7\Server\ServerConnection;
 
 /** 使用稳定连接身份适配 Hyperf 的 WebSocket 响应接口。 */
@@ -22,6 +23,19 @@ class Response implements ResponseInterface
     /** 将协议帧发送到当前连接。 */
     public function push(FrameInterface $frame): bool
     {
+        if (! $frame instanceof WebSocketFrame) {
+            // 仅转换非 Swow 原生帧，保留协议头并复用原有载荷流。
+            $frame = new WebSocketFrame(
+                $frame->getFin(),
+                $frame->getRSV1(),
+                $frame->getRSV2(),
+                $frame->getRSV3(),
+                $frame->getOpcode(),
+                $frame->getPayloadLength(),
+                $frame->getMaskingKey(),
+                $frame->getPayloadData()
+            );
+        }
         $this->connection->sendWebSocketFrame($frame);
         return true;
     }
