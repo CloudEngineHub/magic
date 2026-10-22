@@ -32,6 +32,7 @@ use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileVersionsRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListChildrenPageRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\RenameFileRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\UpdateFileRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileInfoResponseDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Response\FileTreeChangeDTO;
@@ -445,6 +446,55 @@ class MagicFSFileAppService extends AbstractAppService
         ]);
 
         // 转换为 DTO
+        $responseDTO = new FileInfoResponseDTO();
+        $responseDTO->file = MagicFSFileDTO::fromTaskFileEntity($fileEntity);
+
+        return $responseDTO;
+    }
+
+    /**
+     * Rename a file onto a destination, with an explicit collision policy.
+     *
+     * Authorization is the same EDITOR assertion updateFile performs, applied
+     * to BOTH ends: being allowed to write the source is not enough if the
+     * rename would replace a destination the caller cannot write.
+     *
+     * POST /api/v1/open-api/magicfs/files/{id}/rename.
+     */
+    public function renameFile(
+        MagicUserAuthorization $authorization,
+        string $fileId,
+        RenameFileRequestDTO $requestDTO
+    ): FileInfoResponseDTO {
+        $source = $this->assertFileAccessible($fileId, $authorization, MemberRole::EDITOR);
+
+        if ($requestDTO->new_parent_id !== null && $requestDTO->new_parent_id !== $source->getParentId()) {
+            // Replacing into a directory the caller cannot write would let a
+            // rename mutate a tree outside their permission scope.
+            $this->assertFileAccessible($requestDTO->new_parent_id, $authorization, MemberRole::EDITOR);
+        }
+
+        $fileEntity = $this->magicFSFileDomainService->renameFile(
+            $fileId,
+            $requestDTO->new_name,
+            $requestDTO->new_parent_id === null ? null : (int) $requestDTO->new_parent_id,
+            $requestDTO->on_exists ?? MagicFSFileDomainService::RENAME_ON_EXISTS_REPLACE,
+        );
+
+        $this->eventDispatcher->dispatch(new FileContentSavedEvent(
+            $fileEntity,
+            $fileEntity->getUserId(),
+            $fileEntity->getOrganizationCode()
+        ));
+
+        $this->logger->info('[RENAME] File renamed', [
+            'file_id' => $fileId,
+            'new_name' => $requestDTO->new_name,
+            'new_parent_id' => $requestDTO->new_parent_id,
+            'on_exists' => $requestDTO->on_exists,
+            'survivor_file_id' => $fileEntity->getFileId(),
+        ]);
+
         $responseDTO = new FileInfoResponseDTO();
         $responseDTO->file = MagicFSFileDTO::fromTaskFileEntity($fileEntity);
 

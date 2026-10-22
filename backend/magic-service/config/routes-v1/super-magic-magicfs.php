@@ -45,6 +45,11 @@ Router::addGroup(
             // 创建文件或目录
             Router::post('', [MagicFSApi::class, 'createFile']);
 
+            // Rename / move. Separate from updateFile because "who survives when
+            // the destination is occupied" is an identity decision a partial
+            // update cannot express (see RenameFileRequestDTO).
+            Router::post('/{id}/rename', [MagicFSApi::class, 'renameFile']);
+
             // 更新文件元数据
             Router::put('/{id}', [MagicFSApi::class, 'updateFile']);
 
