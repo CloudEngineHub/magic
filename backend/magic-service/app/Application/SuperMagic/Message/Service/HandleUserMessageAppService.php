@@ -114,6 +114,7 @@ class HandleUserMessageAppService extends AbstractAppService
         ?UserToolCallMessage $toolReply = null,
         ?int $existingTaskId = null,
     ): ?InterruptClientNotification {
+        $dataIsolation->initDataIsolationEnv();
         $toolReply ??= UserMessageDTOAssembler::resolveUserToolCallMessage(null, $message->getDynamicParams());
         $kind = UserMessageDTOAssembler::classifyMessage($message->getInstruction(), $toolReply);
         if ($existingTaskId !== null && $kind !== 'chat') {
@@ -141,6 +142,7 @@ class HandleUserMessageAppService extends AbstractAppService
      */
     public function handleInternalMessage(DataIsolation $dataIsolation, UserMessageDTO $dto): ?InterruptClientNotification
     {
+        $dataIsolation->initDataIsolationEnv();
         // Get topic information
         $topicEntity = $this->topicDomainService->getTopicByChatTopicId($dataIsolation, $dto->getChatTopicId());
 
@@ -187,6 +189,7 @@ class HandleUserMessageAppService extends AbstractAppService
     */
     public function getTaskContext(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO): TaskContext
     {
+        $dataIsolation->initDataIsolationEnv();
         $topicEntity = $this->topicDomainService->getTopicByChatTopicId($dataIsolation, $userMessageDTO->getChatTopicId());
         if (is_null($topicEntity)) {
             ExceptionBuilder::throw(SuperAgentErrorCode::TOPIC_NOT_FOUND, 'topic.topic_not_found');
@@ -263,6 +266,7 @@ class HandleUserMessageAppService extends AbstractAppService
      */
     public function handleChatMessage(DataIsolation $dataIsolation, UserMessageDTO $userMessageDTO, ?int $taskId = null): void
     {
+        $dataIsolation->initDataIsolationEnv();
         // Validate prompt length (MySQL text type max length is 65535 bytes, use 65000 for redundancy)
         if (strlen($userMessageDTO->getPrompt()) > 65000) {
             EventExceptionBuilder::throw(
@@ -405,6 +409,7 @@ class HandleUserMessageAppService extends AbstractAppService
         UserMessageDTO $userMessageDTO,
         UserToolCallMessage $userToolCallMessage,
     ): void {
+        $dataIsolation->initDataIsolationEnv();
         try {
             $this->topicTaskAppService->handleUserToolCallReply(
                 dataIsolation: $dataIsolation,

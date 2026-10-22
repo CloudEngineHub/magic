@@ -148,6 +148,7 @@ class SuperAgentMessageSubscriberV2 extends MagicAgentEventAppService
 
             // Create data isolation object
             $dataIsolation = DataIsolation::create($organizationCode, $userId);
+            $dataIsolation->initDataIsolationEnv();
             $dataIsolation->setLanguage($language);
 
             $fields = UserMessageDTOAssembler::parseMessageContent($messageStruct, SuperMagicExecutionSource::HumanChat);

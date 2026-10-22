@@ -408,6 +408,7 @@ readonly class SuperMagicAgentDomainService
         int $projectId,
         string $fullWorkdir,
         string $sandboxId,
+        DataIsolation $contactDataIsolation,
         ?string $sourcePath = null,
         array $excludePaths = [],
         ?string $skillsMdHash = null
@@ -422,14 +423,6 @@ readonly class SuperMagicAgentDomainService
 
         // Call sandbox workspace export API via proxy request
         $request = new ExportWorkspaceRequest(ProjectMode::AGENT_CREATOR->value, $code, $uploadConfig, $sourcePath, excludePaths: $excludePaths, skillsMdHash: $skillsMdHash);
-        // SuperMagicAgentDataIsolation is the Agent-domain isolation VO
-        // (BaseDataIsolation derivative), NOT the Contact-side DataIsolation
-        // used by the sandbox gateway. Adapt it to Contact\DataIsolation
-        // here so the export path can forward the per-user token uniformly.
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
         $response = $this->workspaceExporter->export($contactDataIsolation, $sandboxId, $request);
 
         if (! $response->isSuccess()) {
@@ -447,6 +440,7 @@ readonly class SuperMagicAgentDomainService
         string $sourcePath,
         string $fileName,
         string $taskKey,
+        DataIsolation $contactDataIsolation,
         array $excludePaths = [],
         ?string $skillsMdHash = null
     ): array {
@@ -466,10 +460,6 @@ readonly class SuperMagicAgentDomainService
             excludePaths: $excludePaths,
             skillsMdHash: $skillsMdHash,
         );
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
         return $this->workspaceExporter->createAsync($contactDataIsolation, $sandboxId, $request, $taskKey)->toArray();
     }
 
@@ -477,12 +467,9 @@ readonly class SuperMagicAgentDomainService
     public function checkAgentWorkspaceExportAsync(
         SuperMagicAgentDataIsolation $dataIsolation,
         string $sandboxId,
-        string $taskKey
+        string $taskKey,
+        DataIsolation $contactDataIsolation
     ): array {
-        $contactDataIsolation = DataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId()
-        );
         return $this->workspaceExporter->checkAsync($contactDataIsolation, $sandboxId, $taskKey)->toArray();
     }
 

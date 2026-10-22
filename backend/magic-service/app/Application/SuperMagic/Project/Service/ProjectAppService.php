@@ -1438,7 +1438,7 @@ class ProjectAppService extends AbstractAppService
 
         try {
             // Call file domain service to handle file migration
-            $dataIsolation = DataIsolation::simpleMake($event->getOrganizationCode(), $event->getUserId());
+            $dataIsolation = $this->createContactDataIsolationByUser($event->getOrganizationCode(), $event->getUserId());
 
             $sourceProjectEntity = $this->projectDomainService->getProjectNotUserId($event->getSourceProjectId());
 
@@ -1446,7 +1446,7 @@ class ProjectAppService extends AbstractAppService
 
             $forkProjectRecordEntity = $this->projectDomainService->getForkProjectRecordById($event->getForkRecordId());
 
-            $sourceToForkFileIdMap = $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $event->getFileIds());
+            $sourceToForkFileIdMap = $this->taskFileDomainService->migrateProjectFile($dataIsolation, $sourceProjectEntity, $forkProjectEntity, $forkProjectRecordEntity, $this->createContactDataIsolationByUser($forkProjectEntity->getUserOrganizationCode(), $forkProjectEntity->getUserId()), $event->getFileIds());
             if (! empty($sourceToForkFileIdMap)) {
                 $this->audioProjectDomainService->updateForkedAudioFileIdFromMigrationMap(
                     $sourceProjectEntity->getId(),

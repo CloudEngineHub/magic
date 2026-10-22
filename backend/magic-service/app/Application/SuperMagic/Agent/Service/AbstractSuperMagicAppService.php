@@ -224,13 +224,6 @@ abstract class AbstractSuperMagicAppService extends AbstractKernelAppService
         return $dataIsolation;
     }
 
-    protected function createContactDataIsolation(Authenticatable|BaseDataIsolation $authorization): ContactDataIsolation
-    {
-        // 先创建SuperMagicDataIsolation，然后转换为ContactDataIsolation
-        $superMagicDataIsolation = $this->createSuperMagicDataIsolation($authorization);
-        return $this->createContactDataIsolationByBase($superMagicDataIsolation);
-    }
-
     /**
      * 批量加载 Agent 版本列表关联的用户与部门信息.
      *
