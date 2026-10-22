@@ -30,6 +30,14 @@ enum ProjectMode: string
     case MICRO_APP = 'micro-app'; // 微应用开发模式
 
     /**
+     * AI 画布模式：项目位于 ai-canvas 专属工作区，打开后只展示一个画布和对话。
+     * 只用于识别项目和跳转专属页面，对话实际使用的 Agent 由话题模式决定（默认 design）。
+     * 不使用 canvas 这个值：Python 运行时的 AgentMode.CANVAS 对应另一个 canvas.agent，
+     * 避免项目模式被误当作 Agent 模式时切换到别的 Agent。
+     */
+    case AI_CANVAS = 'ai-canvas';
+
+    /**
      * Get all available project modes.
      */
     public static function getAllModes(): array
@@ -50,9 +58,14 @@ enum ProjectMode: string
             self::MAGICLAW->value,
             self::CHAT->value,
             self::MICRO_APP->value,
+            self::AI_CANVAS->value,
         ];
     }
 
+    /**
+     * 普通项目查询需要排除的模式。
+     * AI_CANVAS 不在其中：AI 画布首页按工作区查询项目列表，最近项目和搜索也需要照常展示它。
+     */
     public static function getQueryFilterModes(): array
     {
         return [
@@ -102,6 +115,7 @@ enum ProjectMode: string
             self::MAGICLAW => 'magic 龙虾模式',
             self::CHAT => '对话模式',
             self::MICRO_APP => '微应用开发模式',
+            self::AI_CANVAS => 'AI 画布模式',
         };
     }
 }
