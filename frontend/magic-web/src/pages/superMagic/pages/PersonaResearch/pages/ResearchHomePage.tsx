@@ -3,6 +3,7 @@ import { useMemoizedFn, useSize } from "ahooks"
 import {
 	ArrowRight,
 	ClipboardCheck,
+	FolderClock,
 	LayoutTemplate,
 	ListChecks,
 	Quote,
@@ -23,6 +24,7 @@ import { useResearchEditor } from "../hooks/useResearchEditor"
 import { useResearchTemplates } from "../hooks/useResearchTemplates"
 import { useStudyActions } from "../hooks/useStudyActions"
 import PersonaAvatar from "../components/PersonaAvatar"
+import ResearchHistoryFiles from "../components/ResearchHistoryFiles"
 import ResearchComposerOptions, {
 	type ReportTemplateOption,
 } from "../components/ResearchComposerOptions"
@@ -64,6 +66,14 @@ function ResearchHomePage() {
 	const heroSplit = !isMobile && (heroWidth === undefined || heroWidth >= HERO_SPLIT_MIN_WIDTH)
 	const templates = useResearchTemplates()
 	const { openStudy, requestDelete, deleteDialog } = useStudyActions()
+	// "历史产物" sidebar: the whole research project's files, opened from the top-right link.
+	const [historyOpen, setHistoryOpen] = useState(false)
+	const historyButtonRef = useRef<HTMLButtonElement>(null)
+	const changeHistoryOpen = useMemoizedFn((next: boolean) => {
+		setHistoryOpen(next)
+		// The docked sidebar unmounts without a focus return of its own; hand focus back to the entry.
+		if (!next) window.setTimeout(() => historyButtonRef.current?.focus(), 0)
+	})
 
 	// The home composer always starts a new study, never continues the last opened one.
 	useEffect(() => {
@@ -145,277 +155,300 @@ function ResearchHomePage() {
 	})
 
 	return (
-		<ScrollArea className="h-full bg-background" data-testid="persona-research-home">
-			<div
-				className={cn(
-					"mx-auto flex w-full max-w-6xl flex-col",
-					isMobile ? "gap-8 px-4 pb-6 pt-3" : "gap-14 px-10 pb-16 pt-5",
-				)}
+		// The sidebar docks beside the page, so the page keeps its own scroll area.
+		<div className="flex h-full min-h-0">
+			<ScrollArea
+				className="h-full min-w-0 flex-1 bg-background"
+				data-testid="persona-research-home"
 			>
-				{/* No page bar: the sidebar already names the page. Help, the persona library and
+				<div
+					className={cn(
+						"mx-auto flex w-full max-w-6xl flex-col",
+						isMobile ? "gap-8 px-4 pb-6 pt-3" : "gap-14 px-10 pb-16 pt-5",
+					)}
+				>
+					{/* No page bar: the sidebar already names the page. Help, the persona library and
 				    report templates sit as quiet links at the top right, above the hero. */}
-				<div className={cn("flex flex-col", isMobile ? "gap-2" : "gap-3")}>
-					<div
-						className={cn("flex items-center justify-end gap-1", styles.enter)}
-						style={enterDelay(0)}
-					>
-						<ResearchHelp page="home" />
-						<button
-							type="button"
-							data-guide-anchor={ResearchOnboardingAnchor.HomePersonaLibrary}
-							className={cn(HOME_LINK, PRESSABLE)}
-							onClick={openLibrary}
+					<div className={cn("flex flex-col", isMobile ? "gap-2" : "gap-3")}>
+						<div
+							className={cn("flex items-center justify-end gap-1", styles.enter)}
+							style={enterDelay(0)}
 						>
-							<span className="flex -space-x-1.5">
-								{libraryPersonas.slice(0, 3).map((persona) => (
-									<PersonaAvatar
-										key={persona.id}
-										id={persona.id}
-										name={persona.name}
-										className="size-5 ring-2 ring-background"
-									/>
-								))}
-								{libraryPersonas.length === 0 ? (
-									<UsersRound className="size-4" />
-								) : null}
-							</span>
-							{t("home.personaLibraryLabel")}
-							{/* Counted from the file list: the home reads only a few preview personas. */}
-							<span className="font-mono text-xs opacity-70">
-								{store.personaFileCount}
-							</span>
-						</button>
-						<button
-							type="button"
-							className={cn(HOME_LINK, PRESSABLE)}
-							aria-label={t("home.reportTemplatesLabel")}
-							onClick={openTemplates}
-						>
-							<LayoutTemplate className="size-4" />
-							{isMobile ? null : t("home.reportTemplatesLabel")}
-							<span className="font-mono text-xs opacity-70">
-								{store.reportTemplates.length}
-							</span>
-						</button>
-					</div>
-					{/* Hero: the question on the left, a persona voice on the right when there is room. */}
-					<section
-						ref={heroRef}
-						className={cn(
-							"grid items-stretch",
-							heroSplit
-								? "grid-cols-[minmax(0,1fr)_380px] gap-12"
-								: "grid-cols-1 gap-6",
-						)}
-					>
-						<div className="flex min-w-0 flex-col">
-							<h1
-								className={cn(
-									"font-black tracking-[-0.035em] text-foreground",
-									// Leading goes with the size: cn() drops a leading class placed before a text size.
-									isMobile
-										? "text-4xl leading-[1.15]"
-										: "text-[64px] leading-[1.08]",
-								)}
+							<ResearchHelp page="home" />
+							<button
+								type="button"
+								data-guide-anchor={ResearchOnboardingAnchor.HomePersonaLibrary}
+								className={cn(HOME_LINK, PRESSABLE)}
+								onClick={openLibrary}
 							>
-								{/* Each line of the title rises on its own, the second a beat later. */}
-								{t("home.title")
-									.split("\n")
-									.map((line, index) => (
-										<span
-											key={index}
-											className={cn("block", styles.enter)}
-											style={enterDelay(index * 60)}
-										>
-											{line}
-										</span>
+								<span className="flex -space-x-1.5">
+									{libraryPersonas.slice(0, 3).map((persona) => (
+										<PersonaAvatar
+											key={persona.id}
+											id={persona.id}
+											name={persona.name}
+											className="size-5 ring-2 ring-background"
+										/>
 									))}
-							</h1>
-							<p
-								className={cn(
-									"mt-3 max-w-[30em] text-[15px] leading-7 text-muted-foreground",
-									styles.enter,
-								)}
-								style={enterDelay(120)}
-							>
-								{t("home.subtitle")}
-							</p>
-							<div
-								className={cn(
-									"mt-6 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30",
-									styles.enter,
-								)}
-								style={enterDelay(170)}
-								data-testid="persona-research-composer"
-								data-guide-anchor={ResearchOnboardingAnchor.HomeComposer}
-							>
-								{isMobile ? (
-									<MobileInputContainer
-										editorContext={editorContext}
-										editorNodes={editorNodes}
-									/>
-								) : (
-									<DefaultMessageEditorContainer
-										editorContext={editorContext}
-										editorNodes={editorNodes}
-									/>
-								)}
-								{/* Settings strip inside the composer box, as in the prototype's bottom bar. */}
-								<ResearchComposerOptions
-									value={options}
-									onChange={updateOptions}
-									reportTemplate={reportTemplateOption}
-									guideAnchor={ResearchOnboardingAnchor.HomeSettings}
-									className="px-2.5 pb-3 pt-1.5"
-									pickedCount={store.studyPersonaPicks.length}
-									trailing={<StudyPersonaPicks onPickMore={openLibrary} />}
-								/>
-							</div>
-							{/* What every study promises, in place of decorative value-prop tiles. */}
-							<div
-								className={cn(
-									"mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground",
-									styles.enter,
-								)}
-								style={enterDelay(220)}
-							>
-								<span className="inline-flex items-center gap-1.5">
-									<ListChecks className="size-3.5" />
-									{t("home.promise.clarify")}
+									{libraryPersonas.length === 0 ? (
+										<UsersRound className="size-4" />
+									) : null}
 								</span>
-								<span className="inline-flex items-center gap-1.5">
-									<Quote className="size-3.5" />
-									{t("home.promise.quotes")}
+								{t("home.personaLibraryLabel")}
+								{/* Counted from the file list: the home reads only a few preview personas. */}
+								<span className="font-mono text-xs opacity-70">
+									{store.personaFileCount}
 								</span>
-								<span className="inline-flex items-center gap-1.5">
-									<ClipboardCheck className="size-3.5" />
-									{t("home.promise.validate")}
+							</button>
+							<button
+								type="button"
+								className={cn(HOME_LINK, PRESSABLE)}
+								aria-label={t("home.reportTemplatesLabel")}
+								onClick={openTemplates}
+							>
+								<LayoutTemplate className="size-4" />
+								{isMobile ? null : t("home.reportTemplatesLabel")}
+								<span className="font-mono text-xs opacity-70">
+									{store.reportTemplates.length}
 								</span>
-							</div>
+							</button>
+							<button
+								ref={historyButtonRef}
+								type="button"
+								className={cn(
+									HOME_LINK,
+									PRESSABLE,
+									historyOpen && "bg-muted text-foreground",
+								)}
+								aria-label={t("home.historyFilesLabel")}
+								aria-expanded={historyOpen}
+								onClick={() => changeHistoryOpen(!historyOpen)}
+							>
+								<FolderClock className="size-4" />
+								{isMobile ? null : t("home.historyFilesLabel")}
+							</button>
 						</div>
-						{heroSplit ? (
-							<div
-								className={cn("flex", styles.enter, styles.enterSoft)}
-								style={enterDelay(200)}
-							>
-								<ResearchVoiceCard
-									personas={libraryPersonas}
-									onOpenLibrary={openLibrary}
-									className="flex-1"
-								/>
+						{/* Hero: the question on the left, a persona voice on the right when there is room. */}
+						<section
+							ref={heroRef}
+							className={cn(
+								"grid items-stretch",
+								heroSplit
+									? "grid-cols-[minmax(0,1fr)_380px] gap-12"
+									: "grid-cols-1 gap-6",
+							)}
+						>
+							<div className="flex min-w-0 flex-col">
+								<h1
+									className={cn(
+										"font-black tracking-[-0.035em] text-foreground",
+										// Leading goes with the size: cn() drops a leading class placed before a text size.
+										isMobile
+											? "text-4xl leading-[1.15]"
+											: "text-[64px] leading-[1.08]",
+									)}
+								>
+									{/* Each line of the title rises on its own, the second a beat later. */}
+									{t("home.title")
+										.split("\n")
+										.map((line, index) => (
+											<span
+												key={index}
+												className={cn("block", styles.enter)}
+												style={enterDelay(index * 60)}
+											>
+												{line}
+											</span>
+										))}
+								</h1>
+								<p
+									className={cn(
+										"mt-3 max-w-[30em] text-[15px] leading-7 text-muted-foreground",
+										styles.enter,
+									)}
+									style={enterDelay(120)}
+								>
+									{t("home.subtitle")}
+								</p>
+								<div
+									className={cn(
+										"mt-6 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30",
+										styles.enter,
+									)}
+									style={enterDelay(170)}
+									data-testid="persona-research-composer"
+									data-guide-anchor={ResearchOnboardingAnchor.HomeComposer}
+								>
+									{isMobile ? (
+										<MobileInputContainer
+											editorContext={editorContext}
+											editorNodes={editorNodes}
+										/>
+									) : (
+										<DefaultMessageEditorContainer
+											editorContext={editorContext}
+											editorNodes={editorNodes}
+										/>
+									)}
+									{/* Settings strip inside the composer box, as in the prototype's bottom bar. */}
+									<ResearchComposerOptions
+										value={options}
+										onChange={updateOptions}
+										reportTemplate={reportTemplateOption}
+										guideAnchor={ResearchOnboardingAnchor.HomeSettings}
+										className="px-2.5 pb-3 pt-1.5"
+										pickedCount={store.studyPersonaPicks.length}
+										trailing={<StudyPersonaPicks onPickMore={openLibrary} />}
+									/>
+								</div>
+								{/* What every study promises, in place of decorative value-prop tiles. */}
+								<div
+									className={cn(
+										"mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground",
+										styles.enter,
+									)}
+									style={enterDelay(220)}
+								>
+									<span className="inline-flex items-center gap-1.5">
+										<ListChecks className="size-3.5" />
+										{t("home.promise.clarify")}
+									</span>
+									<span className="inline-flex items-center gap-1.5">
+										<Quote className="size-3.5" />
+										{t("home.promise.quotes")}
+									</span>
+									<span className="inline-flex items-center gap-1.5">
+										<ClipboardCheck className="size-3.5" />
+										{t("home.promise.validate")}
+									</span>
+								</div>
 							</div>
-						) : null}
+							{heroSplit ? (
+								<div
+									className={cn("flex", styles.enter, styles.enterSoft)}
+									style={enterDelay(200)}
+								>
+									<ResearchVoiceCard
+										personas={libraryPersonas}
+										onOpenLibrary={openLibrary}
+										className="flex-1"
+									/>
+								</div>
+							) : null}
+						</section>
+					</div>
+
+					<section
+						className="flex flex-col gap-4"
+						data-guide-anchor={ResearchOnboardingAnchor.HomeTemplates}
+					>
+						<div className={styles.enter} style={enterDelay(230)}>
+							<SectionTitle
+								title={t("home.templatesTitle")}
+								hint={t("home.templatesHint")}
+							/>
+						</div>
+						<div
+							className={cn(
+								"grid gap-3",
+								isMobile
+									? "grid-cols-1"
+									: "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]",
+							)}
+						>
+							{templates.map(
+								(
+									{
+										id,
+										kicker,
+										method,
+										title,
+										description,
+										prompt,
+										options: preset,
+										image,
+									},
+									index,
+								) => (
+									<button
+										key={id}
+										type="button"
+										// Cards follow the hero one after another, all in within ~0.7s.
+										style={enterDelay(260 + index * TEMPLATE_STAGGER_MS)}
+										className={cn(
+											styles.enter,
+											"group flex flex-col overflow-hidden rounded-xl bg-card text-left outline-none ring-1 ring-border",
+											"transition-all duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)] active:scale-[0.98]",
+											"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
+										)}
+										onClick={() => applyStarter(prompt, preset)}
+									>
+										{/* Scene photo: what the study is about. It fades into the card so the text below
+									    stays the focus; a slow zoom on hover is the only motion. */}
+										<span className="relative block h-28 overflow-hidden bg-muted">
+											<img
+												src={image}
+												alt=""
+												loading="lazy"
+												className="size-full object-cover saturate-[0.88] transition-transform duration-700 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] motion-reduce:transition-none"
+											/>
+											<span className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
+										</span>
+										<span className="flex flex-1 flex-col gap-1.5 px-[18px] pb-[18px] pt-2">
+											<span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
+												{kicker}
+											</span>
+											<span className="text-[15px] font-bold text-foreground">
+												{title}
+											</span>
+											<span className="line-clamp-2 text-[13px] leading-6 text-muted-foreground">
+												{description}
+											</span>
+											<span className="mt-auto flex items-center gap-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground">
+												<span className="truncate">
+													{[
+														preset?.panelSize &&
+														preset.panelSize !== "auto"
+															? t("options.panelValue", {
+																	count: preset.panelSize,
+																})
+															: null,
+														preset?.rounds && preset.rounds !== "auto"
+															? {
+																	quick: t("options.depthQuick"),
+																	standard:
+																		t("options.depthStandard"),
+																	deep: t("options.depthDeep"),
+																}[interviewDepth(preset.rounds)]
+															: null,
+														method,
+													]
+														.filter(Boolean)
+														.join(" · ")}
+												</span>
+												<ArrowRight className="ml-auto size-3.5 shrink-0 opacity-0 transition-[opacity,transform] group-hover:translate-x-0.5 group-hover:opacity-100" />
+											</span>
+										</span>
+									</button>
+								),
+							)}
+						</div>
 					</section>
+
+					<StudyListSection
+						onOpen={openStudy}
+						onDelete={requestDelete}
+						onTrySample={() => applyStarter(t("home.samplePrompt"))}
+						onViewAll={() => navigate({ name: RouteName.PersonaResearchStudies })}
+					/>
 				</div>
 
-				<section
-					className="flex flex-col gap-4"
-					data-guide-anchor={ResearchOnboardingAnchor.HomeTemplates}
-				>
-					<div className={styles.enter} style={enterDelay(230)}>
-						<SectionTitle
-							title={t("home.templatesTitle")}
-							hint={t("home.templatesHint")}
-						/>
-					</div>
-					<div
-						className={cn(
-							"grid gap-3",
-							isMobile
-								? "grid-cols-1"
-								: "grid-cols-[repeat(auto-fill,minmax(260px,1fr))]",
-						)}
-					>
-						{templates.map(
-							(
-								{
-									id,
-									kicker,
-									method,
-									title,
-									description,
-									prompt,
-									options: preset,
-									image,
-								},
-								index,
-							) => (
-								<button
-									key={id}
-									type="button"
-									// Cards follow the hero one after another, all in within ~0.7s.
-									style={enterDelay(260 + index * TEMPLATE_STAGGER_MS)}
-									className={cn(
-										styles.enter,
-										"group flex flex-col overflow-hidden rounded-xl bg-card text-left outline-none ring-1 ring-border",
-										"transition-all duration-200 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-px hover:shadow-[0_6px_18px_-10px_rgb(0_0_0/0.3)] active:scale-[0.98]",
-										"focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transform-none motion-reduce:transition-none",
-									)}
-									onClick={() => applyStarter(prompt, preset)}
-								>
-									{/* Scene photo: what the study is about. It fades into the card so the text below
-									    stays the focus; a slow zoom on hover is the only motion. */}
-									<span className="relative block h-28 overflow-hidden bg-muted">
-										<img
-											src={image}
-											alt=""
-											loading="lazy"
-											className="size-full object-cover saturate-[0.88] transition-transform duration-700 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] motion-reduce:transition-none"
-										/>
-										<span className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-card to-transparent" />
-									</span>
-									<span className="flex flex-1 flex-col gap-1.5 px-[18px] pb-[18px] pt-2">
-										<span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-											{kicker}
-										</span>
-										<span className="text-[15px] font-bold text-foreground">
-											{title}
-										</span>
-										<span className="line-clamp-2 text-[13px] leading-6 text-muted-foreground">
-											{description}
-										</span>
-										<span className="mt-auto flex items-center gap-1 border-t border-dashed border-border pt-3 text-xs text-muted-foreground">
-											<span className="truncate">
-												{[
-													preset?.panelSize && preset.panelSize !== "auto"
-														? t("options.panelValue", {
-																count: preset.panelSize,
-															})
-														: null,
-													preset?.rounds && preset.rounds !== "auto"
-														? {
-																quick: t("options.depthQuick"),
-																standard:
-																	t("options.depthStandard"),
-																deep: t("options.depthDeep"),
-															}[interviewDepth(preset.rounds)]
-														: null,
-													method,
-												]
-													.filter(Boolean)
-													.join(" · ")}
-											</span>
-											<ArrowRight className="ml-auto size-3.5 shrink-0 opacity-0 transition-[opacity,transform] group-hover:translate-x-0.5 group-hover:opacity-100" />
-										</span>
-									</span>
-								</button>
-							),
-						)}
-					</div>
-				</section>
-
-				<StudyListSection
-					onOpen={openStudy}
-					onDelete={requestDelete}
-					onTrySample={() => applyStarter(t("home.samplePrompt"))}
-					onViewAll={() => navigate({ name: RouteName.PersonaResearchStudies })}
-				/>
-			</div>
-
-			{deleteDialog}
-			{/* The page is fully rendered once the shell shows it (the store loads before). */}
-			<ResearchOnboarding page="home" ready onFinish={focusComposer} />
-		</ScrollArea>
+				{deleteDialog}
+				{/* The page is fully rendered once the shell shows it (the store loads before). */}
+				<ResearchOnboarding page="home" ready onFinish={focusComposer} />
+			</ScrollArea>
+			<ResearchHistoryFiles open={historyOpen} onOpenChange={changeHistoryOpen} />
+		</div>
 	)
 }
 

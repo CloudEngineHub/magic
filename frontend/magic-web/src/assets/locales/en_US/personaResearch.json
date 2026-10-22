@@ -259,6 +259,11 @@
 		"leading": "Leading question",
 		"sequencePriming": "Question order primes answers"
 	},
+	"historyFiles": {
+		"close": "Close history files",
+		"description": "All files of your research project. Click one to preview it.",
+		"title": "History files"
+	},
 	"home": {
 		"delete": "Delete",
 		"deleteDescription": "The conversation and this study's output files will be deleted. Personas in the library are kept.",
@@ -275,6 +280,7 @@
 			"reset": "Clear filters",
 			"search": "Search study titles"
 		},
+		"historyFilesLabel": "History files",
 		"moreActions": "More actions",
 		"myStudies": "My studies",
 		"noStudies": "No studies yet. Ask a business question or start from a template above.",

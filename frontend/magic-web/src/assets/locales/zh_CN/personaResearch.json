@@ -256,6 +256,11 @@
 		"leading": "诱导性提问",
 		"sequencePriming": "问题顺序引导"
 	},
+	"historyFiles": {
+		"close": "关闭历史产物",
+		"description": "研究项目里的全部文件，点击即可预览",
+		"title": "历史产物"
+	},
 	"home": {
 		"delete": "删除",
 		"deleteDescription": "研究对话和本次研究产出的文件会一起删除，人设库中的人设会保留。",
@@ -272,6 +277,7 @@
 			"reset": "清除筛选",
 			"search": "搜索研究标题"
 		},
+		"historyFilesLabel": "历史产物",
 		"moreActions": "更多操作",
 		"myStudies": "我的研究",
 		"noStudies": "还没有研究。输入一个商业问题，或从上面的模板开始。",
