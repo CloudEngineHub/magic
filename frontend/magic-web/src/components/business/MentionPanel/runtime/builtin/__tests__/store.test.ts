@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import mentionPanelStore from "../store"
 import projectFilesStore from "@/stores/projectFiles"
 import { MentionItemType, MentionItem } from "../../../types"
@@ -430,7 +430,23 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 			expect(items.some((item) => item.id === "scene-catalog")).toBe(false)
 		})
 
-		it("lists a title row per non-empty group", async () => {
+		it("lists a title row per group when there are several", async () => {
+			pinStudy({ personas: [personaItem], outputs: [reportItem] })
+
+			const result = await mentionPanelStore.dispatch({
+				kind: "catalog",
+				catalogId: MentionPanelCatalogId.SCENE_CATALOG,
+			})
+			expect(result.items?.map((item) => [item.type, item.name])).toEqual([
+				[MentionItemType.TITLE, "受访人设"],
+				[MentionItemType.PROJECT_FILE, "王浩"],
+				[MentionItemType.TITLE, "研究产物"],
+				[MentionItemType.PROJECT_FILE, "report.html"],
+			])
+			expect(result.items?.[3]?.tags).toContain("scene-catalog")
+		})
+
+		it("omits the title of a lone group, the breadcrumb already names the catalog", async () => {
 			pinStudy({ outputs: [reportItem] })
 
 			const result = await mentionPanelStore.dispatch({
@@ -438,10 +454,8 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 				catalogId: MentionPanelCatalogId.SCENE_CATALOG,
 			})
 			expect(result.items?.map((item) => [item.type, item.name])).toEqual([
-				[MentionItemType.TITLE, "研究产物"],
 				[MentionItemType.PROJECT_FILE, "report.html"],
 			])
-			expect(result.items?.[1]?.tags).toContain("scene-catalog")
 		})
 
 		it("searches names and taglines, keeping one row per file", async () => {
@@ -1349,6 +1363,110 @@ describe("MentionPanelStore Sorting Algorithm", () => {
 
 			expect(results.find((item) => item.name === "Alpha Skill")).toBeDefined()
 			expect(results.find((item) => item.name === "General Skill")).toBeUndefined()
+		})
+	})
+
+	describe("project file display resolver", () => {
+		const tree = () => [
+			{
+				type: "directory" as const,
+				file_id: "d-templates",
+				file_name: "templates",
+				relative_file_path: "/templates/",
+				project_id: "test-project",
+				source: AttachmentSource.PROJECT_DIRECTORY,
+				children: [
+					{
+						type: "file" as const,
+						file_id: "f-voices",
+						file_name: "voices.html",
+						file_extension: "html",
+						relative_file_path: "/templates/voices.html",
+						project_id: "test-project",
+						source: AttachmentSource.PROJECT_DIRECTORY,
+						children: [],
+					},
+				],
+			},
+			{
+				type: "directory" as const,
+				file_id: "d-chats",
+				file_name: "template-chats",
+				relative_file_path: "/template-chats/",
+				project_id: "test-project",
+				source: AttachmentSource.PROJECT_DIRECTORY,
+				children: [],
+			},
+		]
+
+		function resolver({ path, isDirectory }: { path: string; isDirectory: boolean }) {
+			if (path.startsWith("template-chats")) return { hidden: true }
+			if (isDirectory && path.replace(/\/$/, "") === "templates") return { name: "报告模板" }
+			if (path === "templates/voices.html") return { name: "人声（默认）" }
+			return null
+		}
+
+		async function listProjectFiles() {
+			const result = await mentionPanelStore.dispatch({
+				kind: "children",
+				id: "project-files",
+			})
+			return result.items ?? []
+		}
+
+		beforeEach(() => {
+			projectFilesStore.setSelectedProject(createTestProject("test-project"))
+			projectFilesStore.setWorkspaceFileTree(tree() as never)
+			mentionPanelStore.setProjectFileDisplayResolver(resolver)
+		})
+
+		afterEach(() => {
+			mentionPanelStore.setProjectFileDisplayResolver(null)
+		})
+
+		it("relabels and hides folders while keeping their real path", async () => {
+			const items = await listProjectFiles()
+
+			expect(items.map((item) => item.name)).toEqual(["报告模板"])
+			expect(items[0]).toMatchObject({
+				id: "/templates/",
+				data: { directory_name: "templates", directory_path: "templates/" },
+			})
+		})
+
+		it("labels a file like a template mention: real path, label as file_name", async () => {
+			const result = await mentionPanelStore.dispatch({
+				kind: "children",
+				id: "/templates/",
+			})
+
+			expect(result.items?.[0]).toMatchObject({
+				id: "f-voices",
+				type: MentionItemType.PROJECT_FILE,
+				name: "人声（默认）",
+				description: "voices.html",
+				data: {
+					file_id: "f-voices",
+					file_name: "人声（默认）",
+					file_path: "templates/voices.html",
+					file_extension: "html",
+					project_id: "test-project",
+				},
+			})
+		})
+
+		it("finds a relabelled file by its label or its real name", async () => {
+			expect((await searchItems("人声")).map((item) => item.id)).toContain("f-voices")
+			expect((await searchItems("voices")).map((item) => item.id)).toContain("f-voices")
+		})
+
+		it("leaves plain projects untouched once the resolver is cleared", async () => {
+			mentionPanelStore.setProjectFileDisplayResolver(null)
+
+			expect((await listProjectFiles()).map((item) => item.name)).toEqual([
+				"templates",
+				"template-chats",
+			])
 		})
 	})
 })

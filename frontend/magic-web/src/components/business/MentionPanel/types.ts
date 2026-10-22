@@ -472,6 +472,28 @@ export interface MentionSceneCatalog {
 	groups: MentionSceneCatalogGroup[]
 }
 
+/** What the @ panel knows about a project entry when a scene wants to relabel it. */
+export interface ProjectFileDisplayInput {
+	/** Real workspace path without a leading slash, e.g. "studies/x/report.html". */
+	path: string
+	/** Real file or folder name. */
+	name: string
+	isDirectory: boolean
+}
+
+/** Display-only override of a project entry; the real path and ids are never touched. */
+export interface ProjectFileDisplay {
+	/** Row label. Files also use it as the chip label, like scene catalog items do. */
+	name?: string
+	icon?: ReactNode
+	/** Drops the entry (and anything the resolver also hides below it) from the panel. */
+	hidden?: boolean
+}
+
+export type ProjectFileDisplayResolver = (
+	input: ProjectFileDisplayInput,
+) => ProjectFileDisplay | null | undefined
+
 export interface MentionCoreItem<
 	T extends MentionCoreItemType = MentionCoreItemType,
 > extends MentionItem<T> {}

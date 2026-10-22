@@ -67,6 +67,8 @@ export class MentionPanelSceneCatalogStore {
 
 	getItems(): MentionItem[] {
 		if (!this.catalog) return []
+		// The panel breadcrumb already names the catalog, so a lone group would repeat it.
+		if (this.catalog.groups.length === 1) return this.catalog.groups[0].items
 		return this.catalog.groups.flatMap((group) => [
 			{
 				id: `${MentionPanelBuiltinItemId.SCENE_CATALOG}-title-${group.id}`,

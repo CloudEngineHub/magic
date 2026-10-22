@@ -394,11 +394,16 @@
 		"viewDetail": "View details"
 	},
 	"mention": {
+		"discussionsDir": "Focus group discussions",
 		"interviewOf": "{{name}} · interview",
 		"interviews": "Interview transcripts",
 		"outputs": "Study outputs",
+		"panelsDir": "Persona groups",
+		"participantList": "Participant list",
 		"personas": "Interviewed personas",
+		"personasDir": "Personas",
 		"reportTemplates": "Report templates",
+		"studiesDir": "Studies",
 		"study": "This study"
 	},
 	"onboarding": {

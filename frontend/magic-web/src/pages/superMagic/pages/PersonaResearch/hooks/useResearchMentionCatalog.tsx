@@ -1,29 +1,22 @@
 import { useEffect } from "react"
 import { autorun } from "mobx"
 import { useTranslation } from "react-i18next"
-import { FlaskConical, LayoutTemplate } from "lucide-react"
-import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
+import { FlaskConical, LayoutTemplate, Layers, Users } from "lucide-react"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import PersonaAvatar from "../components/PersonaAvatar"
 import { usePersonaResearchStore } from "../context"
-import {
-	DEFAULT_REPORT_TEMPLATE_PATH,
-	getAttachmentPath,
-	reportTemplateName,
-} from "../services/researchFiles"
-import {
-	buildReportTemplateCatalog,
-	buildResearchMentionCatalog,
-} from "../services/researchMentionCatalog"
+import { createResearchFileDisplayResolver } from "../services/researchFileDisplay"
+import { buildResearchMentionCatalog } from "../services/researchMentionCatalog"
 
 /**
- * Pins research files in the @ panel of a research composer.
+ * Research-specific content of the @ panel of a research composer.
  *
- * | Composer                                        | Pinned entry                              |
- * | study conversation, study files ready           | "This study" + its report templates group |
- * | no study yet (home, library sheets, a template  | "Report templates" only, when any exist   |
- * | conversation) or a study still loading          |                                           |
+ * | Part                                    | Behaviour                                              |
+ * | "This study" entry                      | pinned while the selected study's files are ready      |
+ * | "Current project files" (all composers) | research folders and files shown with readable names   |
  *
+ * Report templates are ordinary project files (templates/*.html): they appear under
+ * "Current project files" as "Report templates", so there is no separate category.
  * The entry follows file changes and is cleared on unmount; while a newly selected study is
  * still loading the previous study's personas never show under the next one.
  */
@@ -34,16 +27,32 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 
 	useEffect(() => {
 		const mentionPanelStore = store.mentionPanelStore
-		const templatesInput = () => ({
-			files: store.reportTemplates,
-			title: t("mention.reportTemplates"),
-			nameOf: (file: AttachmentItem) => {
-				const path = getAttachmentPath(file)
-				return path === DEFAULT_REPORT_TEMPLATE_PATH
-					? t("reportTemplates.defaultName")
-					: reportTemplateName(path)
-			},
-		})
+		mentionPanelStore.setProjectFileDisplayResolver(
+			createResearchFileDisplayResolver(
+				{
+					personas: t("mention.personasDir"),
+					panels: t("mention.panelsDir"),
+					studies: t("mention.studiesDir"),
+					templates: t("mention.reportTemplates"),
+					defaultTemplate: t("reportTemplates.defaultName"),
+					interviews: t("mention.interviews"),
+					discussions: t("mention.discussionsDir"),
+					study: {
+						report: t("console.docReport"),
+						plan: t("console.docPlan"),
+						deskResearch: t("console.docDeskResearch"),
+						validation: t("console.docValidation"),
+						panel: t("mention.participantList"),
+					},
+				},
+				{
+					personas: <Users size={16} />,
+					panels: <Layers size={16} />,
+					studies: <FlaskConical size={16} />,
+					templates: <LayoutTemplate size={16} />,
+				},
+			),
+		)
 		const labels = {
 			study: t("mention.study"),
 			personas: t("mention.personas"),
@@ -61,15 +70,7 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 		const dispose = autorun(() => {
 			const study = topicId ? store.studyAttachments : null
 			if (!study || store.selectedTopic?.id !== topicId || store.isStudyContentLoading) {
-				const templates = templatesInput()
-				mentionPanelStore.setPinnedSceneCatalog(
-					templates.files.length
-						? buildReportTemplateCatalog(templates, {
-								projectId: store.selectedProject?.id,
-								icon: <LayoutTemplate size={16} />,
-							})
-						: null,
-				)
+				mentionPanelStore.setPinnedSceneCatalog(null)
 				return
 			}
 			const personaFiles = new Map(
@@ -82,7 +83,6 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 			mentionPanelStore.setPinnedSceneCatalog(
 				buildResearchMentionCatalog({
 					study,
-					reportTemplates: templatesInput(),
 					projectId: store.selectedProject?.id,
 					personas,
 					interviewPersonaIdByFileId: new Map(
@@ -106,6 +106,7 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 		return () => {
 			dispose()
 			mentionPanelStore.setPinnedSceneCatalog(null)
+			mentionPanelStore.setProjectFileDisplayResolver(null)
 		}
 	}, [store, t, topicId])
 }

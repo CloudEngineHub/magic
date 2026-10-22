@@ -391,11 +391,16 @@
 		"viewDetail": "查看详情"
 	},
 	"mention": {
+		"discussionsDir": "小组讨论",
 		"interviewOf": "{{name}} · 访谈记录",
 		"interviews": "访谈记录",
 		"outputs": "研究产物",
+		"panelsDir": "人设分组",
+		"participantList": "受访者名单",
 		"personas": "受访人设",
+		"personasDir": "人设",
 		"reportTemplates": "报告模板",
+		"studiesDir": "研究",
 		"study": "本次研究"
 	},
 	"onboarding": {

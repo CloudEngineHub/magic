@@ -2,7 +2,13 @@ import { makeAutoObservable } from "mobx"
 import { createDefaultItems } from "./default-items"
 import { MentionItemType, PanelState } from "../../types"
 import { MentionPanelBuiltinItemId as BuiltinItemId } from "./catalog-ids"
-import type { MentionData, MentionItem, McpMentionData, MentionSceneCatalog } from "../../types"
+import type {
+	MentionData,
+	MentionItem,
+	McpMentionData,
+	MentionSceneCatalog,
+	ProjectFileDisplayResolver,
+} from "../../types"
 import type {
 	CatalogRequest,
 	EffectRequest,
@@ -170,6 +176,14 @@ export class MentionPanelStore {
 	 */
 	setPinnedSceneCatalog(catalog: MentionSceneCatalog | null) {
 		this.sceneCatalogStore.setCatalog(catalog)
+	}
+
+	/**
+	 * Lets a scene relabel project entries in "Current project files" (name, icon, hidden).
+	 * Display only: paths and ids in the inserted mention stay real. null restores the default.
+	 */
+	setProjectFileDisplayResolver(resolver: ProjectFileDisplayResolver | null) {
+		this.workspaceFilesStore.setDisplayResolver(resolver)
 	}
 
 	setSkillQueryContext(topicMode?: string, agentCode?: string) {
