@@ -35,6 +35,8 @@ export interface ResearchFileDisplayLookups {
 	personaName?: (path: string) => string | undefined
 	/** studies/<slug>/interviews/<id>.json → e.g. "王浩 · 访谈记录". */
 	interviewLabel?: (path: string) => string | undefined
+	/** studies/<slug> → the study's title. */
+	studyTitle?: (path: string) => string | undefined
 }
 
 export interface ResearchFileDisplayIcons {
@@ -65,6 +67,7 @@ function studyFileLabel(name: string, labels: ResearchFileDisplayLabels["study"]
  * | personas/ · panels/ · studies/     | 人设 · 人设分组 · 研究          |
  * | templates/ · templates/<name>.html | 报告模板 · 模板名 (voices → 人声（默认）) |
  * | template-chats/ (and below)        | hidden: internal conversation markers |
+ * | studies/<slug>/                    | the study title (lookup, once known) |
  * | studies/<slug>/report.html …       | 研究报告 / 研究方案 / 市场洞察 / 验证问卷 / 受访者名单 |
  * | studies/<slug>/interviews/ · discussions/ | 访谈记录 · 小组讨论 |
  *
@@ -93,6 +96,10 @@ export function createResearchFileDisplayResolver(
 				}
 				const match = top[`${normalized}/`]
 				return match ? { name: match[0], icon: match[1] } : null
+			}
+			if (`${segments[0]}/` === STUDIES_DIR && segments.length === 2) {
+				const title = lookups.studyTitle?.(normalized)
+				return title ? { name: title } : null
 			}
 			if (`${segments[0]}/` === STUDIES_DIR && segments.length === 3) {
 				if (name === "interviews") return { name: labels.interviews }

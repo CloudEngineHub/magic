@@ -2038,7 +2038,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 										dragState.isExternalDrag
 									}
 								>
-									{item?.name}
+									{decoration?.name ?? item?.name}
 								</SmartTooltip>
 							)}
 						</div>
@@ -2267,7 +2267,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 										)}
 										sideOffset={20}
 									>
-										{item?.file_name}
+										{decoration?.name ?? item?.file_name}
 									</ProjectFileImageSmartTooltip>
 								) : (
 									<SmartTooltip
@@ -2285,7 +2285,7 @@ const TopicFilesCore = forwardRef<TopicFilesCoreRef, TopicFilesCoreProps>(functi
 											dragState.isExternalDrag
 										}
 									>
-										{item?.file_name}
+										{decoration?.name ?? item?.file_name}
 									</SmartTooltip>
 								)}
 							</>

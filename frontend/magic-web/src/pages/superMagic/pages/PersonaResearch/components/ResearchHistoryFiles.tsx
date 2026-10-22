@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import { useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
 import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { X } from "lucide-react"
@@ -23,11 +23,14 @@ import PreviewDetailPopup, {
 	type PreviewDetailPopupRef,
 } from "@/pages/superMagicMobile/components/PreviewDetailPopup"
 import { resolveRuntimeFileOpen } from "@/pages/share/microApp/hooks/resolveRuntimeFileOpen"
+import type { TopicFileRowDecorationResolver } from "@/pages/superMagic/components/TopicFilesButton/topic-file-row-decoration.types"
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks/types"
 import type { PersonaFile } from "../types"
 import { usePersonaResearchStore } from "../context"
 import { getAttachmentPath, normalizeResearchPath } from "../services/researchFiles"
 import { routeResearchFile } from "../services/researchFileRouting"
+import { TEMPLATE_CHATS_DIR } from "../services/templateChats"
+import { useResearchFileDisplayResolver } from "../hooks/useResearchFileDisplayResolver"
 import PersonaDetailSheet from "./PersonaDetailSheet"
 import ResearchStateView from "./ResearchStateView"
 
@@ -79,12 +82,32 @@ function ResearchHistoryFiles({ children, open, onOpenChange }: ResearchHistoryF
 		openPreview(result.detail)
 	})
 
+	// Same readable names as the @ panel: "研究报告", persona names, study titles, template names.
+	const resolveFileDisplay = useResearchFileDisplayResolver()
+	const resolveRowDecoration = useMemoizedFn<TopicFileRowDecorationResolver>(({ item }) => {
+		const display = resolveFileDisplay({
+			path: getAttachmentPath(item),
+			name: item.file_name ?? item.name ?? "",
+			isDirectory: item.is_directory === true,
+		})
+		return display?.name || display?.icon ? { name: display.name, icon: display.icon } : null
+	})
+	// template-chats/ holds internal conversation markers, not user files. Only the root level is
+	// filtered (a handful of folders), so the tree is never walked or copied per file.
+	const visibleTree = useMemo(
+		() =>
+			store.attachments.filter(
+				(item) => !`${getAttachmentPath(item)}/`.startsWith(TEMPLATE_CHATS_DIR),
+			),
+		[store.attachments],
+	)
+
 	const project = store.selectedProject
 	const content = project ? (
 		<TopicFilesButton
 			// The tree needs the research project's own files store, not the global workspace's.
 			projectFilesStore={store.projectFilesStore}
-			attachments={store.attachments}
+			attachments={visibleTree}
 			projectId={project.id}
 			selectedProject={project}
 			selectedTopic={store.selectedTopic}
@@ -93,7 +116,10 @@ function ResearchHistoryFiles({ children, open, onOpenChange }: ResearchHistoryF
 			allowEdit={!store.isReadOnly}
 			allowDownload
 			showTitle={false}
-			showRefresh={false}
+			// Studies keep writing files while the page is open; let users re-read the project.
+			showRefresh
+			refreshAttachments={() => store.refreshAttachments()}
+			resolveTopicFileRowDecoration={resolveRowDecoration}
 		/>
 	) : (
 		<ResearchStateView status="loading" />

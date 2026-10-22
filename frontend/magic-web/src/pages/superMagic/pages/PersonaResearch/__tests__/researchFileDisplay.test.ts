@@ -23,6 +23,7 @@ const resolve = createResearchFileDisplayResolver(
 		personaName: (path) => (path === "personas/p_a.json" ? "王浩" : undefined),
 		interviewLabel: (path) =>
 			path === "studies/x/interviews/p_a.json" ? "王浩 · 访谈记录" : undefined,
+		studyTitle: (path) => (path === "studies/x" ? "AI 录音硬件" : undefined),
 	},
 )
 
@@ -56,6 +57,11 @@ describe("createResearchFileDisplayResolver", () => {
 		expect(file("templates/notes.txt")).toBeNull()
 	})
 
+	it("names a study folder by its title once known, else keeps the slug", () => {
+		expect(dir("studies/x")).toEqual({ name: "AI 录音硬件" })
+		expect(dir("studies/y")).toBeNull()
+	})
+
 	it("names study files and sub folders only directly under studies/<slug>/", () => {
 		expect(file("studies/x/report.html")).toEqual({ name: "研究报告" })
 		expect(file("studies/x/plan.md")).toEqual({ name: "研究方案" })
@@ -65,7 +71,6 @@ describe("createResearchFileDisplayResolver", () => {
 		expect(dir("studies/x/discussions")).toEqual({ name: "小组讨论" })
 		expect(file("studies/x/interviews/report.html")).toBeNull()
 		expect(file("studies/x/study.json")).toBeNull()
-		expect(dir("studies/x")).toBeNull()
 	})
 
 	it("shows persona and interview names once parsed, otherwise the file name", () => {

@@ -257,6 +257,16 @@ export class PersonaResearchStore {
 		return this.studyFileOf(topic)?.title || ""
 	}
 
+	/** Title of the study stored in `dir` ("studies/<slug>"), for file lists; undefined if unknown. */
+	studyTitleOfDir(dir: string): string | undefined {
+		const prefix = dir.replace(/\/+$/, "")
+		const topic = this.topicStore.topics.find((item) => {
+			const studyDir = this.studyDirOf(item.id)
+			return studyDir !== null && studyDir.replace(/\/+$/, "") === prefix
+		})
+		return topic ? this.studyTitleOf(topic) || undefined : undefined
+	}
+
 	/** Renames a study through its topic name. */
 	async renameStudy(topicId: string, name: string): Promise<void> {
 		const topicName = name.trim()

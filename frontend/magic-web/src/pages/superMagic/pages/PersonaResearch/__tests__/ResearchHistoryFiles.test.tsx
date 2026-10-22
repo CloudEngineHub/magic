@@ -6,10 +6,14 @@ const { store, previewOpen, filesButtonProps } = vi.hoisted(() => ({
 		selectedProject: { id: "project-1" } as { id: string } | null,
 		selectedTopic: null,
 		isReadOnly: false,
-		attachments: [{ file_id: "tree" }],
+		attachments: [
+			{ file_id: "personas", relative_file_path: "personas/", is_directory: true },
+			{ file_id: "chats", relative_file_path: "template-chats/", is_directory: true },
+		] as Record<string, unknown>[],
 		attachmentList: [{ file_id: "list" }],
 		projectFilesStore: { tag: "research-files-store" },
 		personaById: vi.fn(),
+		refreshAttachments: vi.fn(),
 	},
 	previewOpen: vi.fn(),
 	filesButtonProps: { current: null as Record<string, unknown> | null },
@@ -39,6 +43,10 @@ vi.mock("@/pages/superMagicMobile/components/PreviewDetailPopup", async () => {
 vi.mock("../components/PersonaDetailSheet", () => ({
 	default: ({ persona }: { persona: { name: string } | null }) =>
 		persona ? <div data-testid="persona-dialog">{persona.name}</div> : null,
+}))
+vi.mock("../hooks/useResearchFileDisplayResolver", () => ({
+	useResearchFileDisplayResolver: () => (file: { path: string }) =>
+		file.path === "studies/a/report.html" ? { name: "研究报告" } : null,
 }))
 vi.mock("../components/ResearchStateView", () => ({
 	default: () => <div data-testid="loading" />,
@@ -95,11 +103,51 @@ describe("ResearchHistoryFiles", () => {
 		expect(filesButtonProps.current).toMatchObject({
 			projectId: "project-1",
 			projectFilesStore: store.projectFilesStore,
-			attachments: store.attachments,
+			showRefresh: true,
 			selectedTopic: null,
 			allowEdit: true,
 			allowDownload: true,
 		})
+	})
+
+	it("hides internal template-chats folders but keeps the real tree untouched", () => {
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main />
+			</ResearchHistoryFiles>,
+		)
+		const shown = filesButtonProps.current?.attachments as { file_id: string }[]
+		expect(shown.map((item) => item.file_id)).toEqual(["personas"])
+		expect(store.attachments).toHaveLength(2)
+	})
+
+	it("offers a refresh that re-reads the project's files", () => {
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main />
+			</ResearchHistoryFiles>,
+		)
+		;(filesButtonProps.current?.refreshAttachments as () => void)()
+		expect(store.refreshAttachments).toHaveBeenCalledTimes(1)
+	})
+
+	it("shows readable names through the row decoration, leaving other files as they are", () => {
+		render(
+			<ResearchHistoryFiles open onOpenChange={onOpenChange}>
+				<main />
+			</ResearchHistoryFiles>,
+		)
+		const decorate = filesButtonProps.current?.resolveTopicFileRowDecoration as (c: {
+			item: Record<string, unknown>
+		}) => { name?: string } | null
+		expect(
+			decorate({
+				item: { relative_file_path: "studies/a/report.html", file_name: "report.html" },
+			}),
+		).toMatchObject({ name: "研究报告" })
+		expect(
+			decorate({ item: { relative_file_path: "notes.md", file_name: "notes.md" } }),
+		).toBeNull()
 	})
 
 	it("shows a loading state until the project is known", () => {
@@ -128,7 +176,7 @@ describe("ResearchHistoryFiles", () => {
 		expect(previewOpen).toHaveBeenCalledTimes(1)
 		const [detail, tree, list] = previewOpen.mock.calls[0]
 		expect(detail).toMatchObject({ currentFileId: "f1" })
-		expect(tree).toBe(store.attachments)
+		expect(tree).toBe(store.attachments) // handed over by reference, not copied
 		expect(list).toBe(store.attachmentList)
 		expect(onOpenChange).not.toHaveBeenCalled()
 	})
