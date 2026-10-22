@@ -318,11 +318,16 @@ const PPTSlide = observer(function PPTSlide({
 		}
 	}, [fileId, rawContent, fetchFileVersions])
 
-	// Authoring steps must not reload the preview; only presenting needs the metadata.
-	const isPresenting = Boolean(isFullscreen || isPlaybackMode)
+	// While the animation panel is open the editor mutates the live preview, so build metadata
+	// is ignored when deciding to reload it. Once the panel closes (or the slide is presented)
+	// the preview syncs with the saved source, so reopening the panel or playing never sees a
+	// stale document.
+	const isEditingBuilds = Boolean(
+		buildPanelOpen && allowEdit && isActive && !isFullscreen && !isPlaybackMode && !fileVersion,
+	)
 	const comparableSource = useCallback(
-		(html: string) => stripSlideNotes(isPresenting ? html : stripPPTBuildMetadata(html)),
-		[isPresenting],
+		(html: string) => stripSlideNotes(isEditingBuilds ? stripPPTBuildMetadata(html) : html),
+		[isEditingBuilds],
 	)
 	const [displayContent, setDisplayContent] = useState<{
 		content: string
@@ -498,7 +503,11 @@ const PPTSlide = observer(function PPTSlide({
 			displayContent.sourceVersion === undefined &&
 			comparableSource(rawContent) === comparableSource(displayContent.rawContent)
 		) {
-			setDisplayContent((current) => ({ ...current, rawContent }))
+			// Only notes can be tracked in place. Build metadata edited through the animation
+			// panel keeps the source this preview was rendered from, so closing the panel still
+			// sees the difference and syncs the processed content.
+			if (stripSlideNotes(rawContent) === stripSlideNotes(displayContent.rawContent))
+				setDisplayContent((current) => ({ ...current, rawContent }))
 			return
 		}
 
@@ -626,13 +635,7 @@ const PPTSlide = observer(function PPTSlide({
 
 	const saveBuildConfiguration = useMemoizedFn(() => performSave())
 	const rendererStaticProps = {
-		buildPanelOpen:
-			buildPanelOpen &&
-			allowEdit &&
-			isActive &&
-			!isFullscreen &&
-			!isPlaybackMode &&
-			!fileVersion,
+		buildPanelOpen: isEditingBuilds,
 		onBuildPanelOpenChange,
 		onBuildSave: saveBuildConfiguration,
 		// Metadata saves must reach the save boundary immediately, even while the

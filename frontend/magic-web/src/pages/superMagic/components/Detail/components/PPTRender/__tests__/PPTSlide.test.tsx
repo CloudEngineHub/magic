@@ -712,6 +712,33 @@ describe("PPTSlide", () => {
 		expect(screen.getByTestId("ppt-slide-render-content").querySelector(".z-10")).toBeNull()
 	})
 
+	it("leaves the preview alone while the animation panel is open and syncs once it closes", async () => {
+		const processSource = vi.fn(async (source: string) => `processed:${source}`)
+		const withStep = '<p data-ppt-step="1">a</p>'
+		const view = renderPPTSlide({
+			content: "<p>a</p>",
+			rawContent: "<p>a</p>",
+			buildPanelOpen: true,
+			processSource,
+		})
+		rerenderSlide(view, {
+			content: "<p>a</p>",
+			rawContent: withStep,
+			buildPanelOpen: true,
+			processSource,
+		})
+		await act(async () => undefined)
+		expect(processSource).not.toHaveBeenCalled()
+
+		rerenderSlide(view, {
+			content: "<p>a</p>",
+			rawContent: withStep,
+			buildPanelOpen: false,
+			processSource,
+		})
+		await waitFor(() => expect(processSource).toHaveBeenCalledWith(withStep))
+	})
+
 	it("renders the saved source after saving its own edit", async () => {
 		const view = renderPPTSlide({
 			content: "<main>Processed</main>",
