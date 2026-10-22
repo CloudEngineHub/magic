@@ -37,12 +37,14 @@ class Arrangement(BaseToolParams):
         allowed = {
             "arrange": {"pattern", "anchor_element_ids", "side", "alignment", "columns", "gap"},
             "align": {"direction", "scope"},
-            "distribute": {"direction", "scope"},
+            "distribute": {"direction", "scope", "gap", "anchor_element_ids", "side", "alignment"},
         }
         if self.model_fields_set - common - allowed[self.operation]:
             raise ValueError("Parameters for arrangement, alignment and distribution must not be mixed")
         if self.operation == "arrange" and ((self.pattern == "grid") != (self.columns is not None)):
             raise ValueError("columns is required only for grid")
+        if self.operation == "distribute" and self.direction not in {"horizontal", "vertical"}:
+            raise ValueError("Distribution requires horizontal/vertical direction")
         return self
 
 
@@ -94,8 +96,24 @@ class ArrangementService:
                 "DIFFERENT_PARENTS", "Moving and reference Elements must have the same immediate parent."
             )
         rectangles = [geometry.bounds(element_id, world=frame_bounds is None) for element_id in ids]
+        if frame_bounds is not None and request.operation == "distribute":
+            # Frame ID 没有显式子元素顺序，沿目标轴保留现有空间顺序；普通选择按传入 ID 排列。
+            ordered = sorted(
+                zip(ids, targets, rectangles),
+                key=lambda item: item[2].x if request.direction == "horizontal" else item[2].y,
+            )
+            ids = [item[0] for item in ordered]
+            targets = [item[1] for item in ordered]
+            rectangles = [item[2] for item in ordered]
         original = CanvasRect.enclosing(rectangles)
-        if request.operation == "arrange":
+        layout_request = request
+        if request.operation == "distribute":
+            # 例：宽 600/1000/700、间距 200，横排宽度为 2700；旧范围 1900 不限制新排列。
+            # 复用行列布局与避让，不能通过压缩间距把大图挤进旧包围盒或当前视口。
+            layout_request = request.model_copy(
+                update={"pattern": "row" if request.direction == "horizontal" else "column"}
+            )
+        if request.operation != "align":
             parent_id = geometry.parents[ids[0]]
             if (parent_id and geometry.require(parent_id).opaque_children) or (
                 parent_id is None and canvas.opaque_elements
@@ -104,27 +122,25 @@ class ArrangementService:
                     "GEOMETRY_UNAVAILABLE",
                     "Some sibling Elements cannot be decoded; collision-free placement cannot be calculated safely.",
                 )
-            positions = self._pattern(rectangles, request)
+            positions = self._pattern(rectangles, layout_request)
             group = CanvasRect.enclosing(
                 [CanvasRect(x, y, r.width, r.height) for r, (x, y) in zip(rectangles, positions)]
             )
-            reference = CanvasRect.enclosing([geometry.bounds(a) for a in anchors]) if anchors else original
-            origin = self._origin(reference, group, request) if anchors else (original.x, original.y)
+            reference = (
+                CanvasRect.enclosing([geometry.bounds(a, world=frame_bounds is None) for a in anchors])
+                if anchors
+                else original
+            )
+            origin = self._origin(reference, group, layout_request) if anchors else (original.x, original.y)
             positions = [(x + origin[0], y + origin[1]) for x, y in positions]
             obstacles = [
-                geometry.bounds(e.element_id)
+                geometry.bounds(e.element_id, world=frame_bounds is None)
                 for e in canvas.siblings(ids[0])
                 if e.element_id not in ids and geometry.visible(e.element_id)
             ]
-            positions = self._avoid(rectangles, positions, obstacles, request, bool(anchors))
+            positions = self._avoid(rectangles, positions, obstacles, layout_request, bool(anchors))
         else:
-            # 子元素对齐沿用所选集合边界；只有画框内等间距分布计入画框边距。
-            positions = self._aligned(
-                rectangles,
-                frame_bounds if frame_bounds and request.operation == "distribute" else original,
-                request,
-                contained=frame_bounds is not None,
-            )
+            positions = self._aligned(rectangles, original, request)
         changes: list[JsonObject] = []
         for element, rectangle, (x, y) in zip(targets, rectangles, positions):
             current = element.properties
@@ -174,6 +190,9 @@ class ArrangementService:
             "dry_run": request.dry_run,
             "items": changes,
             "bounds_coordinate_space": "frame-local" if frame_bounds else "world",
+            "before_bounds": original.to_dict(),
+            "direction": request.direction if request.operation == "align" else layout_request.pattern,
+            **({"gap": request.gap} if request.operation != "align" else {}),
             "bounds": CanvasRect.enclosing(
                 [CanvasRect(x, y, r.width, r.height) for r, (x, y) in zip(rectangles, positions)]
             ).to_dict(),
@@ -244,45 +263,26 @@ class ArrangementService:
         raise CanvasDomainError("LAYOUT_COLLISION", "No collision-free relative placement was found.")
 
     @staticmethod
-    def _aligned(
-        rectangles: list[CanvasRect], group: CanvasRect, request: Arrangement, *, contained: bool = False
-    ) -> list[tuple[float, float]]:
+    def _aligned(rectangles: list[CanvasRect], group: CanvasRect, request: Arrangement) -> list[tuple[float, float]]:
         direction = request.direction
-        if request.operation == "align":
-            if direction not in {"left", "center", "right", "top", "middle", "bottom"}:
-                raise CanvasDomainError("INVALID_ALIGNMENT", "Alignment requires left/center/right/top/middle/bottom.")
-            return [
-                (
-                    group.x
-                    if direction == "left"
-                    else group.x + (group.width - r.width) / 2
-                    if direction == "center"
-                    else group.right - r.width
-                    if direction == "right"
-                    else r.x,
-                    group.y
-                    if direction == "top"
-                    else group.y + (group.height - r.height) / 2
-                    if direction == "middle"
-                    else group.bottom - r.height
-                    if direction == "bottom"
-                    else r.y,
-                )
-                for r in rectangles
-            ]
-        if direction not in {"horizontal", "vertical"} or len(rectangles) < (1 if contained else 3):
-            raise CanvasDomainError(
-                "INVALID_DISTRIBUTION",
-                "Distribution requires at least three Elements and horizontal/vertical direction.",
+        if direction not in {"left", "center", "right", "top", "middle", "bottom"}:
+            raise CanvasDomainError("INVALID_ALIGNMENT", "Alignment requires left/center/right/top/middle/bottom.")
+        return [
+            (
+                group.x
+                if direction == "left"
+                else group.x + (group.width - r.width) / 2
+                if direction == "center"
+                else group.right - r.width
+                if direction == "right"
+                else r.x,
+                group.y
+                if direction == "top"
+                else group.y + (group.height - r.height) / 2
+                if direction == "middle"
+                else group.bottom - r.height
+                if direction == "bottom"
+                else r.y,
             )
-        horizontal = direction == "horizontal"
-        order = sorted(range(len(rectangles)), key=lambda i: rectangles[i].x if horizontal else rectangles[i].y)
-        total = sum(r.width if horizontal else r.height for r in rectangles)
-        gap = ((group.width if horizontal else group.height) - total) / (len(rectangles) + (1 if contained else -1))
-        positions = [(r.x, r.y) for r in rectangles]
-        cursor = (group.x if horizontal else group.y) + (gap if contained else 0)
-        for index in order:
-            rectangle = rectangles[index]
-            positions[index] = (cursor, rectangle.y) if horizontal else (rectangle.x, cursor)
-            cursor += (rectangle.width if horizontal else rectangle.height) + gap
-        return positions
+            for r in rectangles
+        ]
