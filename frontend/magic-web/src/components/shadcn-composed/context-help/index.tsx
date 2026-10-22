@@ -89,6 +89,10 @@ export function ContextHelp({ help, mode, children, renderDialog, header }: Cont
 		<Slot
 			ref={refs.setReference}
 			{...getReferenceProps({
+				onPointerEnter() {
+					// 关闭面板只抑制程序恢复焦点；用户再次悬停时应重新显示简介。
+					suppressFocusPreview.current = false
+				},
 				onPointerDown() {
 					suppressFocusPreview.current = false
 				},
@@ -129,7 +133,7 @@ export function ContextHelp({ help, mode, children, renderDialog, header }: Cont
 					<TooltipTrigger asChild>{trigger}</TooltipTrigger>
 					{/* 简介自然换行，避免均衡折行后气泡宽度仍保留右侧空白。 */}
 					<TooltipContent
-						side="bottom"
+						side="top"
 						className="max-w-[min(18rem,var(--radix-tooltip-content-available-width,100vw))] whitespace-normal text-wrap break-words"
 					>
 						<p>{help.summary}</p>

@@ -77,20 +77,23 @@ export function HelpDialogFrame({
 			onDoubleClick={(event) => event.stopPropagation()}
 			onKeyDown={(event) => event.stopPropagation()}
 		>
-			<DialogHeader className="flex h-16 shrink-0 flex-row items-center gap-3 space-y-0 border-b px-5 text-left sm:h-[68px] sm:px-6">
+			{/* 大标题在窄屏或长译文中可以换行；两项关闭／目录操作固定在右上方，不挤占正文。 */}
+			<DialogHeader className="flex min-h-16 shrink-0 flex-row items-start gap-3 space-y-0 border-b px-5 py-3 text-left sm:min-h-[68px] sm:px-6">
 				<span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-[var(--help-soft)] text-[var(--help-accent)]">
 					<BookOpen size={18} aria-hidden />
 				</span>
-				<div className="min-w-0 flex-1 space-y-0.5 pr-12">
-					<DialogTitle className="text-sm leading-5 text-foreground">
-						{header?.title ?? t("contextHelp.guideTitle")}
+				<div
+					className={cn("min-w-0 flex-1 space-y-0.5", hasNavigation ? "pr-24" : "pr-12")}
+				>
+					<DialogTitle className="text-[22px] font-semibold leading-7 text-foreground">
+						{header?.title ?? t("contextHelp.title")}
 					</DialogTitle>
 					<DialogDescription
 						className={header && !header.description ? "sr-only" : "text-xs"}
 					>
 						{header
 							? (header.description ?? header.title)
-							: t("contextHelp.guideSubtitle")}
+							: t("contextHelp.description")}
 					</DialogDescription>
 				</div>
 				<DialogClose asChild>
@@ -102,7 +105,7 @@ export function HelpDialogFrame({
 								? t("contextHelp.dismissWithTitle", { title: header.title })
 								: t("contextHelp.dismiss")
 						}
-						className="group size-10 shrink-0 cursor-pointer rounded-lg bg-muted/40 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-accent motion-reduce:transition-none [@media(pointer:coarse)]:size-11"
+						className="group absolute right-5 top-3 size-10 shrink-0 cursor-pointer rounded-lg bg-muted/40 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:bg-accent motion-reduce:transition-none sm:right-6 sm:top-3.5 [@media(pointer:coarse)]:size-11"
 					>
 						<X
 							className="size-5 transition-transform duration-150 group-active:scale-90 motion-reduce:transition-none"
