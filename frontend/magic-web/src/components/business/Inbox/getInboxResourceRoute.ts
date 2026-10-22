@@ -8,6 +8,8 @@ const logger = Logger.createLogger("InboxRoute")
 
 const RESOURCE_NAME_FIELDS = ["resource_name"]
 const PROJECT_NAME_FIELDS = ["resource_name", "project_name"]
+/** Task body is "{{workspace_name}} / {{project_name}} …"; both may link to the same topic. */
+const TASK_TOPIC_NAME_FIELDS = ["workspace_name", "project_name", "resource_name"]
 
 function routeValue(value: unknown): string | undefined {
 	if (typeof value === "string") {
@@ -58,7 +60,7 @@ function isShareNotification(message: InboxMessage) {
 function taskTopicRoute(projectId: string, topicId: string) {
 	return {
 		path: buildRoute(RouteName.SuperWorkspaceProjectTopicState, { projectId, topicId }),
-		nameFields: PROJECT_NAME_FIELDS,
+		nameFields: TASK_TOPIC_NAME_FIELDS,
 	}
 }
 
