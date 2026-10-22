@@ -1752,6 +1752,9 @@ export function useFileOperations(options: UseFileOperationsOptions = {}) {
 						projectId,
 						fileIds,
 						fileName: downloadName,
+						// Share pages have no login session; the batch-download create/check
+						// requests are authorized by the share token only.
+						token: shareToken || undefined,
 						label: t("topicFiles.downloading"),
 						onSuccess: () => {
 							magicToast.success({
