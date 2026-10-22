@@ -194,7 +194,7 @@ function AIManagerLayout() {
 			{
 				key: RoutePath.AIManage,
 				label: t("nav.aiSubMenu.manage"),
-				hidden: isOfficialOrg,
+				hidden: isOfficialOrg || isPersonalOrganization,
 				validate: (permissions: string[], isSuperAdmin?: boolean) => {
 					return (
 						isSuperAdmin ||
