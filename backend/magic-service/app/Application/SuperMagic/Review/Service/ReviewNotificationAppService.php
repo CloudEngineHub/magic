@@ -26,6 +26,7 @@ final readonly class ReviewNotificationAppService
             eventType: 'review.agent.version_approved',
             resourceType: 'agent',
             resourceId: $resourceId ?: (string) ($version->getId() ?? ''),
+            resourceCode: $version->getCode(),
             resourceName: $version->getName(),
             versionId: (string) ($version->getId() ?? ''),
             versionName: $version->getVersion(),
@@ -42,6 +43,7 @@ final readonly class ReviewNotificationAppService
             eventType: 'review.skill.version_approved',
             resourceType: 'skill',
             resourceId: $resourceId ?: (string) ($version->getId() ?? ''),
+            resourceCode: $version->getCode(),
             resourceName: $resourceName,
             versionId: (string) ($version->getId() ?? ''),
             versionName: $version->getVersion(),
@@ -54,6 +56,7 @@ final readonly class ReviewNotificationAppService
         string $eventType,
         string $resourceType,
         string $resourceId,
+        string $resourceCode,
         string $resourceName,
         string $versionId,
         string $versionName,
@@ -75,6 +78,8 @@ final readonly class ReviewNotificationAppService
         $payload = [
             'review_id' => $versionId,
             'resource_id' => $resourceId,
+            // Detail routes resolve Agent/Skill by code, never by the database ID.
+            'resource_code' => $resourceCode,
             'resource_name' => $resourceName,
             'version_id' => $versionId,
             'version_name' => $versionName,
