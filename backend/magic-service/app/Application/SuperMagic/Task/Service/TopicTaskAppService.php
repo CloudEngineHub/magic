@@ -111,6 +111,7 @@ class TopicTaskAppService extends AbstractAppService
         private readonly ClientMessageAppService $clientMessageAppService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly TopicDomainService $topicDomainService,
+        private readonly TaskNotificationLabelResolver $taskNotificationLabelResolver,
         private readonly TaskDomainService $taskDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly TaskMessageDomainService $taskMessageDomainService,
@@ -1777,6 +1778,10 @@ class TopicTaskAppService extends AbstractAppService
             'user_id' => $dataIsolation->getCurrentUserId(),
         ]);
         // 派发 RunTaskCallbackEvent
+        $labels = $this->taskNotificationLabelResolver->resolve(
+            task: $taskEntity,
+            topic: $topicEntity,
+        );
         AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
             $dataIsolation->getCurrentOrganizationCode(),
             $dataIsolation->getCurrentUserId(),
@@ -1784,7 +1789,11 @@ class TopicTaskAppService extends AbstractAppService
             '', // 话题名称传空字符串
             $taskEntity->getId(),
             $messageDTO,
-            $messageDTO->getMetadata()->getLanguage()
+            $messageDTO->getMetadata()->getLanguage(),
+            $labels['project_id'],
+            $labels['project_name'],
+            $labels['workspace_id'],
+            $labels['workspace_name']
         ));
     }
 

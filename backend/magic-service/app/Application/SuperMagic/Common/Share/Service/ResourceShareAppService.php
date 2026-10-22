@@ -143,7 +143,8 @@ class ResourceShareAppService extends AbstractShareAppService
         private readonly TaskFileRepositoryInterface $taskFileRepository,
         private readonly ShareUrlBuilder $shareUrlBuilder,
         private readonly RequestInterface $request,
-        private readonly FunctionPermissionAppService $functionPermissionAppService
+        private readonly FunctionPermissionAppService $functionPermissionAppService,
+        private readonly ShareNotificationAppService $shareNotificationAppService
     ) {
         $this->logger = $loggerFactory->get(get_class($this));
     }
@@ -432,6 +433,15 @@ class ResourceShareAppService extends AbstractShareAppService
             $projectId
         );
 
+        // 分享事实落库成功后，由统一消息服务处理新增收件人通知。
+        // 适配器同时维护已通知收件人快照，更新分享时只发布新增差集。
+        $extraBeforeNotification = $savedEntity->getExtra();
+        $this->shareNotificationAppService->publishRecipientsAdded($existingShare, $savedEntity);
+        if ($savedEntity->getExtra() !== $extraBeforeNotification) {
+            // 适配器可能只更新了 extra 快照；保存一次即可，不修改分享业务字段。
+            $this->shareDomainService->saveShareByEntity($savedEntity);
+        }
+
         $shareDto = $this->shareAssembler->toDto($savedEntity);
 
         if (in_array($resourceType, [ResourceType::FileCollection, ResourceType::File, ResourceType::Project], true)) {
@@ -467,7 +477,12 @@ class ResourceShareAppService extends AbstractShareAppService
         $organizationCode = $userAuthorization->getOrganizationCode();
 
         // 调用领域服务的取消分享方法
-        return $this->shareDomainService->cancelShare($shareId, $userId, $organizationCode);
+        $share = $this->shareDomainService->getShareById($shareId);
+        $result = $this->shareDomainService->cancelShare($shareId, $userId, $organizationCode);
+        if ($result && $share !== null) {
+            $this->shareNotificationAppService->publishWithdrawn($share);
+        }
+        return $result;
     }
 
     /**
@@ -505,6 +520,7 @@ class ResourceShareAppService extends AbstractShareAppService
 
         // 调用领域服务的取消分享方法
         $this->shareDomainService->saveShareByEntity($shareEntity);
+        $this->shareNotificationAppService->publishWithdrawn($shareEntity);
         return true;
     }
 
@@ -565,6 +581,9 @@ class ResourceShareAppService extends AbstractShareAppService
 
         if (! empty($entitiesToSave)) {
             $this->shareDomainService->batchSaveShareEntities(array_values($entitiesToSave));
+            foreach ($entitiesToSave as $entity) {
+                $this->shareNotificationAppService->publishWithdrawn($entity);
+            }
         }
 
         return [];

@@ -20,6 +20,7 @@ use App\Application\SuperMagic\Task\Service\AgentAppService;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountPlanner;
 use App\Application\SuperMagic\Task\Service\ReferencedProjectMountService;
 use App\Application\SuperMagic\Task\Service\TaskContextMentionsResolver;
+use App\Application\SuperMagic\Task\Service\TaskNotificationLabelResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Application\SuperMagic\Topic\Service\TopicAgentConfigResolver;
 use App\Domain\Chat\DTO\Message\ChatMessage\UserToolCallMessage;
@@ -381,7 +382,7 @@ class HandleUserMessageAppService extends AbstractAppService
             // RunTaskCallbackEvent flow never triggers. Settle the task here and emit
             // the terminal event so downstream state (e.g. recording summary phase)
             // never gets stuck.
-            $this->settleFailedChatTask($dataIsolation, $topicEntity, $taskEntity, $e);
+            $this->settleFailedChatTask($dataIsolation, $topicEntity, $taskEntity, $projectEntity, $e);
 
             // Business exceptions already carry a translated, client-safe message.
             if ($e instanceof BusinessException) {
@@ -777,6 +778,7 @@ class HandleUserMessageAppService extends AbstractAppService
         DataIsolation $dataIsolation,
         TopicEntity $topicEntity,
         TaskEntity $taskEntity,
+        ProjectEntity $projectEntity,
         Throwable $e
     ): void {
         try {
@@ -801,6 +803,12 @@ class HandleUserMessageAppService extends AbstractAppService
                 ],
             ]);
 
+            $labels = di(TaskNotificationLabelResolver::class)->resolve(
+                task: $taskEntity,
+                topic: $topicEntity,
+                project: $projectEntity,
+            );
+
             AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
                 $dataIsolation->getCurrentOrganizationCode(),
                 $dataIsolation->getCurrentUserId(),
@@ -808,7 +816,11 @@ class HandleUserMessageAppService extends AbstractAppService
                 $topicEntity->getTopicName(),
                 $taskEntity->getId(),
                 $messageDTO,
-                $dataIsolation->getLanguage() ?? ''
+                $dataIsolation->getLanguage() ?? '',
+                $labels['project_id'],
+                $labels['project_name'],
+                $labels['workspace_id'],
+                $labels['workspace_name']
             ));
         } catch (Throwable $dispatchError) {
             $this->logger->error('Failed to dispatch error callback event for failed chat task', [
