@@ -78,6 +78,9 @@ function normalizeTextMentionLabelsForBackend(content: JSONContent): JSONContent
 }
 
 export interface HandleSendParams {
+	origin?: "composer" | "model_recovery"
+	/** 异步准备结束、实际发送前重新检查来源是否仍有效，仅用于本地发送流程。 */
+	canSend?: () => boolean
 	value: JSONContent | undefined
 	mentionItems: MentionListItem[]
 	selectedModel?: ModelItem | null
@@ -102,6 +105,7 @@ export interface SendContentParams {
 }
 
 export interface DispatchMessageParams {
+	canSend?: () => boolean
 	content?: string
 	jsonContent?: JSONContent
 	options?: SendMessageOptions
@@ -192,6 +196,7 @@ class MessageSendService {
 	}
 
 	async dispatchMessage({
+		canSend,
 		content: textContent,
 		jsonContent,
 		showLoading,
@@ -202,6 +207,7 @@ class MessageSendService {
 		selectedTopic,
 		context,
 	}: DispatchMessageParams): Promise<boolean> {
+		if (canSend && !canSend()) return false
 		// 发送前必须有有效话题
 		const currentProject =
 			selectedProject ?? context?.selectedProject ?? options?._tempProject ?? null
@@ -381,6 +387,8 @@ class MessageSendService {
 			if (!isConfirmed) return false
 		}
 
+		if (canSend && !canSend()) return false
+
 		if (shouldTrackAttempt) {
 			try {
 				analyticsService.report("conversation_message_send_attempted", {
@@ -453,6 +461,7 @@ class MessageSendService {
 
 			const followUp = showLoading && messagesLength > 1
 			const isDispatched = await this.dispatchMessage({
+				canSend: params.canSend,
 				jsonContent: params.value,
 				showLoading: followUp,
 				options: data,

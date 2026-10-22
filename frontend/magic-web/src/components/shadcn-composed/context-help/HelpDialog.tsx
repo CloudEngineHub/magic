@@ -52,6 +52,7 @@ export function HelpDialogFrame({
 	id,
 	help,
 	onCloseAutoFocus,
+	header,
 	hasNavigation,
 	header,
 	children,

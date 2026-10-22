@@ -18,6 +18,8 @@ export interface MessageAttachmentsRenderProps {
 	className?: string
 }
 
+import type { ModelErrorRecoveryCapability } from "@/pages/superMagic/hooks/useModelErrorRecovery"
+
 export interface MessageListContextState {
 	/** 打开当前话题的文件管理器，并显示一次性整理引导。 */
 	onOpenProjectFiles?: () => void
@@ -25,6 +27,8 @@ export interface MessageListContextState {
 	fileBundleDownload?: FileBundleDownloadCapability
 	/** 消息正文转交列表级调试入口，不由虚拟消息行持有弹窗状态。 */
 	onMessageDebugClick?: (node: unknown, event: MouseEvent<HTMLDivElement>) => void
+	/** 当前会话注入；分享、历史预览等未注入场景只能阅读帮助。 */
+	modelErrorRecovery?: ModelErrorRecoveryCapability
 	/** 仅登录的非分享会话解析当前用户的个人文件引用。 */
 	allowUserFileReferences?: boolean
 	/** 是否允许撤回 */

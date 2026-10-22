@@ -17,7 +17,7 @@ import type {
 	ServiceProviderModel,
 } from "@/apis/modules/org-ai-model-provider"
 import { useOptionalAddModelStore } from "./AddModel/context"
-import type { ModelItem } from "../types"
+import type { ModelItem, ModelSelectionState } from "../types"
 import { MyModelRow } from "./my-models-list/MyModelRow"
 import { ModelSectionHeader } from "./ModelSectionHeader"
 import { buildMyModelGroups } from "./my-models-list/utils"
@@ -48,6 +48,7 @@ export function getVisibleMyModelGroups(
 }
 
 interface MyModelsListProps {
+	allowModelManagement?: boolean
 	modelKey?: MyModelsListKey
 	selectedModel?: ModelItem | null
 	onModelClick?: (model: ModelItem) => void
@@ -55,6 +56,7 @@ interface MyModelsListProps {
 	onModelsLoaded?: () => Promise<void> | void
 	/** 桌面紧凑布局：分组标题与模型行对齐供应商分组；移动端弹层保持原布局。 */
 	compact?: boolean
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 }
 
 function MyModelsListInner({
@@ -64,6 +66,8 @@ function MyModelsListInner({
 	selectedItemRef,
 	onModelsLoaded,
 	compact = false,
+	getModelState,
+	allowModelManagement = true,
 }: MyModelsListProps) {
 	const { t } = useTranslation("super")
 	const store = useOptionalAddModelStore()
@@ -112,10 +116,12 @@ function MyModelsListInner({
 						<MyModelRow
 							key={group.representativeModel.model_id}
 							group={group}
+							allowModelManagement={allowModelManagement}
 							isSelected={
 								selectedModel?.model_id === group.representativeModel.model_id
 							}
 							onSelect={onModelClick}
+							getModelState={getModelState}
 							selectedItemRef={selectedItemRef}
 							onEdit={store.openEditModel}
 							onDelete={store.openDeleteModel}

@@ -40,6 +40,7 @@ export interface HelpDialogContentProps {
 export interface HelpDialogProps extends HelpDialogContentProps {
 	header?: { title: string; description?: string }
 	onCloseAutoFocus: (event: Event) => void
+	header?: { title: string; description?: string }
 }
 
 export interface ContextHelpProps {

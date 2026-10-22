@@ -15,6 +15,7 @@ import { MagicDropdown, MagicTooltip } from "@/components/base"
 import { logger as Logger } from "@/infrastructure/logger"
 import { StatusBadge } from "./components/StatusBadge"
 import { FileSpaceLimitCard, getFileSpaceLimitData } from "./components/FileSpaceLimitCard"
+import { getModelRecoveryMessage } from "@/pages/superMagic/utils/model-error-recovery"
 import { useGlobalSuggestion } from "@/components/settings/FollowUpSuggestionItems/hooks"
 import useShareRoute from "@/pages/superMagic/hooks/useShareRoute"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
@@ -295,63 +296,70 @@ export function withAssistantCard<
 			<div className="contents [&:not(:has(.message-attachments))>[data-slot=message-status][data-status=finished]]:pt-2">
 				{!fileSpaceLimitData && <WrapperComponent {...props} />}
 
-				{props.contentMode !== "process" && statusList.has(messageNode?.status) && (
-					<>
-						{fileSpaceLimitData && (
-							<FileSpaceLimitCard
-								data={fileSpaceLimitData}
-								onOpenProjectFiles={onOpenProjectFiles}
-							/>
-						)}
-						{messageNode?.role === "tool" && messageNode?.content && (
-							<div className="mb-2 text-muted-foreground">{messageNode?.content}</div>
-						)}
-						<div
-							className={`${fileSpaceLimitData ? "mt-3" : ""} ml-[var(--message-status-offset,0px)] w-fit`}
-							data-testid="message-list-status-badge"
-							data-slot="message-status"
-							data-status={messageNode?.status}
-						>
-							<StatusBadge status={messageNode?.status} />
-						</div>
-						{messageNode?.status === "finished" && (
-							<div className="mb-[6px] mt-[6px] flex items-center justify-between gap-[4px]">
-								<div className="flex items-center gap-1"></div>
-
-								<div className="flex items-center gap-1">
-									{allowConversationCopy && (
-										<span
-											className="inline-flex h-6 cursor-pointer items-center rounded-lg border border-border bg-background px-2 py-0 text-xs leading-4 text-foreground hover:bg-muted hover:text-foreground"
-											onClick={triggerCopyTopic}
-										>
-											{copyLoading ? (
-												<div className="flex h-[14px] w-[14px] items-center justify-center rounded-[8px] bg-black/[0.09] dark:bg-white/[0.09] [&_svg]:h-[60%] [&_svg]:w-[60%] [&_svg]:flex-none [&_svg]:animate-spin">
-													<IconLoader2 size={12} />
-												</div>
-											) : (
-												<IconGitBranch size={16} />
-											)}
-											<span>{t("ui.copyTopic")}</span>
-										</span>
-									)}
-									{roundConsumptionPoints > 0 && (
-										<MagicDropdown
-											menu={{ items, onClick: onMenuClick }}
-											trigger={["click"]}
-										>
-											<Button
-												className="!flex h-6 w-6 flex-none cursor-pointer items-center justify-center gap-1 !rounded-md !border !border-border !bg-white !p-0 !text-xs !font-normal !leading-4 !shadow-sm hover:!bg-fill hover:!text-foreground dark:!bg-card dark:hover:!bg-fill"
-												data-testid="assistant-card-dropdown-trigger"
-											>
-												<Ellipsis size={16} className="text-foreground" />
-											</Button>
-										</MagicDropdown>
-									)}
+				{props.contentMode !== "process" &&
+					statusList.has(messageNode?.status) &&
+					!getModelRecoveryMessage(messageNode) && (
+						<>
+							{fileSpaceLimitData && (
+								<FileSpaceLimitCard
+									data={fileSpaceLimitData}
+									onOpenProjectFiles={onOpenProjectFiles}
+								/>
+							)}
+							{messageNode?.role === "tool" && messageNode?.content && (
+								<div className="mb-2 text-muted-foreground">
+									{messageNode?.content}
 								</div>
+							)}
+							<div
+								className={`${fileSpaceLimitData ? "mt-3" : ""} ml-[var(--message-status-offset,0px)] w-fit`}
+								data-testid="message-list-status-badge"
+								data-slot="message-status"
+								data-status={messageNode?.status}
+							>
+								<StatusBadge status={messageNode?.status} />
 							</div>
-						)}
-					</>
-				)}
+							{messageNode?.status === "finished" && (
+								<div className="mb-[6px] mt-[6px] flex items-center justify-between gap-[4px]">
+									<div className="flex items-center gap-1"></div>
+
+									<div className="flex items-center gap-1">
+										{allowConversationCopy && (
+											<span
+												className="inline-flex h-6 cursor-pointer items-center rounded-lg border border-border bg-background px-2 py-0 text-xs leading-4 text-foreground hover:bg-muted hover:text-foreground"
+												onClick={triggerCopyTopic}
+											>
+												{copyLoading ? (
+													<div className="flex h-[14px] w-[14px] items-center justify-center rounded-[8px] bg-black/[0.09] dark:bg-white/[0.09] [&_svg]:h-[60%] [&_svg]:w-[60%] [&_svg]:flex-none [&_svg]:animate-spin">
+														<IconLoader2 size={12} />
+													</div>
+												) : (
+													<IconGitBranch size={16} />
+												)}
+												<span>{t("ui.copyTopic")}</span>
+											</span>
+										)}
+										{roundConsumptionPoints > 0 && (
+											<MagicDropdown
+												menu={{ items, onClick: onMenuClick }}
+												trigger={["click"]}
+											>
+												<Button
+													className="!flex h-6 w-6 flex-none cursor-pointer items-center justify-center gap-1 !rounded-md !border !border-border !bg-white !p-0 !text-xs !font-normal !leading-4 !shadow-sm hover:!bg-fill hover:!text-foreground dark:!bg-card dark:hover:!bg-fill"
+													data-testid="assistant-card-dropdown-trigger"
+												>
+													<Ellipsis
+														size={16}
+														className="text-foreground"
+													/>
+												</Button>
+											</MagicDropdown>
+										)}
+									</div>
+								</div>
+							)}
+						</>
+					)}
 				{showSuggestList && (
 					<Suspense fallback={null}>
 						<SuggestList

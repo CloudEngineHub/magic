@@ -1,9 +1,9 @@
-import { Check } from "lucide-react"
+import { Check, TriangleAlert } from "lucide-react"
 import FlexBox from "@/components/base/FlexBox"
 import { cn } from "@/utils/cn"
 import type React from "react"
 import type { ReactNode } from "react"
-import type { ModelItem, ModelListGroup, MessageEditorSize } from "../types"
+import type { ModelItem, ModelListGroup, MessageEditorSize, ModelSelectionState } from "../types"
 import { isModelDisabled } from "../utils"
 import { ModelInfoHoverCard } from "./ModelInfoHoverCard"
 import ModelIcon from "./ModelIcon"
@@ -32,6 +32,7 @@ interface ModelGroupSectionProps {
 	header?: ReactNode
 	/** 行内显示模型自己的图标；按供应商分组时标题已带图标，不需要。 */
 	showModelIcon?: boolean
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 }
 
 export function ModelGroupSection({
@@ -45,6 +46,7 @@ export function ModelGroupSection({
 	showModelInfo = true,
 	header,
 	showModelIcon = false,
+	getModelState,
 }: ModelGroupSectionProps) {
 	const isMobile = size === "mobile"
 
@@ -53,16 +55,21 @@ export function ModelGroupSection({
 			{header === undefined ? <ProviderName item={item.group} /> : header}
 			<div className="flex flex-col gap-0.5">
 				{item.displayModels.map((model) => {
-					const isSelected = selectedModel?.model_id === model.model_id
+					const modelState = getModelState?.(model)
+					const isSelectionDisabled = modelState?.disabled ?? false
+					// 场景受限的原模型仍用作滚动定位，但不再显示可切换候选的勾选。
+					const isCurrentModel = selectedModel?.model_id === model.model_id
+					const isSelected = isCurrentModel && !isSelectionDisabled
 					const isDisabled = isModelDisabled(model)
-					const description = getModelDescription(model)
+					const isUnavailable = isDisabled || isSelectionDisabled
+					const description = modelState?.reason ?? getModelDescription(model)
 					if (isMobile) {
 						return (
 							<MobileModelRow
 								key={model.model_id}
 								model={model}
 								selected={isSelected}
-								disabled={isDisabled}
+								disabled={isUnavailable}
 								description={description}
 								selectedItemRef={selectedItemRef}
 								onSelect={onModelClick}
@@ -81,7 +88,7 @@ export function ModelGroupSection({
 					const row = (
 						<div
 							key={model.model_id}
-							ref={isSelected ? selectedItemRef : null}
+							ref={isCurrentModel ? selectedItemRef : null}
 							className={cn(
 								"flex h-8 items-center gap-2 rounded-lg px-2",
 								// 按供应商分组时行缩进一级形成层级；平台模型平铺带图标，不缩进，图标与分组标题左对齐。
@@ -93,18 +100,24 @@ export function ModelGroupSection({
 									: "[@media(hover:hover)_and_(pointer:fine)]:hover:bg-muted/60",
 								"outline-none focus-visible:ring-2 focus-visible:ring-ring",
 								isDisabled && "cursor-not-allowed opacity-50",
+								isSelectionDisabled && "cursor-not-allowed",
+								modelState && "h-auto min-h-12 py-2",
 							)}
-							onClick={() => onModelClick(model)}
+							onClick={() => {
+								if (!isSelectionDisabled) onModelClick(model)
+							}}
 							role="button"
-							tabIndex={isDisabled ? -1 : 0}
+							tabIndex={isUnavailable ? -1 : 0}
 							onKeyDown={(event) => {
-								if (isDisabled) return
+								if (isUnavailable) return
 								if (event.key !== "Enter" && event.key !== " ") return
 								event.preventDefault()
 								onModelClick(model)
 							}}
 							aria-label={ariaLabel}
 							aria-pressed={isSelected}
+							aria-disabled={isUnavailable || undefined}
+							title={description}
 							data-testid="model-switch-item"
 							data-model-id={model.model_id}
 							data-model-name={model.model_name}
@@ -132,6 +145,12 @@ export function ModelGroupSection({
 									)}
 								/>
 								<ModelTags model={model} />
+								{modelState && (
+									<span className="inline-flex shrink-0 items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+										<TriangleAlert className="size-4" aria-hidden />
+										{modelState.label}
+									</span>
+								)}
 							</FlexBox>
 							{/* 倍率用 Inter 小字，和名称拉开层级，也不抢名称的宽度。 */}
 							<ModelBillingMultiplier
@@ -160,7 +179,7 @@ export function ModelGroupSection({
 							model={model}
 							description={description}
 							onReasoningEffortChange={
-								isDisabled ? undefined : onReasoningEffortChange
+								isUnavailable ? undefined : onReasoningEffortChange
 							}
 						>
 							{row}

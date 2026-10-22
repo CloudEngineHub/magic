@@ -216,6 +216,18 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	})
 
 	const handleSend = useMemoizedFn(async (params: HandleSendParams): Promise<boolean> => {
+		const isModelRecovery = params.origin === "model_recovery"
+		if (params.canSend && !params.canSend()) return false
+		// 恢复沿用发送准备，但不能改写队列草稿，也不能在新运行开始后自动入队。
+		if (
+			isModelRecovery &&
+			(showLoading ||
+				isWaitingForUser ||
+				editorContext?.isTaskRunning ||
+				queueContext?.isQueueOperationPending ||
+				params.targetTopic?.id !== selectedTopic?.id)
+		)
+			return false
 		let hasStartedSend = false
 		let sendResult:
 			| {
@@ -225,10 +237,9 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			| undefined
 		let shouldShowHomeSendLoading = false
 
-		const nextValue = appendPresetSuffixContent(
-			params.value,
-			sceneStateStore?.presetSuffixContent,
-		)
+		const nextValue = isModelRecovery
+			? params.value
+			: appendPresetSuffixContent(params.value, sceneStateStore?.presetSuffixContent)
 		const sendSelection = resolveAgentSelection(effectiveTopicMode, editorContext?.agentCode)
 		const extra = { ...(params.extra ?? {}) }
 		delete extra.agent_code
@@ -264,6 +275,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		const finalParams: HandleSendParams = mergedParams
 
 		if (
+			!isModelRecovery &&
 			params.shouldClearEditorAfterSend !== false &&
 			queueContext &&
 			tiptapEditorRef.current?.getQueueDraft()
@@ -286,7 +298,11 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 		}
 
 		const shouldQueue =
-			effectiveIsTaskRunning && !isWaitingForUser && !params.isFromQueue && queueContext
+			!isModelRecovery &&
+			effectiveIsTaskRunning &&
+			!isWaitingForUser &&
+			!params.isFromQueue &&
+			queueContext
 
 		if (shouldQueue) {
 			// Programmatic requests have their own content and must preserve the current draft.
@@ -372,7 +388,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 				messagesLength: editorContext?.messagesLength ?? 0,
 			})
 
-			if (!preparedSend) {
+			if (!preparedSend || (params.canSend && !params.canSend())) {
 				return false
 			}
 

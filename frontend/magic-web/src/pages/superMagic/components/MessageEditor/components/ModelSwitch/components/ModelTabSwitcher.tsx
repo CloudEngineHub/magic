@@ -8,6 +8,7 @@ interface ModelTabSwitcherProps {
 	activeTab: ModelTab
 	onTabChange: (tab: ModelTab) => void
 	showImageTab?: boolean
+	showLanguageTab?: boolean
 	showVideoTab?: boolean
 	isMobile?: boolean
 }
@@ -25,6 +26,7 @@ export function ModelTabSwitcher({
 	activeTab,
 	onTabChange,
 	showImageTab = true,
+	showLanguageTab = true,
 	showVideoTab = true,
 	isMobile = false,
 }: ModelTabSwitcherProps) {
@@ -40,7 +42,7 @@ export function ModelTabSwitcher({
 				{
 					key: "language" as const,
 					label: t("messageEditor.modelSwitch.languageModel"),
-					visible: true,
+					visible: showLanguageTab,
 				},
 				{
 					key: "image" as const,
@@ -53,7 +55,7 @@ export function ModelTabSwitcher({
 					visible: showVideoTab,
 				},
 			].filter((item) => item.visible),
-		[t, showImageTab, showVideoTab],
+		[t, showLanguageTab, showImageTab, showVideoTab],
 	)
 
 	const updateIndicator = useCallback(() => {

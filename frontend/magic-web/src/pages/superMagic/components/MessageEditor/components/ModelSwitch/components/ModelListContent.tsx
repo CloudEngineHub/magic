@@ -4,7 +4,13 @@ import { cn } from "@/utils/cn"
 import { SearchX, Sparkles } from "lucide-react"
 import { MyModelsList, getVisibleMyModelGroups } from "./MyModelsList"
 import { useOptionalAddModelStore } from "./AddModel/context"
-import type { ModelItem, ModelListGroup, MessageEditorSize, ModelListKey } from "../types"
+import type {
+	ModelItem,
+	ModelListGroup,
+	MessageEditorSize,
+	ModelListKey,
+	ModelSelectionState,
+} from "../types"
 import type React from "react"
 import { useTranslation } from "react-i18next"
 import { isModelDisabled } from "../utils"
@@ -13,6 +19,7 @@ import { ModelGroupSection, type RenderableModelGroup } from "./ModelGroupSectio
 import { ModelSectionHeader } from "./ModelSectionHeader"
 
 interface ModelListContentProps {
+	allowModelManagement?: boolean
 	modelList: ModelListGroup[]
 	selectedModel: ModelItem | null
 	searchKeyword: string
@@ -22,6 +29,7 @@ interface ModelListContentProps {
 	onReasoningEffortChange?: (model: ModelItem) => void
 	selectedItemRef: React.RefObject<HTMLDivElement>
 	getModelDescription: (model: ModelItem) => string | undefined
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 	modelKey?: ModelListKey
 	onModelsLoaded?: () => Promise<void> | void
 	/** 桌面语言模型行悬停显示只读信息卡并带列标题；移动端弹层传 false。 */
@@ -37,9 +45,11 @@ export const ModelListContent = observer(function ModelListContent({
 	onReasoningEffortChange,
 	selectedItemRef,
 	getModelDescription,
+	getModelState,
 	modelKey = "models",
 	onModelsLoaded,
 	showModelInfo = true,
+	allowModelManagement,
 }: ModelListContentProps) {
 	const { t } = useTranslation("super")
 	const visibleGroups = getVisibleGroups({ modelList, modelKey, searchKeyword })
@@ -54,12 +64,12 @@ export const ModelListContent = observer(function ModelListContent({
 		? t("messageEditor.modelSwitch.noModelsFound")
 		: t("messageEditor.modelSwitch.noModels")
 	const handleModelClick = useMemoizedFn((model: ModelItem) => {
-		if (!isModelDisabled(model)) {
+		if (!getModelState?.(model)?.disabled && !isModelDisabled(model)) {
 			onModelClick(model)
 		}
 	})
 	const handleReasoningEffortChange = useMemoizedFn((model: ModelItem) => {
-		if (!isModelDisabled(model)) {
+		if (!getModelState?.(model)?.disabled && !isModelDisabled(model)) {
 			onReasoningEffortChange?.(model)
 		}
 	})
@@ -73,6 +83,8 @@ export const ModelListContent = observer(function ModelListContent({
 				selectedItemRef={selectedItemRef}
 				onModelsLoaded={onModelsLoaded}
 				compact={showModelInfo}
+				getModelState={getModelState}
+				allowModelManagement={allowModelManagement}
 			/>
 			{/* 平台模型和「我的模型 / 企业模型」都没有时才显示空状态；只有企业模型时不再在下方追加空状态。 */}
 			{visibleGroups.length === 0 && !hasMyModels && (
@@ -102,6 +114,7 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					showModelInfo={showModelInfo}
+					getModelState={getModelState}
 				/>
 			))}
 			*/}
@@ -127,6 +140,7 @@ export const ModelListContent = observer(function ModelListContent({
 					selectedItemRef={selectedItemRef}
 					getModelDescription={getModelDescription}
 					showModelInfo={showModelInfo}
+					getModelState={getModelState}
 				/>
 			) : null}
 		</>

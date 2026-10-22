@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { Slot } from "@radix-ui/react-slot"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import { userStore } from "@/models/user"
@@ -16,6 +17,7 @@ import { ModelPreferenceTooltip } from "./components/ModelPreferenceTooltip"
 import { cn } from "@/utils/cn"
 import { modelSwitchVariants, ICON_SIZE_MAP, CHEVRON_SIZE_MAP } from "./constants"
 import { useModelSwitchLogic } from "./hooks/useModelSwitchLogic"
+import { useModelSwitchConfirmation } from "./hooks/useModelSwitchConfirmation"
 import { ModelListContent } from "./components/ModelListContent"
 import { ModelInfoHoverProvider } from "./components/ModelInfoHoverCard"
 import {
@@ -67,8 +69,16 @@ export const ModelSwitch = observer(function ModelSwitch({
 	defaultTab = "language",
 	triggerTab,
 	triggerTestId,
+	trigger,
+	selection,
+	allowedTabs,
 }: ModelSwitchProps) {
-	const [activeTab, setActiveTab] = useState<ModelTabType>(defaultTab)
+	const confirmation = useModelSwitchConfirmation(selection)
+	const { setPendingModel } = confirmation
+	const needsConfirmation = selection?.mode === "confirm"
+	const allowedDefaultTab =
+		!allowedTabs || allowedTabs.includes(defaultTab) ? defaultTab : allowedTabs[0]
+	const [activeTab, setActiveTab] = useState<ModelTabType>(allowedDefaultTab)
 	const [tooltipOpen, setTooltipOpen] = useState(false)
 	const [addMenuOpen, setAddMenuOpen] = useState(false)
 	// Keep the tooltip suppressed for the current pointer-hover cycle after the model menu closes.
@@ -102,11 +112,32 @@ export const ModelSwitch = observer(function ModelSwitch({
 		handleOpenChange,
 		getModelDescription,
 	} = useModelSwitchLogic({
-		onModelClick: handleModelChange,
-		// 桌面选中模型后保留面板：用户常在选中后接着调整底栏或信息卡里的思考强度。
-		// 移动端弹层仍由 useModelSwitchLogic 在选中后关闭。
-		shouldCloseOnSelect: false,
-		onBeforeOpen,
+		onModelClick: (model) => {
+			if (selection?.mode === "confirm") {
+				if (!confirmation.submitting && !selection.getModelState?.(model)?.disabled)
+					confirmation.setPendingModel(model)
+				return
+			}
+			if (activeTab === "image") {
+				onImageModelChange?.(model)
+			} else if (activeTab === "video") {
+				onVideoModelChange?.(model)
+			} else {
+				onModelChange?.(model)
+			}
+		},
+		onBeforeOpen: async () => {
+			await onBeforeOpen?.()
+			if (needsConfirmation)
+				confirmation.setPendingModel(
+					allowedDefaultTab === "image"
+						? (selectedImageModel ?? null)
+						: allowedDefaultTab === "video"
+							? (selectedVideoModel ?? null)
+							: (selectedModel ?? null),
+				)
+		},
+		shouldCloseOnSelect: needsConfirmation ? false : undefined,
 	})
 	const previousIsOpenRef = useRef(isOpen)
 
@@ -118,8 +149,12 @@ export const ModelSwitch = observer(function ModelSwitch({
 		previousIsOpenRef.current = isOpen
 	}, [isOpen])
 
+	useEffect(() => {
+		if (!isOpen) setPendingModel(null)
+	}, [isOpen, setPendingModel])
+
 	const { isPersonalOrganization } = userStore.user
-	const canManageModels = isPersonalOrganization
+	const canManageModels = isPersonalOrganization && !needsConfirmation
 
 	const iconSize = ICON_SIZE_MAP[size]
 	const chevronSize = CHEVRON_SIZE_MAP[size]
@@ -156,11 +191,19 @@ export const ModelSwitch = observer(function ModelSwitch({
 			((activeTab === "image" && !hasAnyImageModels) ||
 				(activeTab === "video" && !hasAnyVideoModels)) &&
 			!isLoadingCustomModels &&
-			!canAddModel
+			!canAddModel &&
+			(!allowedTabs || allowedTabs.includes("language"))
 		if (shouldFallbackToLanguage) {
 			setActiveTab("language")
 		}
-	}, [activeTab, hasAnyImageModels, hasAnyVideoModels, isLoadingCustomModels, canAddModel])
+	}, [
+		activeTab,
+		hasAnyImageModels,
+		hasAnyVideoModels,
+		isLoadingCustomModels,
+		canAddModel,
+		allowedTabs,
+	])
 
 	useEffect(() => {
 		if (!openAddModelMenuSignal || isMobile || !canAddModel) return
@@ -188,8 +231,8 @@ export const ModelSwitch = observer(function ModelSwitch({
 
 	useEffect(() => {
 		if (!isOpen) return
-		setActiveTab(defaultTab)
-	}, [defaultTab, isOpen])
+		setActiveTab(allowedDefaultTab)
+	}, [allowedDefaultTab, isOpen])
 
 	const currentModelList =
 		activeTab === "image"
@@ -197,8 +240,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 			: activeTab === "video"
 				? videoModelList || []
 				: modelList
-	const currentSelectedModel =
-		activeTab === "image"
+	const currentSelectedModel = needsConfirmation
+		? confirmation.pendingModel
+		: activeTab === "image"
 			? selectedImageModel || null
 			: activeTab === "video"
 				? selectedVideoModel || null
@@ -324,9 +368,13 @@ export const ModelSwitch = observer(function ModelSwitch({
 		</div>
 	)
 
-	const showImageTab = hasAnyImageModels || canAddModel
-	const showVideoTab = hasAnyVideoModels || canAddModel
-	const showTabSwitcher = showImageTab || showVideoTab
+	const showImageTab =
+		(hasAnyImageModels || canAddModel) && (!allowedTabs || allowedTabs.includes("image"))
+	const showVideoTab =
+		(hasAnyVideoModels || canAddModel) && (!allowedTabs || allowedTabs.includes("video"))
+	const showLanguageTab = !allowedTabs || allowedTabs.includes("language")
+	const showTabSwitcher =
+		Number(showLanguageTab) + Number(showImageTab) + Number(showVideoTab) > 1
 	const resolvedShowSelectedModelName = resolveShowSelectedModelName({
 		showSelectedModelName,
 		showImageTab,
@@ -337,6 +385,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 			activeTab={activeTab}
 			onTabChange={setActiveTab}
 			showImageTab={showImageTab}
+			showLanguageTab={showLanguageTab}
 			showVideoTab={showVideoTab}
 			isMobile={isMobile}
 		/>
@@ -373,45 +422,75 @@ export const ModelSwitch = observer(function ModelSwitch({
 			searchKeyword={searchKeyword}
 			size={size}
 			onModelClick={baseHandleModelClick}
-			onReasoningEffortChange={handleModelChange}
+			onReasoningEffortChange={needsConfirmation ? baseHandleModelClick : handleModelChange}
 			selectedItemRef={selectedItemRef}
 			getModelDescription={getModelDescription}
+			getModelState={selection?.mode === "confirm" ? selection.getModelState : undefined}
 			modelKey={currentModelKey}
 			onModelsLoaded={onBeforeOpen}
 			showModelInfo={!isMobile}
+			allowModelManagement={!needsConfirmation}
 		/>
+	)
+
+	const confirmationFooter = selection?.mode === "confirm" && (
+		<div className="shrink-0 space-y-3 border-t px-4 py-3">
+			{selection.description && (
+				<div className="text-xs leading-5 text-muted-foreground">
+					{selection.description}
+				</div>
+			)}
+			<div className="flex justify-end gap-2">
+				<Button variant="ghost" size="sm" onClick={handleClose}>
+					{t("common.cancel")}
+				</Button>
+				<Button
+					size="sm"
+					disabled={confirmation.submitting || !confirmation.canConfirm}
+					onClick={() => void confirmation.confirm(handleClose)}
+				>
+					{confirmation.submitting
+						? t("modelRecovery.submitting")
+						: selection.confirmText}
+				</Button>
+			</div>
+		</div>
 	)
 
 	// Mobile render using MagicPopup
 	if (isMobile) {
 		return (
 			<>
-				<FlexBox
-					gap={showName ? 4 : 2}
-					align="center"
-					className={cn(
-						modelSwitchVariants({ size, variant: "secondary" }),
-						showBorder && "border border-border",
-						"shrink-0",
-						className,
-					)}
-					onClick={() => void handleOpenChange(true)}
-					data-testid={triggerTestId ?? "super-message-editor-model-switch-mobile"}
-				>
-					{showName && (
-						<ModelSwitchTriggerContent
-							showLabel={showLabel}
-							selectedLanguageModel={selectedModel}
-							selectedImageModel={selectedImageModel}
-							selectedVideoModel={selectedVideoModel}
-							isLoading={isLoading}
-							iconSize={iconSize}
-							triggerTab={triggerTab}
-							showSelectedModelName={resolvedShowSelectedModelName}
-						/>
-					)}
-					<ChevronsUpDownIcon size={chevronSize} />
-				</FlexBox>
+				{trigger ? (
+					<Slot onClick={() => void handleOpenChange(true)}>{trigger}</Slot>
+				) : (
+					<FlexBox
+						gap={showName ? 4 : 2}
+						align="center"
+						className={cn(
+							modelSwitchVariants({ size, variant: "secondary" }),
+							showBorder && "border border-border",
+							"shrink-0",
+							className,
+						)}
+						onClick={() => void handleOpenChange(true)}
+						data-testid={triggerTestId ?? "super-message-editor-model-switch-mobile"}
+					>
+						{showName && (
+							<ModelSwitchTriggerContent
+								showLabel={showLabel}
+								selectedLanguageModel={selectedModel}
+								selectedImageModel={selectedImageModel}
+								selectedVideoModel={selectedVideoModel}
+								isLoading={isLoading}
+								iconSize={iconSize}
+								triggerTab={triggerTab}
+								showSelectedModelName={resolvedShowSelectedModelName}
+							/>
+						)}
+						<ChevronsUpDownIcon size={chevronSize} />
+					</FlexBox>
+				)}
 
 				<MagicPopup
 					visible={isOpen}
@@ -457,6 +536,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 								) : null}
 							</div>
 						</div>
+						{confirmationFooter}
 					</div>
 				</MagicPopup>
 			</>
@@ -477,7 +557,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 	return (
 		<TooltipProvider delayDuration={200}>
 			<TooltipPrimitive.Root
-				open={isOpen ? false : tooltipOpen}
+				open={isOpen || trigger ? false : tooltipOpen}
 				onOpenChange={(open) => {
 					if (isOpen || (open && tooltipSuppressedRef.current)) {
 						setTooltipOpen(false)
@@ -510,35 +590,39 @@ export const ModelSwitch = observer(function ModelSwitch({
 							}}
 						>
 							<DropdownMenuTrigger asChild>
-								<button
-									type="button"
-									className={cn(
-										"inline-flex shrink-0 items-center justify-center gap-2 border-0 bg-transparent p-0",
-										"outline-none",
-										modelSwitchVariants({ size, variant: "secondary" }),
-										showBorder && "border border-border",
-										className,
-									)}
-									data-testid={
-										triggerTestId ?? "super-message-editor-model-switch"
-									}
-									data-model-id={selectedModel?.model_id}
-									data-model-name={selectedModel?.model_name}
-								>
-									{showName && (
-										<ModelSwitchTriggerContent
-											showLabel={showLabel}
-											selectedLanguageModel={selectedModel}
-											selectedImageModel={selectedImageModel}
-											selectedVideoModel={selectedVideoModel}
-											isLoading={isLoading}
-											iconSize={iconSize}
-											triggerTab={triggerTab}
-											showSelectedModelName={resolvedShowSelectedModelName}
-										/>
-									)}
-									<ChevronsUpDownIcon size={chevronSize} />
-								</button>
+								{trigger ?? (
+									<button
+										type="button"
+										className={cn(
+											"inline-flex shrink-0 items-center justify-center gap-2 border-0 bg-transparent p-0",
+											"outline-none",
+											modelSwitchVariants({ size, variant: "secondary" }),
+											showBorder && "border border-border",
+											className,
+										)}
+										data-testid={
+											triggerTestId ?? "super-message-editor-model-switch"
+										}
+										data-model-id={selectedModel?.model_id}
+										data-model-name={selectedModel?.model_name}
+									>
+										{showName && (
+											<ModelSwitchTriggerContent
+												showLabel={showLabel}
+												selectedLanguageModel={selectedModel}
+												selectedImageModel={selectedImageModel}
+												selectedVideoModel={selectedVideoModel}
+												isLoading={isLoading}
+												iconSize={iconSize}
+												triggerTab={triggerTab}
+												showSelectedModelName={
+													resolvedShowSelectedModelName
+												}
+											/>
+										)}
+										<ChevronsUpDownIcon size={chevronSize} />
+									</button>
+								)}
 							</DropdownMenuTrigger>
 						</span>
 					</TooltipTrigger>
@@ -597,7 +681,9 @@ export const ModelSwitch = observer(function ModelSwitch({
 							{reasoningFooterModel ? (
 								<ModelReasoningFooter
 									model={reasoningFooterModel}
-									onReasoningEffortChange={handleModelChange}
+									onReasoningEffortChange={
+										needsConfirmation ? baseHandleModelClick : handleModelChange
+									}
 								/>
 							) : null}
 							{addModelRow ? (
@@ -605,6 +691,7 @@ export const ModelSwitch = observer(function ModelSwitch({
 									{addModelRow}
 								</div>
 							) : null}
+							{confirmationFooter}
 						</div>
 					</DropdownMenuContent>
 				</DropdownMenu>

@@ -53,6 +53,12 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
     protected ?array $data = null;
 
     /**
+     * 模型终态的公开恢复信息，不包含上游诊断原文。
+     * @var null|array{code: string, subject?: array{type: string, model_id: string, model_name?: string}, actions: list<array{type: string}>}
+     */
+    protected ?array $error = null;
+
+    /**
      * 附件信息。
      */
     protected ?array $attachments = null;
@@ -97,6 +103,7 @@ class SuperMagicMessage extends MagicMessageStruct implements MessageInterface
             'status' => $this->status,
             'data' => $this->data,
             'event' => $this->event,
+            'error' => $this->error,
         ];
 
         return $filterNull ? array_filter($data, fn ($value) => ! is_null($value)) : $data;

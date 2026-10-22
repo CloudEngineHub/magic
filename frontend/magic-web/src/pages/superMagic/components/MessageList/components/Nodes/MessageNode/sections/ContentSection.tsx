@@ -6,6 +6,8 @@ import { extractCitations, trimIncompleteCitationTag } from "@/pages/superMagic/
 import { hasKnowledgeBaseTabTarget } from "@/pages/superMagic/events/openFileTab"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 import { useMessageViewState } from "@/pages/superMagic/components/MessageList/view-state/MessageViewStateContext"
+import { getModelRecoveryMessage } from "@/pages/superMagic/utils/model-error-recovery"
+import { ModelErrorRecovery } from "../../../Card/components/ModelErrorRecovery"
 
 export const messageMarkdownBaseClassName = cn(
 	"w-full break-words leading-relaxed text-foreground",
@@ -66,11 +68,16 @@ export function ContentSection({
 
 	if (!hasContent) return null
 
-	return (
+	// Markdown 原样保留内容；恢复提示统一为 12px，其他消息继续使用原阅读字号。
+	const recovery = getModelRecoveryMessage(node)
+	const content = (
 		<>
 			<MarkdownComponent
 				enableNoSend={node?.role === "assistant"}
-				className={messageMarkdownBaseClassName}
+				className={cn(
+					messageMarkdownBaseClassName,
+					recovery && "!text-xs !leading-5 ![--font-size:12px]",
+				)}
 				isStreaming={isContentStreaming}
 				content={displayContent}
 				citations={citations}
@@ -106,5 +113,10 @@ export function ContentSection({
 				/>
 			)}
 		</>
+	)
+	return recovery ? (
+		<ModelErrorRecovery message={recovery}>{content}</ModelErrorRecovery>
+	) : (
+		content
 	)
 }

@@ -7,18 +7,21 @@ import { Button } from "@/components/shadcn-ui/button"
 import { Checkbox } from "@/components/shadcn-ui/checkbox"
 import { cn } from "@/utils/cn"
 import { serviceProviderModelToModelItem } from "@/services/superMagic/SuperMagicCustomModelService"
-import { Check, Ellipsis, Pencil, Trash2 } from "lucide-react"
-import type { ModelItem } from "../../types"
+import { Check, Ellipsis, Pencil, Trash2, TriangleAlert } from "lucide-react"
+import type { ModelItem, ModelSelectionState } from "../../types"
 import { ModelInfoHoverCard } from "../ModelInfoHoverCard"
 import ModelIcon from "../ModelIcon"
+import ModelName from "../ModelName"
 import { ProviderTypeIcon } from "../ProviderTypeIcon"
 import type { MyModelGroup, MyModelProviderEntry } from "./utils"
 import { userStore } from "@/models/user"
 
 interface MyModelRowProps {
+	allowModelManagement?: boolean
 	group: MyModelGroup
 	isSelected?: boolean
 	onSelect?: (model: ModelItem) => void
+	getModelState?: (model: ModelItem) => ModelSelectionState | undefined
 	selectedItemRef?: React.RefObject<HTMLDivElement>
 	onEdit: (model: MyModelProviderEntry["model"]) => void
 	onDelete: (modelId: string) => void
@@ -33,15 +36,21 @@ export function MyModelRow({
 	group,
 	isSelected = false,
 	onSelect,
+	getModelState,
 	selectedItemRef,
 	onEdit,
 	onDelete,
 	compact = false,
+	allowModelManagement = true,
 }: MyModelRowProps) {
 	const { t } = useTranslation("super")
 	const isActionMenuOpenRef = useRef(false)
 	const shouldSkipNextSelectRef = useRef(false)
 	const { representativeModel, providerEntries } = group
+	const model = serviceProviderModelToModelItem(representativeModel)
+	const modelState = getModelState?.(model)
+	const isSelectionDisabled = modelState?.disabled ?? false
+	const isCandidateSelected = isSelected && !isSelectionDisabled
 	const hasMultipleProviders = providerEntries.length > 1
 	const primaryProviderEntry = providerEntries[0]
 	const primaryProviderName = primaryProviderEntry
@@ -52,9 +61,11 @@ export function MyModelRow({
 
 	// 企业组织的模型由管理后台维护，模型选择器只允许个人组织用户管理自定义模型。
 	const { isPersonalOrganization } = userStore.user
-	const canManageModels = isPersonalOrganization
+	const canManageModels = isPersonalOrganization && allowModelManagement
 
-	const handleSelect = () => onSelect?.(serviceProviderModelToModelItem(representativeModel))
+	const handleSelect = () => {
+		if (!isSelectionDisabled) onSelect?.(serviceProviderModelToModelItem(representativeModel))
+	}
 
 	const handleItemClick = (event: React.MouseEvent<HTMLDivElement>) => {
 		const target = event.target as HTMLElement | null
@@ -129,7 +140,7 @@ export function MyModelRow({
 		</MagicDropdown>
 	)
 
-	if (compact) {
+	if (compact && !getModelState) {
 		const modelItem = serviceProviderModelToModelItem(representativeModel)
 		const row = (
 			<div
@@ -144,9 +155,13 @@ export function MyModelRow({
 					"outline-none focus-visible:ring-2 focus-visible:ring-ring",
 				)}
 				role="button"
-				tabIndex={0}
+				tabIndex={isSelectionDisabled ? -1 : 0}
 				aria-pressed={isSelected}
-				aria-label={representativeModel.name}
+				aria-label={[representativeModel.name, modelState?.label, modelState?.reason]
+					.filter(Boolean)
+					.join("，")}
+				aria-disabled={isSelectionDisabled || undefined}
+				title={modelState?.reason}
 				data-testid={`my-model-item-${representativeModel.id}`}
 				data-model-id={representativeModel.model_id}
 				data-selected={isSelected}
@@ -225,25 +240,43 @@ export function MyModelRow({
 			className={cn(
 				"group flex cursor-pointer items-center gap-2.5 rounded px-3 py-2",
 				"[@media(hover:hover)_and_(pointer:fine)]:hover:bg-accent",
+				isSelectionDisabled && "cursor-not-allowed",
 			)}
 			data-testid={`my-model-item-${representativeModel.id}`}
 			data-model-id={representativeModel.model_id}
-			data-selected={isSelected}
+			data-selected={isCandidateSelected}
+			aria-disabled={isSelectionDisabled || undefined}
 			data-provider-count={providerEntries.length}
 			onClick={handleItemClick}
 		>
 			<div className="min-w-0 flex-1">
-				<div>
-					<p className="text-sm font-normal leading-5 text-foreground">
-						{representativeModel.name}
-					</p>
+				<div className={cn(getModelState && "flex flex-col gap-1")}>
+					<div className="flex min-w-0 items-center gap-2">
+						{getModelState ? (
+							<ModelName
+								model={model}
+								isSelected={false}
+								className="w-fit max-w-full"
+							/>
+						) : (
+							<p className="min-w-0 text-sm font-medium leading-5 text-foreground">
+								{representativeModel.name}
+							</p>
+						)}
+						{modelState && (
+							<span className="inline-flex shrink-0 items-center gap-1 text-xs font-normal leading-4 text-amber-600 dark:text-amber-400">
+								<TriangleAlert className="size-4 shrink-0" aria-hidden />
+								{modelState.label}
+							</span>
+						)}
+					</div>
 					<p
 						className={cn(
 							"line-clamp-2 text-xs leading-4 text-muted-foreground",
 							"empty:hidden",
 						)}
 					>
-						{representativeModel.description}
+						{modelState?.reason ?? representativeModel.description}
 					</p>
 				</div>
 				{canManageModels && (
@@ -313,18 +346,20 @@ export function MyModelRow({
 					</div>
 				)}
 			</div>
-			<Checkbox
-				checked={isSelected}
-				onCheckedChange={handleSelect}
-				onClick={(event) => event.stopPropagation()}
-				className={cn(
-					"shrink-0",
-					"invisible opacity-0 transition-opacity",
-					"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
-					"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
-					isSelected && "visible opacity-100",
-				)}
-			/>
+			{!isSelectionDisabled && (
+				<Checkbox
+					checked={isCandidateSelected}
+					onCheckedChange={handleSelect}
+					onClick={(event) => event.stopPropagation()}
+					className={cn(
+						"shrink-0",
+						"invisible opacity-0 transition-opacity",
+						"[@media(hover:hover)_and_(pointer:fine)]:group-hover:visible",
+						"[@media(hover:hover)_and_(pointer:fine)]:group-hover:opacity-100",
+						isCandidateSelected && "visible opacity-100",
+					)}
+				/>
+			)}
 		</div>
 	)
 }
