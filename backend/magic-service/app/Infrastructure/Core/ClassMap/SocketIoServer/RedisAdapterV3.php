@@ -990,7 +990,10 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
     private function pipeline(\Hyperf\Redis\Redis|Redis|RedisProxy $redis, callable $commands): mixed
     {
         $pipeline = null;
-        $enqueue = static function (object $connection) use ($commands, &$pipeline): void {
+        $enqueue = static function (mixed $connection) use ($commands, &$pipeline): object {
+            if (! is_object($connection)) {
+                throw new RuntimeException('Socket.IO Redis pipeline initialization failed');
+            }
             $pipeline = $connection;
             // 连接池可能保留上次命令的错误；清除后只判断本轮 pipeline 的执行状态。
             $connection->clearLastError();
@@ -1003,14 +1006,17 @@ class RedisAdapter implements AdapterInterface, EphemeralInterface
                     throw $exception;
                 }
             }
+            return $connection;
         };
         if ($redis instanceof \Hyperf\Redis\Redis) {
             // 回调式 pipeline 在执行结束后归还连接；维护协程不会长期占用连接池。
             $result = $redis->pipeline($enqueue);
         } else {
-            $pipeline = $redis->pipeline();
-            $enqueue($pipeline);
-            $result = $pipeline->exec();
+            $connection = $enqueue($redis->pipeline());
+            $result = $connection->exec();
+        }
+        if (! is_object($pipeline)) {
+            throw new RuntimeException('Socket.IO Redis pipeline initialization failed');
         }
         $error = $pipeline->getLastError();
         if ($result === false || (is_string($error) && $error !== '')) {

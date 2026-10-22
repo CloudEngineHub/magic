@@ -44,17 +44,17 @@ use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillSourceType;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\ErrorCode\SuperAgentErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
+use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use App\Interfaces\SuperMagic\Common\DTO\Request\TransferResourceRequestDTO;
 use DateTimeImmutable;
 use Hyperf\DbConnection\Db;
 use Hyperf\Logger\LoggerFactory;
 use Psr\EventDispatcher\EventDispatcherInterface;
-use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
 use function Hyperf\Translation\trans;
 
-/** One transaction owns both resource and editing-project permissions. */
+/** 在同一事务内转移资源及其编辑项目的权限。 */
 class ResourceTransferAppService extends AbstractKernelAppService
 {
     public function __construct(
@@ -77,7 +77,8 @@ class ResourceTransferAppService extends AbstractKernelAppService
     ) {
     }
 
-    public function transfer(Authenticatable $authorization, string $code, bool $isAgent, TransferResourceRequestDTO $request): array
+    /** 根据组织用户身份转移资源，并同步关联项目及权限。 */
+    public function transfer(MagicUserAuthorization $authorization, string $code, bool $isAgent, TransferResourceRequestDTO $request): array
     {
         $org = $authorization->getOrganizationCode();
         $sender = $authorization->getId();
