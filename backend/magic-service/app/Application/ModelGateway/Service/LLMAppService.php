@@ -740,6 +740,9 @@ class LLMAppService extends AbstractLLMAppService
                 'line' => $e->getLine(),
             ]);
 
+            $failStart = $startTime;
+            $failLatency = (int) ((microtime(true) - $failStart) * 1000);
+
             // 派发模型调用完成（失败）
             ExceptionBuilder::throw(
                 MagicApiErrorCode::MODEL_RESPONSE_FAIL,
