@@ -42,9 +42,9 @@ print(result.content)
 
 ### Batch filenames
 
-1. Call `stage=prepare` with the complete requested `items`. Read the exact before/after comparison, skipped versions and `prepared_tool_call_id`.
-2. Outside Code mode, call the main Agent's direct `ask_user` with only `prepared_tool_call_id`. The runtime supplies the actual prepared question. It waits for a human response and defaults to no automatic deadline.
-3. After an explicit confirmation, call `stage=execute` with the same `items`, the prepared ID and the actual `ask_user` call ID in `confirmation_tool_call_id`. A declined/skipped/timed-out answer or changed scope cannot authorize writes.
+1. Call `stage=prepare` with the complete requested `items` and any `batch_naming`. Read the exact before/after comparison and skipped versions. Preparation makes no changes.
+2. Outside Code mode, call the main Agent's direct `ask_user` with ordinary `questions` XML describing that exact comparison, for example `<question type="confirm">Rename A.png to Release_01.png and B.png to Release_02.png? Image content stays unchanged.</question>`. Omit timeout and wait for the user's answer.
+3. Judge the answer: execute the same `items` and `batch_naming` only after explicit agreement. Do not treat rejection, skipping, timeout or an unclear answer as agreement. If the requested scope changes, query and prepare the new scope before asking again.
 
 ```python
 from sdk.tool import tool
@@ -57,4 +57,4 @@ print(result.content)
 
 One completed file can be renamed with `stage=execute` without adding a batch confirmation; the user's concrete rename request must still identify the intended version and name. `stage=prepare` is available for inspecting that change.
 
-Read per-item outcomes even when `ok` is false. If the file was renamed but Canvas references could not be saved, do not repeat the rename. Use `stage=recover` with the returned recovery prepared/confirmation call IDs to repair references only, after the tool verifies the unchanged actual file identity. Failed or unknown file writes must be re-queried before any new preparation. Canvas and file metadata do not form a cross-service transaction; do not claim rollback or atomicity.
+Read per-item outcomes even when `ok` is false. If the file was renamed but Canvas references could not be saved, do not repeat the rename. Use `stage=recover` with the returned `recovery_tool_call_id` to repair references only, after the tool verifies the unchanged actual file identity. The recovery ID locates actual execution outcomes, not user authorization. Failed or unknown file writes must be re-queried before any new preparation. Canvas and file metadata do not form a cross-service transaction; do not claim rollback or atomicity.

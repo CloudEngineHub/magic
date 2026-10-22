@@ -7,10 +7,9 @@ from typing import cast
 
 from agentlang.context.tool_context import ToolContext
 from app.core.context.agent_context import AgentContext
-from app.i18n import i18n
 from app.tools.canvas.application.commands.rename_commands import BatchNaming, RenameElement
 from app.tools.canvas.application.file_reference_updates import CanvasFileReferenceUpdates
-from app.tools.canvas.application.operation_confirmation import CanvasOperationConfirmation
+from app.tools.canvas.application.rename_execution import CanvasRenameExecutionStore
 from app.tools.canvas.application.rename_preparation import RenamePreparation
 from app.tools.canvas.domain.errors import CanvasDomainError
 from app.tools.canvas.domain.models import CanvasProject
@@ -33,12 +32,11 @@ class RenameElementsService:
         project_path: str,
         items: list[RenameElement],
         stage: str,
-        prepared_id: str | None,
-        confirmation_id: str | None,
+        recovery_tool_call_id: str | None,
         batch_naming: BatchNaming | None = None,
     ) -> JsonObject:
         if stage == "recover":
-            return await self._recover(project_path, prepared_id or "", confirmation_id or "")
+            return await self._recover(project_path, recovery_tool_call_id or "")
         if not items or len({item.element_id for item in items}) != len(items):
             raise CanvasDomainError("INVALID_SELECTION", "Specify distinct exact Element IDs and requested names.")
         gateway = None
@@ -60,8 +58,7 @@ class RenameElementsService:
             return await self._titles(project_path, items, stage == "prepare")
         if gateway is None:
             raise CanvasDomainError("AGENT_CONTEXT_REQUIRED", "File rename requires the current Agent context.")
-        prepared = await preparation.prepare(project_path, items, gateway)
-        payload, fingerprint = prepared.payload, prepared.fingerprint
+        payload = await preparation.prepare(project_path, items, gateway)
         if not payload["files"]:
             title_result = await self._paired_titles(project_path, items, payload, [], stage == "prepare")
             return {
@@ -70,35 +67,15 @@ class RenameElementsService:
                 "skipped": payload["skipped"],
                 "complete": not payload["skipped"],
             }
-        confirmation = CanvasOperationConfirmation.from_tool(self.context)
         if stage == "prepare":
-            comparison = "\n".join(f"{file['file_name']} → {file['target_file_name']}" for file in payload["files"])
-            comparison += "\n" + "\n".join(
-                i18n.translate("canvas.rename_title_comparison", category="tool.messages", name=item.canvas_title)
-                for item in items
-                if item.canvas_title is not None
-            )
-            question = i18n.translate(
-                "canvas.rename_confirmation",
-                category="tool.messages",
-                count=len(payload["files"]),
-                comparison=comparison,
-            )
-            record = await confirmation.prepare(self.context.tool_call_id, "rename", payload, fingerprint, question)
+            titles = await self._paired_titles(project_path, items, payload, [], True)
             return {
                 **payload,
-                "items": [{**file, "status": "prepared"} for file in payload["files"]],
+                "items": [*[{**file, "status": "prepared"} for file in payload["files"]], *titles["items"]],
                 "stage": "prepared",
-                "prepared_tool_call_id": record.prepared_tool_call_id,
             }
-        if len(payload["files"]) > 1 or prepared_id:
-            record = await confirmation.consume(prepared_id or "", confirmation_id or "", "rename", fingerprint)
-        else:
-            # 单文件改名不增加确认弹窗，但同样保留外部写入结果，供只修引用的恢复入口使用。
-            prepared_id = self.context.tool_call_id
-            record = await confirmation.prepare(prepared_id, "rename", payload, fingerprint, "")
-            record.state, record.confirmation_tool_call_id = "consumed", self.context.tool_call_id
-            await confirmation.save(record)
+        execution = CanvasRenameExecutionStore.from_tool(self.context)
+        record = await execution.create(self.context.tool_call_id, payload)
         outcomes: list[JsonObject] = []
         record.payload["outcomes"] = outcomes
         for file in payload["files"]:
@@ -107,7 +84,7 @@ class RenameElementsService:
             outcome: JsonObject = {**file, "status": "rename_unconfirmed"}
             outcomes.append(outcome)
             record.payload["outcomes"] = outcomes
-            await confirmation.save(record)
+            await execution.save(record)
             try:
                 renamed = await gateway.rename(source, str(file["target_file_name"]))
                 outcome.update(
@@ -119,7 +96,7 @@ class RenameElementsService:
                 )
                 # 先保存已发生的外部结果；画布写回失败时只修复引用，不再次改名或覆盖文件。
                 record.payload["outcomes"] = outcomes
-                await confirmation.save(record)
+                await execution.save(record)
                 await self._references(project_path, gateway, source.path, renamed.path)
                 outcome["status"] = "completed"
             except Exception as error:
@@ -131,19 +108,18 @@ class RenameElementsService:
                 }:
                     outcome["status"] = "failed"
             record.payload["outcomes"] = outcomes
-            await confirmation.save(record)
+            await execution.save(record)
         title_result = await self._paired_titles(project_path, items, payload, outcomes, False)
         complete = not payload["skipped"] and all(
             item["status"] in {"completed", "unchanged"} for item in [*outcomes, *title_result["items"]]
         )
         if complete:
-            await confirmation.discard(record)
+            await execution.discard(record)
         return {
             "project_path": project_path,
             "stage": "executed",
             "items": [*outcomes, *title_result["items"], *payload["skipped"]],
-            "recovery_prepared_tool_call_id": prepared_id,
-            "recovery_confirmation_tool_call_id": record.confirmation_tool_call_id,
+            "recovery_tool_call_id": record.tool_call_id,
             "skipped": payload["skipped"],
             "complete": complete,
         }
@@ -245,19 +221,12 @@ class RenameElementsService:
         if user:
             await self.repository.write_sidecar(project_path, user, "element-details-user.json")
 
-    async def _recover(self, project_path: str, prepared_id: str, confirmation_id: str) -> JsonObject:
-        confirmation = CanvasOperationConfirmation.from_tool(self.context)
-        record = await confirmation.read(prepared_id)
-        if (
-            record.operation != "rename"
-            or record.state != "consumed"
-            or record.confirmation_tool_call_id != confirmation_id
-            or record.payload["project_path"] != project_path
-        ):
-            raise CanvasDomainError(
-                "RECOVERY_UNAVAILABLE", "This call does not identify a consumed rename operation in this project."
-            )
-        gateway = WorkspaceFileManagement(self.repository.workspace, project_path, confirmation.agent_context)
+    async def _recover(self, project_path: str, recovery_tool_call_id: str) -> JsonObject:
+        execution = CanvasRenameExecutionStore.from_tool(self.context)
+        record = await execution.read(recovery_tool_call_id)
+        if record.payload["project_path"] != project_path:
+            raise CanvasDomainError("RECOVERY_UNAVAILABLE", "This rename execution belongs to another project.")
+        gateway = WorkspaceFileManagement(self.repository.workspace, project_path, execution.agent_context)
         await gateway.check_canvas_write_access()
         outcomes = record.payload.get("outcomes", [])
         for item in outcomes:
@@ -288,9 +257,9 @@ class RenameElementsService:
         record.payload["outcomes"] = outcomes
         complete = all(item["status"] == "completed" for item in outcomes)
         if complete:
-            await confirmation.discard(record)
+            await execution.discard(record)
         else:
-            await confirmation.save(record)
+            await execution.save(record)
         return {
             "project_path": project_path,
             "stage": "recovered",
