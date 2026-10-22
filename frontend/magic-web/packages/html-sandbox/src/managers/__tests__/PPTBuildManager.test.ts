@@ -89,6 +89,17 @@ describe("PPTBuildManager", () => {
 		)
 	})
 
+	it("treats a changed automatic delay as a real change, including undo", async () => {
+		writePPTBuild(document.querySelector("#a")!, build(1))
+		manager.updateBuilds([{ selector: "#a", build: { ...build(1), after: 800 } }])
+		expect(history.getUndoStackSize()).toBe(1)
+		expect(manager.getBuilds()[0].build.after).toBe(800)
+		manager.updateBuilds([{ selector: "#a", build: build(1) }])
+		expect(manager.getBuilds()[0].build.after).toBeUndefined()
+		await style.undo()
+		expect(manager.getBuilds()[0].build.after).toBe(800)
+	})
+
 	it("rejects writes outside edit mode and ambiguous or duplicate targets", () => {
 		expect(() =>
 			new PPTBuildManager(history, () => false).updateBuilds([

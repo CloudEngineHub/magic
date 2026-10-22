@@ -31,7 +31,14 @@ interface BuildState {
 }
 
 function sameBuild(a: PPTBuild | null, b: PPTBuild | null): boolean {
-	return a === b || (a !== null && b !== null && a.step === b.step && a.effect === b.effect)
+	return (
+		a === b ||
+		(a !== null &&
+			b !== null &&
+			a.step === b.step &&
+			a.effect === b.effect &&
+			a.after === b.after)
+	)
 }
 
 /** Authored build metadata shares the editor's undo stack, but no unrelated attributes. */
