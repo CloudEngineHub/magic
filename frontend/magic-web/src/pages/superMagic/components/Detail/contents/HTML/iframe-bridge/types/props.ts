@@ -186,6 +186,8 @@ export interface HTMLEditorV2Ref {
 	getPPTBuilds: () => Promise<PPTBuildEntry[]>
 	updatePPTBuilds: (updates: PPTBuildUpdate[]) => Promise<void>
 	setPPTBuildMarkers: (visible: boolean) => Promise<void>
+	/** Show the slide after `steps` display steps; null restores the full page. */
+	previewPPTBuild: (steps: number | null) => Promise<void>
 	/** 获取 iframe 元素 */
 	getIframeElement: () => HTMLIFrameElement | null
 

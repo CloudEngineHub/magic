@@ -5216,6 +5216,7 @@
 			"newStep": "拆为末尾新步骤",
 			"next": "下一步",
 			"pickElement": "在画布中选择要逐步显示的元素。",
+			"previewStep": "预览到此步",
 			"previous": "上一步",
 			"progress": "步骤 {{step}}/{{total}}",
 			"queue": "动画步骤队列",
@@ -5226,6 +5227,7 @@
 			"saveFailed": "动画设置失败，请重试。",
 			"step": "第几步",
 			"stepLabel": "步骤 {{step}}",
+			"stopPreview": "退出预览",
 			"title": "页内动画",
 			"undo": "撤销",
 			"updating": "正在更新动画…"

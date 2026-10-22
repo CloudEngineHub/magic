@@ -5218,6 +5218,7 @@
 			"newStep": "Split into a new last step",
 			"next": "Next step",
 			"pickElement": "Select an element on the slide to reveal step by step.",
+			"previewStep": "Preview up to this step",
 			"previous": "Previous step",
 			"progress": "Step {{step}}/{{total}}",
 			"queue": "Animation step queue",
@@ -5228,6 +5229,7 @@
 			"saveFailed": "Could not update the animation. Try again.",
 			"step": "Step number",
 			"stepLabel": "Step {{step}}",
+			"stopPreview": "Exit preview",
 			"title": "In-slide animation",
 			"undo": "Undo",
 			"updating": "Updating animations…"

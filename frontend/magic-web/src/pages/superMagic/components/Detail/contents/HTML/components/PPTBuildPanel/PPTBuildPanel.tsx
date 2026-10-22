@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react"
+import { useEffect, useState, type ReactNode, type RefObject } from "react"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
 import {
@@ -17,7 +17,18 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable"
 import { CSS } from "@dnd-kit/utilities"
-import { ArrowDown, ArrowUp, GripVertical, ListOrdered, Plus, Redo2, Undo2, X } from "lucide-react"
+import {
+	ArrowDown,
+	ArrowUp,
+	Eye,
+	EyeOff,
+	GripVertical,
+	ListOrdered,
+	Plus,
+	Redo2,
+	Undo2,
+	X,
+} from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { ScrollArea } from "@/components/shadcn-ui/scroll-area"
 import MagicTooltip from "@/components/base/MagicTooltip"
@@ -55,6 +66,25 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
 		useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+	)
+	// Display number of the step the canvas is previewed up to; null shows the full page.
+	const [previewSteps, setPreviewSteps] = useState<number | null>(null)
+	const togglePreview = (steps: number) => {
+		const next = previewSteps === steps ? null : steps
+		setPreviewSteps(next)
+		void editorRef.current?.previewPPTBuild(next).catch(() => setPreviewSteps(null))
+	}
+	// Any queue change (edit, undo, reload) invalidates what the preview showed.
+	useEffect(() => {
+		setPreviewSteps(null)
+	}, [entries])
+	useEffect(
+		() => () => {
+			void editorRef.current?.previewPPTBuild(null).catch(() => {
+				/* The iframe may already have been disposed. */
+			})
+		},
+		[editorRef],
 	)
 	const selected = entries.find((entry) => entry.selector === selectedElement?.selector)
 	const move = (from: number, to: number) => void update(reorderBuildQueue(entries, from, to))
@@ -181,6 +211,15 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 										id={group.step}
 										locked={locked}
 										label={t("ppt.build.stepLabel", { step: index + 1 })}
+										preview={{
+											label:
+												previewSteps === index + 1
+													? t("ppt.build.stopPreview")
+													: t("ppt.build.previewStep"),
+											active: previewSteps === index + 1,
+											disabled: locked,
+											onClick: () => togglePreview(index + 1),
+										}}
 										moveUp={{
 											label: t("ppt.build.moveUp"),
 											disabled: locked || index <= 0,
@@ -241,6 +280,7 @@ function SortableStep({
 	id,
 	locked,
 	label,
+	preview,
 	moveUp,
 	moveDown,
 	children,
@@ -248,6 +288,7 @@ function SortableStep({
 	id: number
 	locked: boolean
 	label: string
+	preview: StepAction & { active: boolean }
 	moveUp: StepAction
 	moveDown: StepAction
 	children: ReactNode
@@ -284,6 +325,7 @@ function SortableStep({
 				</button>
 				<span className="min-w-0 flex-1 truncate text-xs font-medium">{label}</span>
 				{[
+					{ icon: preview.active ? EyeOff : Eye, action: preview },
 					{ icon: ArrowUp, action: moveUp },
 					{ icon: ArrowDown, action: moveDown },
 				].map(({ icon: Icon, action }) => (

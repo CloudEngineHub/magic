@@ -13,6 +13,7 @@ import { TextStyleManager } from "../managers/TextStyleManager"
 import { DomStructureManager } from "../managers/DomStructureManager"
 import { PPTBuildManager, type PPTBuildUpdate } from "../managers/PPTBuildManager"
 import { PPTBuildMarkers } from "../features/PPTBuildMarkers"
+import { PPTBuildPreview } from "../features/PPTBuildPreview"
 import { EditorLogger } from "../utils/EditorLogger"
 import { isFromTrustedParent, getParentOrigin } from "../utils/parentOrigin"
 import {
@@ -34,6 +35,7 @@ export class EditorRuntime {
 	private dragDropManager: DragDropManager
 	private pptBuildManager: PPTBuildManager
 	private pptBuildMarkers = new PPTBuildMarkers()
+	private pptBuildPreview = new PPTBuildPreview()
 	private isEditMode = false
 	private isPPTBuildMode = false
 	private keyboardShortcutHandler: ((event: KeyboardEvent) => Promise<void>) | null = null
@@ -163,14 +165,32 @@ export class EditorRuntime {
 			this.elementSelector.setSelectionOnly(enabled && !this.isEditMode)
 			if (enabled) this.elementSelector.enable()
 			else if (!this.isEditMode) this.elementSelector.disable()
-			if (!enabled) this.pptBuildMarkers.destroy()
+			if (!enabled) {
+				this.pptBuildMarkers.destroy()
+				this.pptBuildPreview.clear()
+			}
 			this.notifySelectionModeChanged(enabled || this.isEditMode)
 			return { success: true }
 		})
 		this.bridge.onRequest("GET_PPT_BUILDS", () => this.pptBuildManager.getBuilds())
 		this.bridge.onCommand("UPDATE_PPT_BUILDS", (payload) => {
 			this.pptBuildManager.updateBuilds((payload as { updates: PPTBuildUpdate[] })?.updates)
+			// A stale preview would show the old step layout.
+			this.pptBuildPreview.clear()
 			this.elementSelector.refreshSelection()
+			return { success: true }
+		})
+		this.bridge.onRequest("PREVIEW_PPT_BUILD", (payload) => {
+			const steps = (payload as { steps?: unknown })?.steps
+			if (steps === null) {
+				this.pptBuildPreview.clear()
+				return { success: true }
+			}
+			if (typeof steps !== "number" || !Number.isInteger(steps) || steps < 0)
+				throw new Error("PPT_BUILD_INVALID")
+			if (!this.isEditMode && !this.isPPTBuildMode)
+				throw new Error("PPT_BUILD_EDIT_MODE_REQUIRED")
+			this.pptBuildPreview.show(steps)
 			return { success: true }
 		})
 		this.bridge.onRequest("SET_PPT_BUILD_MARKERS", (payload) => {
@@ -199,6 +219,7 @@ export class EditorRuntime {
 					this.textStyleManager.startMonitoring()
 				} else {
 					this.pptBuildMarkers.destroy()
+					this.pptBuildPreview.clear()
 					this.textStyleManager.stopMonitoring()
 				}
 			},
@@ -527,6 +548,7 @@ export class EditorRuntime {
 	destroy(): void {
 		EditorLogger.info("Destroy editor runtime")
 		this.pptBuildMarkers.destroy()
+		this.pptBuildPreview.clear()
 
 		// Remove keyboard shortcut handler
 		if (this.keyboardShortcutHandler) {

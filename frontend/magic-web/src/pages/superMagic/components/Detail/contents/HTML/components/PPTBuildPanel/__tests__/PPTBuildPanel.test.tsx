@@ -41,6 +41,7 @@ function setup(initial = [make("first", 1), make("second", 2)], onCommit?: () =>
 			entries = previous
 		}),
 		redo: vi.fn(async () => {}),
+		previewPPTBuild: vi.fn(async () => {}),
 		getPPTBuilds: vi.fn(async () => entries),
 		setPPTBuildMarkers: vi.fn(async () => {}),
 		selectElement: vi.fn(async () => {}),
@@ -190,5 +191,15 @@ describe("PPT build panel", () => {
 		await screen.findByText("first")
 		expect(screen.getByTestId("ppt-build-undo")).toBeDisabled()
 		expect(screen.getByTestId("ppt-build-redo")).toBeDisabled()
+	})
+
+	it("previews the canvas up to a step and exits the preview", async () => {
+		const { editor } = setup()
+		await screen.findByText("first")
+		const buttons = screen.getAllByRole("button", { name: "ppt.build.previewStep" })
+		fireEvent.click(buttons[1])
+		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenLastCalledWith(2))
+		fireEvent.click(screen.getByRole("button", { name: "ppt.build.stopPreview" }))
+		await waitFor(() => expect(editor.previewPPTBuild).toHaveBeenLastCalledWith(null))
 	})
 })
