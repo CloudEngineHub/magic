@@ -19,6 +19,11 @@ const resolve = createResearchFileDisplayResolver(
 		},
 	},
 	{ studies: "studies-icon" },
+	{
+		personaName: (path) => (path === "personas/p_a.json" ? "王浩" : undefined),
+		interviewLabel: (path) =>
+			path === "studies/x/interviews/p_a.json" ? "王浩 · 访谈记录" : undefined,
+	},
 )
 
 const dir = (path: string) =>
@@ -61,6 +66,14 @@ describe("createResearchFileDisplayResolver", () => {
 		expect(file("studies/x/interviews/report.html")).toBeNull()
 		expect(file("studies/x/study.json")).toBeNull()
 		expect(dir("studies/x")).toBeNull()
+	})
+
+	it("shows persona and interview names once parsed, otherwise the file name", () => {
+		expect(file("personas/p_a.json")).toEqual({ name: "王浩" })
+		expect(file("personas/p_b.json")).toBeNull()
+		expect(file("studies/x/interviews/p_a.json")).toEqual({ name: "王浩 · 访谈记录" })
+		expect(file("studies/x/interviews/p_b.json")).toBeNull()
+		expect(file("docs/personas/p_a.json")).toBeNull()
 	})
 
 	it("never touches a normal project", () => {

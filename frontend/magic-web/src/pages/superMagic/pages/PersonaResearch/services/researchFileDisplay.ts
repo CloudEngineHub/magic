@@ -25,6 +25,18 @@ export interface ResearchFileDisplayLabels {
 	study: { report: string; plan: string; deskResearch: string; validation: string; panel: string }
 }
 
+/**
+ * Names read from content the page has already parsed (no extra requests). Both take the real
+ * workspace path without a leading slash and return undefined while the file is not parsed yet,
+ * in which case the row keeps its file name.
+ */
+export interface ResearchFileDisplayLookups {
+	/** personas/<id>.json → the persona's name. */
+	personaName?: (path: string) => string | undefined
+	/** studies/<slug>/interviews/<id>.json → e.g. "王浩 · 访谈记录". */
+	interviewLabel?: (path: string) => string | undefined
+}
+
 export interface ResearchFileDisplayIcons {
 	personas?: ReactNode
 	panels?: ReactNode
@@ -56,11 +68,14 @@ function studyFileLabel(name: string, labels: ResearchFileDisplayLabels["study"]
  * | studies/<slug>/report.html …       | 研究报告 / 研究方案 / 市场洞察 / 验证问卷 / 受访者名单 |
  * | studies/<slug>/interviews/ · discussions/ | 访谈记录 · 小组讨论 |
  *
- * Everything else (persona files, study slugs, unknown folders) keeps its real name.
+ * | personas/<id>.json · studies/<slug>/interviews/<id>.json | persona name · "name · 访谈记录" (lookups, once parsed) |
+ *
+ * Everything else (study slugs, unknown folders, unparsed files) keeps its real name.
  */
 export function createResearchFileDisplayResolver(
 	labels: ResearchFileDisplayLabels,
 	icons: ResearchFileDisplayIcons = {},
+	lookups: ResearchFileDisplayLookups = {},
 ): ProjectFileDisplayResolver {
 	return ({ path, name, isDirectory }): ProjectFileDisplay | null => {
 		const normalized = path.replace(/\/+$/, "")
@@ -84,6 +99,20 @@ export function createResearchFileDisplayResolver(
 				if (name === "discussions") return { name: labels.discussions }
 			}
 			return null
+		}
+
+		if (`${segments[0]}/` === PERSONAS_DIR && segments.length === 2) {
+			const personaName = lookups.personaName?.(normalized)
+			return personaName ? { name: personaName } : null
+		}
+
+		if (
+			`${segments[0]}/` === STUDIES_DIR &&
+			segments.length === 4 &&
+			segments[2] === "interviews"
+		) {
+			const label = lookups.interviewLabel?.(normalized)
+			return label ? { name: label } : null
 		}
 
 		if (`${segments[0]}/` === TEMPLATES_DIR && segments.length === 2) {

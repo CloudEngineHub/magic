@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next"
 import { FlaskConical, LayoutTemplate, Layers, Users } from "lucide-react"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import PersonaAvatar from "../components/PersonaAvatar"
+import type { PersonaFile, ResearchFileRef } from "../types"
 import { usePersonaResearchStore } from "../context"
+import { normalizeResearchPath } from "../services/researchFiles"
 import { createResearchFileDisplayResolver } from "../services/researchFileDisplay"
 import { buildResearchMentionCatalog } from "../services/researchMentionCatalog"
 
@@ -20,6 +22,10 @@ import { buildResearchMentionCatalog } from "../services/researchMentionCatalog"
  * The entry follows file changes and is cleared on unmount; while a newly selected study is
  * still loading the previous study's personas never show under the next one.
  */
+function personaRefByPath(refs: ResearchFileRef<PersonaFile>[], path: string) {
+	return refs.find((ref) => normalizeResearchPath(ref.path) === path)
+}
+
 export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
@@ -50,6 +56,18 @@ export function useResearchMentionCatalog(selectedTopic: Topic | null) {
 					panels: <Layers size={16} />,
 					studies: <FlaskConical size={16} />,
 					templates: <LayoutTemplate size={16} />,
+				},
+				{
+					// Read at panel render time from what the store has already parsed; the
+					// library may be only partly loaded, so unknown files keep their names.
+					personaName: (path) => personaRefByPath(store.personas, path)?.data.name,
+					interviewLabel: (path) => {
+						const personaId = store.interviews.find(
+							(ref) => normalizeResearchPath(ref.path) === path,
+						)?.data.persona_id
+						const name = personaId ? store.personaById(personaId)?.name : undefined
+						return name ? t("mention.interviewOf", { name }) : undefined
+					},
 				},
 			),
 		)
