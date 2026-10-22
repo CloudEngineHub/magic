@@ -1462,6 +1462,27 @@ describe("PPTSlide", () => {
 		expect(screen.queryByTestId("ppt-edit-button")).not.toBeInTheDocument()
 	})
 
+	it("asks before saving animation steps over a newer server version", async () => {
+		mockState.initialEditMode = false
+		renderPPTSlide({
+			buildPanelOpen: true,
+			serverUpdatedContent: "<div>server-update</div>",
+		})
+		const props = mockState.renderedIsolatedProps.mock.calls.at(-1)?.[0]
+		let saved: boolean | undefined
+		await act(async () => {
+			void props.onBuildSave().then((result: boolean) => {
+				saved = result
+			})
+		})
+		expect(screen.getByTestId("ppt-slide-save-with-update-dialog")).toBeInTheDocument()
+		expect(mockState.triggerSave).not.toHaveBeenCalled()
+
+		fireEvent.click(screen.getByText("ppt.saveChanges"))
+		await waitFor(() => expect(saved).toBe(true))
+		expect(mockState.triggerSave).toHaveBeenCalledTimes(1)
+	})
+
 	it("切换幻灯片时在代码模式保存并继续切换", async () => {
 		const { rerender } = renderPPTSlide()
 

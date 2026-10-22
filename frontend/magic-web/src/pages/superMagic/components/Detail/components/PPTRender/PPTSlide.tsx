@@ -633,7 +633,9 @@ const PPTSlide = observer(function PPTSlide({
 		setTriggerSaveRef(() => triggerSave)
 	}, [])
 
-	const saveBuildConfiguration = useMemoizedFn(() => performSave())
+	// Step edits persist the whole slide, so they must honor the same "server has a newer
+	// version" confirmation as a normal save instead of silently overwriting someone else.
+	const saveBuildConfiguration = useMemoizedFn(() => runSaveAttempt("save"))
 	const rendererStaticProps = {
 		buildPanelOpen: isEditingBuilds,
 		onBuildPanelOpenChange,
