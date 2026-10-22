@@ -20,6 +20,7 @@ final readonly class ReviewNotificationAppService
 {
     public function __construct(
         private NotificationEventPublisherInterface $publisher,
+        private ?ReviewNotificationRecipientsInterface $recipients = null,
     ) {
     }
 
@@ -70,14 +71,30 @@ final readonly class ReviewNotificationAppService
             return;
         }
 
-        $sourceEventKey = sprintf(
-            'review:%s:%s:%s:%s:%s:approved',
+        $userIds = ($this->recipients ?? new CreatorReviewNotificationRecipients())->resolve(
             $organizationCode,
             $resourceType,
-            $resourceId,
-            $versionId,
+            $resourceCode,
             $recipientUserId
         );
+        // One event can fan out to collaborators without duplicating the creator.
+        $recipients = [];
+        foreach (array_unique($userIds) as $userId) {
+            if ($userId === '') {
+                continue;
+            }
+            $recipients[] = new EventRecipient($userId, sprintf(
+                'review:%s:%s:%s:%s:%s:approved',
+                $organizationCode,
+                $resourceType,
+                $resourceId,
+                $versionId,
+                $userId
+            ));
+        }
+        if ($recipients === []) {
+            return;
+        }
         $payload = [
             'review_id' => $versionId,
             'resource_id' => $resourceId,
@@ -98,7 +115,7 @@ final readonly class ReviewNotificationAppService
             producer: 'super_magic.review',
             organizationCode: $organizationCode,
             source: new EventSource('review', $resourceType, $resourceId, $versionId),
-            recipients: [new EventRecipient($recipientUserId, $sourceEventKey)],
+            recipients: $recipients,
             payload: $payload,
         ));
     }

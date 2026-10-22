@@ -12,6 +12,7 @@ use App\Application\Notification\Contract\NotificationEventPublisherInterface;
 use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
 use App\Application\Notification\Validator\NotificationEventEnvelopeValidator;
 use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
+use App\Application\SuperMagic\Review\Service\ReviewNotificationRecipientsInterface;
 use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use App\Domain\SuperMagic\Agent\Entity\AgentVersionEntity;
 use App\Domain\SuperMagic\Skill\Entity\SkillVersionEntity;
@@ -20,6 +21,27 @@ use PHPUnit\Framework\TestCase;
 /** @internal */
 final class ReviewNotificationAppServiceTest extends TestCase
 {
+    public function testApprovalFansOutWithIndependentIdempotencyKeys(): void
+    {
+        $version = new AgentVersionEntity();
+        $version->setId(2002);
+        $version->setCode('agent-code');
+        $version->setName('Agent');
+        $version->setVersion('1.0');
+        $version->setOrganizationCode('ORG');
+        $version->setCreator('creator');
+        $recipients = $this->createMock(ReviewNotificationRecipientsInterface::class);
+        $recipients->expects(self::once())->method('resolve')->with('ORG', 'agent', 'agent-code', 'creator')
+            ->willReturn(['creator', 'collaborator', 'creator']);
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::once())->method('publish')->willReturnCallback(function (EventEnvelope $event): array {
+            self::assertSame(['creator', 'collaborator'], array_column($event->recipients, 'userId'));
+            self::assertNotSame($event->recipients[0]->sourceEventKey, $event->recipients[1]->sourceEventKey);
+            return [];
+        });
+        (new ReviewNotificationAppService($publisher, $recipients))->publishAgentApproved($version, '1001');
+    }
+
     public function testAgentApprovalPublishesVersionedEventToCreator(): void
     {
         $published = [];
