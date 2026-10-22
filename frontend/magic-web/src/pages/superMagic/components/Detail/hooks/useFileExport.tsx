@@ -3,7 +3,7 @@ import { useState, useRef } from "react"
 import { TFunction } from "i18next"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
-import { exportHtmlToImage, type ImageExportFormat } from "@magic-web/html2image"
+import type { ImageExportFormat } from "@magic-web/html2image"
 import { isFileInPPTMode } from "@/pages/superMagic/components/Detail/utils/file"
 import { isMarkdownFileName } from "@/utils/pdfFileType"
 import {
@@ -474,6 +474,8 @@ function useFileExport({
 				throw new Error("Failed to fetch HTML file content")
 			}
 
+			// 不把图片导出引擎加入文件列表启动依赖；导入失败也必须结束现有导出状态。
+			const { exportHtmlToImage } = await import("@magic-web/html2image")
 			await exportHtmlToImage({
 				pages: result.htmlSlides,
 				format,

@@ -17,6 +17,7 @@ import { withTransformFilter } from "./plugins/with-transform-filter"
 import babelPluginAntdStyle from "babel-plugin-antd-style"
 import { viteExternalsPlugin } from "vite-plugin-externals"
 import createAppServiceWorkerPlugin from "./plugins/vite-plugin-app-service-worker"
+import createChunkImportMapHashPlugin from "./plugins/vite-plugin-chunk-import-map-hash"
 import vitePluginMagicAdminSource from "./packages/magic-admin/vite/plugins/vite-plugin-magic-admin-source"
 import vitePluginTransformBaseImports from "./plugins/vite-plugin-transform-base-imports"
 import { lucideDynamicAggregatePlugin } from "./plugins/vite-plugin-lucide-dynamic-aggregate"
@@ -225,6 +226,7 @@ export function getBaseViteConfig(env: NodeJS.ProcessEnv = process.env, mode?: s
 			isDev && createHtmlSandboxRuntimePlugin(env),
 			lucideDynamicAggregatePlugin(),
 			createAppServiceWorkerPlugin(),
+			createChunkImportMapHashPlugin(),
 			vitePluginMagicApi({ projectRoot: __dirname }),
 			vitePluginIframeRuntime({ projectRoot: __dirname }),
 			vitePluginMagicAdminSource({

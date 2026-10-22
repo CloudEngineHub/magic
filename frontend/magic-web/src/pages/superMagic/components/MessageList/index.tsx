@@ -7,6 +7,8 @@ import {
 import { MessageProcessToggle } from "./components/MessageProcessToggle"
 import { useMemoizedFn } from "ahooks"
 import {
+	lazy,
+	Suspense,
 	type MutableRefObject,
 	type ReactNode,
 	type Ref,
@@ -56,7 +58,6 @@ import {
 	getSelectableTurnKeys,
 } from "./hooks/useExportSelection"
 import { ExportToolbar } from "./components/ExportToolbar"
-import { ExportPreviewModal } from "./components/ExportPreviewModal"
 import MessageDebugPanel from "./components/MessageDebugPanel"
 import { useMessageDebugPanel } from "./hooks/useMessageDebugPanel"
 import { extractTurns } from "./export/extractMessageContent"
@@ -85,6 +86,13 @@ import {
 import type { RevokedMessageEditorContext } from "./revoked-editor-context"
 import type { MessageListScrollAdapter } from "./message-list-scroll-adapter"
 import { useStableArrayReference } from "./hooks/useStableArrayReference"
+
+// 导出选择由现有 store 保留；只有打开预览才加载导出组件，关闭时沿用组件卸载取消。
+const ExportPreviewModal = lazy(() =>
+	import("./components/ExportPreviewModal").then((module) => ({
+		default: module.ExportPreviewModal,
+	})),
+)
 
 export { MessageListProvider }
 
@@ -1057,12 +1065,16 @@ const MessageList = observer(
 							className={backToLatestButtonClassName}
 							onClick={() => scrollToBottom("smooth")}
 						/>
-						{enableExport && (
-							<ExportPreviewModal
-								store={exportStore}
-								turns={exportTurns}
-								title={exportTitle || selectedTopic?.topic_name || "conversation"}
-							/>
+						{enableExport && exportStore.previewOpen && (
+							<Suspense fallback={null}>
+								<ExportPreviewModal
+									store={exportStore}
+									turns={exportTurns}
+									title={
+										exportTitle || selectedTopic?.topic_name || "conversation"
+									}
+								/>
+							</Suspense>
 						)}
 						{messageDebug.snapshot && (
 							<MessageDebugPanel
