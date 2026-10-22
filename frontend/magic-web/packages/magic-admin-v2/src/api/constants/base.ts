@@ -1,6 +1,8 @@
 /** Endpoints that are available in the open-source edition and backed by Magic. */
 export const BaseRequestUrl = {
+	modelBillingMultiplier: "/api/v1/platform/setting/model-billing-multiplier",
 	platformInfo: "/api/v1/platform/setting",
+	modelBillingPreview: "/api/v1/platform/setting/model-billing-preview",
 	officialOrganizationInfo: "/api/v1/admin/service-providers/office-info",
 	myPermissionList: "/api/v1/permissions/me",
 	globalConfig: "/api/v1/settings/global",
@@ -53,6 +55,14 @@ export const BaseRequestUrl = {
 		"/api/v1/admin/service-providers/connectivity-tests/config-based",
 	providerModelStatus: "/api/v1/admin/service-providers/models/${id}/status",
 	providerModelGroupList: "/api/v1/admin/provider-models/groups/queries",
+	modelIdentifierMappingCreate: "/api/v1/admin/model-identifier-mappings",
+	modelIdentifierMappingList: "/api/v1/admin/model-identifier-mappings/queries",
+	modelIdentifierMappingDetail: "/api/v1/admin/model-identifier-mappings/${id}",
+	modelIdentifierMappingStatus: "/api/v1/admin/model-identifier-mappings/${id}/status",
+	modelIdentifierMappingBatchStatus: "/api/v1/admin/model-identifier-mappings/batch-status",
+	modelIdentifierMappingBatchDelete: "/api/v1/admin/model-identifier-mappings/batch-delete",
+	modelIdentifierMappingSourceOptions: "/api/v1/admin/model-identifier-mappings/source-options",
+	modelIdentifierMappingTargetOptions: "/api/v1/admin/model-identifier-mappings/target-options",
 	officialStaffList: "/api/v1/official/admin/modes",
 	officialStaffDefault: "/api/v1/official/admin/modes/default",
 	officialStaffDefaultAgent: "/api/v1/official/admin/mode-settings/default-agent",

@@ -730,8 +730,7 @@ final class RedisAdapterV3NativeRedisPipeline
             return [];
         }
         $this->executed = true;
-        $result = $this->redis->exec();
-        return $result;
+        return $this->redis->exec();
     }
 }
 
@@ -756,14 +755,6 @@ final class RedisAdapterV3TestSender extends Sender
         $this->availableSocket->shouldReceive('isAvailable')->andReturn(true);
     }
 
-    /** 按当前 SID 映射返回连接替身，模拟 Sender 保存在线连接的行为。 */
-    public function getResponse(int $fd): mixed
-    {
-        return $this->sidProvider->getSid($fd) === ''
-            ? null
-            : new RedisAdapterV3TestConnection($fd, $this->availableSocket);
-    }
-
     public function __call($name, $arguments)
     {
         if ($name === 'disconnect') {
@@ -771,6 +762,14 @@ final class RedisAdapterV3TestSender extends Sender
             return true;
         }
         throw new RuntimeException('unsupported sender method ' . $name);
+    }
+
+    /** 按当前 SID 映射返回连接替身，模拟 Sender 保存在线连接的行为。 */
+    public function getResponse(int $fd): mixed
+    {
+        return $this->sidProvider->getSid($fd) === ''
+            ? null
+            : new RedisAdapterV3TestConnection($fd, $this->availableSocket);
     }
 
     public function pushFrame(int $fd, FrameInterface $frame): bool

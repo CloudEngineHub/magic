@@ -158,7 +158,7 @@ export function ProjectResourceInfo({
 				<div className="flex min-w-0 flex-col gap-0.5">
 					<div className="flex min-w-0 items-start gap-1.5">
 						<SmartTooltip
-							className="min-w-0 text-sm font-medium leading-5 text-foreground"
+							className="min-w-0 text-sm font-medium leading-5 text-foreground [overflow-wrap:anywhere]"
 							maxLines={2}
 							align="start"
 							disabled={mobile}
@@ -172,7 +172,7 @@ export function ProjectResourceInfo({
 					</div>
 					{description && (
 						<SmartTooltip
-							className="text-xs leading-4 text-muted-foreground"
+							className="min-w-0 text-xs leading-4 text-muted-foreground [overflow-wrap:anywhere]"
 							maxLines={2}
 							align="start"
 							disabled={mobile}

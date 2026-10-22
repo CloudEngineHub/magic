@@ -1,18 +1,14 @@
+import { toModelMultiplierUpdate } from "../../../../model-billing-reference";
 import { RequestUrl } from "@magic-admin-v2/api/constants";
 import type { HttpClient, RequestOptions } from "@magic-admin-v2/api/types";
+import { normalizeIdentityWatermark } from "@magic-admin-v2/components/identity-watermark/watermark-utils";
 import type {
   PlatformInfoDetails,
   PlatformInfoFormState,
   PlatformInfoWatermark,
   PlatformLocale,
-  PlatformWatermarkDepth,
-  PlatformWatermarkField,
   UpdatePlatformInfoParams,
 } from "@magic-admin-v2/features/platform-info/types";
-import {
-  platformWatermarkDepths,
-  platformWatermarkFields,
-} from "@magic-admin-v2/features/platform-info/utils";
 import { Language } from "@magic-admin-v2/i18n/resources";
 
 const emptyLocalizedText: Record<PlatformLocale, string> = {
@@ -20,45 +16,18 @@ const emptyLocalizedText: Record<PlatformLocale, string> = {
   en_US: "",
 };
 
-/** 与后端 platform_settings 的默认水印配置保持一致。 */
-const defaultWatermark: PlatformInfoWatermark = {
-  enabled: false,
-  fields: ["real_name"],
-  depth: "light",
-};
-
 function normalizeLocale(value: unknown): PlatformLocale {
   return value === Language.EnUS ? Language.EnUS : Language.ZhCN;
 }
 
-function normalizeWatermarkDepth(value?: string): PlatformWatermarkDepth {
-  return platformWatermarkDepths.find((depth) => depth === value) ?? defaultWatermark.depth;
-}
-
-function normalizeWatermarkFields(value?: readonly string[]): PlatformWatermarkField[] {
-  const selected = new Set(value ?? []);
-
-  // 只保留前端能渲染的字段并按固定顺序输出，避免后端返回未知字段或乱序时
-  // 复选框组出现无法取消的脏数据。
-  return platformWatermarkFields.filter((field) => selected.has(field));
-}
-
 /**
- * 归一化服务端水印配置。缺省字段回退到后端默认值，
- * 保证预览态、编辑态与提交参数使用同一份结构。
+ * 归一化服务端水印配置。规则（默认值、未知字段/档位、保留显式空数组）
+ * 由跨 feature 的身份水印共享模块统一维护，企业水印走同一份实现。
  */
 export function normalizePlatformWatermark(
   value?: Partial<PlatformInfoWatermark> | null,
 ): PlatformInfoWatermark {
-  if (!value) {
-    return { ...defaultWatermark, fields: [...defaultWatermark.fields] };
-  }
-
-  return {
-    enabled: value.enabled ?? defaultWatermark.enabled,
-    fields: normalizeWatermarkFields(value.fields),
-    depth: normalizeWatermarkDepth(value.depth),
-  };
+  return normalizeIdentityWatermark(value);
 }
 
 function normalizeLocalizedText(value?: Partial<Record<PlatformLocale, string>>) {
@@ -82,6 +51,8 @@ export function toPlatformInfoFormState(data: PlatformInfoDetails): PlatformInfo
         link: data.footer?.filing?.link ?? "https://beian.miit.gov.cn/",
       },
     },
+    model_billing_multiplier:
+      data.model_billing_multiplier ?? createEmptyPlatformInfoFormState().model_billing_multiplier,
     watermark: normalizePlatformWatermark(data.watermark),
     name_i18n: normalizeLocalizedText(data.name_i18n),
     title_i18n: normalizeLocalizedText(data.title_i18n),
@@ -107,6 +78,7 @@ export function createEmptyPlatformInfoFormState(): PlatformInfoFormState {
         link: "https://beian.miit.gov.cn/",
       },
     },
+    model_billing_multiplier: { enabled: false, base_price_cny: null, usd_to_cny_rate: null },
     watermark: normalizePlatformWatermark(),
     name_i18n: { ...emptyLocalizedText },
     title_i18n: { ...emptyLocalizedText },
@@ -127,6 +99,7 @@ export function createDefaultPlatformInfoDetails(): PlatformInfoDetails {
     minimal_logo: null,
     default_language: defaults.default_language,
     footer: defaults.footer,
+    model_billing_multiplier: defaults.model_billing_multiplier,
     watermark: defaults.watermark,
     name_i18n: defaults.name_i18n,
     title_i18n: defaults.title_i18n,
@@ -148,6 +121,7 @@ export function toUpdatePlatformInfoParams(
     favicon_url: values.favicon,
     default_language: values.default_language,
     footer: values.footer,
+    model_billing_multiplier: toModelMultiplierUpdate(values.model_billing_multiplier),
     watermark: values.watermark,
     name_i18n: values.name_i18n,
     title_i18n: values.title_i18n,
@@ -174,6 +148,9 @@ export function toChangedPlatformInfoParams(
   if (dirtyFields.favicon) params.favicon_url = values.favicon;
   if (dirtyFields.default_language) params.default_language = values.default_language;
   if (dirtyFields.footer) params.footer = values.footer;
+  // 开关、基准价及汇率相互依赖，任一变化都提交完整展示配置。
+  if (dirtyFields.model_billing_multiplier)
+    params.model_billing_multiplier = toModelMultiplierUpdate(values.model_billing_multiplier);
   // 水印的 enabled、fields、depth 相互依赖（开启时必须有内容），
   // 因此任一子字段变化都提交完整水印对象，后端按 array_replace 合并。
   if (dirtyFields.watermark) params.watermark = values.watermark;

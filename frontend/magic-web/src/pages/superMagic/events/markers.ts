@@ -13,10 +13,9 @@ import type { SuperMagicMessageQueueMessage } from "@/types/chat/intermediate_me
  *   animated: true,
  * })
  */
-export interface SuperMagicFocusCanvasElementPayload {
+interface SuperMagicFocusCanvasElementPayloadBase {
 	isFromPlaybackToolNode?: boolean
 	canvasDesignId: string
-	elementIds: string[]
 	selectElement?: string[] | boolean
 	animated?: boolean
 	padding?: PaddingInsetConfig
@@ -24,6 +23,21 @@ export interface SuperMagicFocusCanvasElementPayload {
 	showGenerationDetails?: boolean
 	contentId?: string
 }
+
+/** Focus known Canvas elements directly. */
+export type SuperMagicFocusCanvasElementDirectPayload = SuperMagicFocusCanvasElementPayloadBase & {
+	elementIds: string[]
+	mediaFileId?: never
+}
+
+/** Ask the target Canvas to resolve matching media elements from a project file ID. */
+export type SuperMagicFocusCanvasMediaPayload = SuperMagicFocusCanvasElementPayloadBase & {
+	elementIds?: never
+	mediaFileId: string
+}
+
+export type SuperMagicFocusCanvasElementPayload =
+	SuperMagicFocusCanvasElementDirectPayload | SuperMagicFocusCanvasMediaPayload
 
 /**
  * Super_Magic_Marker_Data_Updated 的标准 contract。

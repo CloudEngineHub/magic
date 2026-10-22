@@ -66,6 +66,16 @@
 .renameScrollable {
 	flex: 1 1 auto;
 	min-height: 0;
+	overflow: hidden;
+}
+
+/* Radix needs a height-constrained viewport; the panel's max-height alone only clips it. */
+.renameScrollViewport {
+	max-height: min(440px, calc(100vh - 160px));
+}
+
+.renameFileScrollViewport {
+	max-height: min(60vh, 440px);
 }
 
 .renameSection {
@@ -241,6 +251,14 @@
 	}
 
 	.renameFileList {
+		max-height: min(60dvh, 440px);
+	}
+
+	.renameScrollViewport {
+		max-height: min(440px, calc(100dvh - 160px));
+	}
+
+	.renameFileScrollViewport {
 		max-height: min(60dvh, 440px);
 	}
 }

@@ -21,12 +21,18 @@ use App\ErrorCode\PermissionErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Interfaces\Authorization\Web\MagicUserAuthorization;
 use Dtyq\AsyncEvent\AsyncEventUtil;
+use Hyperf\Contract\TranslatorInterface;
 use Hyperf\DbConnection\Db;
 
 use function Hyperf\Translation\__;
 
 class FunctionPermissionAppService extends AbstractPermissionAppService
 {
+    /**
+     * 国际部署 ID（与前台 clawBrand 的 MagiClaw 判定一致）。
+     */
+    private const string INTERNATIONAL_DEPLOYMENT_ID = 'a1565492';
+
     public function __construct(
         private readonly FunctionPermissionDomainService $domainService,
         private readonly MagicDepartmentDomainService $departmentDomainService,
@@ -332,7 +338,44 @@ class FunctionPermissionAppService extends AbstractPermissionAppService
 
         unset($item['function_name_key'], $item['module_name_key'], $item['description_key']);
 
+        if (($item['module_code'] ?? '') === 'magic_claw') {
+            $item = $this->applyClawBranding($item);
+        }
+
         return $item;
+    }
+
+    /**
+     * 龙虾描述按部署形态替换关键字：国际 MagiClaw，国内英文 SuperClaw，国内中文超级龙虾。
+     *
+     * @param array<string, mixed> $item
+     * @return array<string, mixed>
+     */
+    private function applyClawBranding(array $item): array
+    {
+        $brand = $this->resolveClawBrand();
+
+        $item['description'] = strtr((string) $item['description'], [
+            'Magic Claw' => $brand,
+            '龙虾' => $brand,
+        ]);
+
+        return $item;
+    }
+
+    private function resolveClawBrand(): string
+    {
+        $deploymentId = (string) config('super-magic.sandbox.deployment_id', '');
+        if ($deploymentId === self::INTERNATIONAL_DEPLOYMENT_ID) {
+            return 'MagiClaw';
+        }
+
+        $locale = (string) (di(TranslatorInterface::class)->getLocale() ?? 'en_US');
+        if (str_starts_with(strtolower($locale), 'zh')) {
+            return '超级龙虾';
+        }
+
+        return 'SuperClaw';
     }
 
     /**

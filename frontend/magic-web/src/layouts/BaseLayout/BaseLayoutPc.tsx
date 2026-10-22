@@ -51,7 +51,8 @@ const BaseLayoutPc = observer(() => {
 	const projectPage =
 		routeName === RouteName.SuperWorkspaceProjectState ||
 		routeName === RouteName.SuperWorkspaceProjectTopicState ||
-		routeName === RouteName.SuperChatProjectState
+		routeName === RouteName.SuperChatProjectState ||
+		routeName === RouteName.AiCanvasProjectState
 	const { config: widgetConfig, embedContext } = useMagicWidgetConfig()
 	const widgetLayout = resolveMagicWidgetCrewLayout({
 		configuredLayout: embedContext ? widgetConfig.layout : undefined,

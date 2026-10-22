@@ -89,5 +89,7 @@ export interface ProjectPageInputContainerProps {
 	}) => void
 	/** Optional override for send-time topic creation (e.g. project entry with detail backfill). */
 	createTopic?: SceneEditorContext["createTopic"]
+	/** Mentions bound to every sent message, e.g. the AI canvas folder. */
+	getImplicitMentionItems?: SceneEditorContext["getImplicitMentionItems"]
 	editorRef?: SceneEditorContext["editorRef"]
 }

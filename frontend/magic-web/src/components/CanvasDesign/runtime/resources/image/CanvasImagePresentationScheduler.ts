@@ -340,6 +340,21 @@ export class CanvasImagePresentationScheduler {
 		this.enqueueTask(target, resource)
 	}
 
+	private releaseSupersededLowIfUnused(path: string): void {
+		const canonicalPath = this.canonicalPath(path)
+		for (const target of this.targets.values()) {
+			if (target.canonicalPath !== canonicalPath) continue
+			const consumer = this.getConsumer(target.elementId)
+			if (target.variant === "low") return
+			if (consumer?.getDisplayResourceVariant() === "low") return
+		}
+
+		const imageResourceManager = this.canvas.imageResourceManager as {
+			releaseSupersededLowIfUnused?: (resourcePath: string) => void
+		}
+		imageResourceManager.releaseSupersededLowIfUnused?.(path)
+	}
+
 	private enqueueTask(target: InternalPresentationTarget, resource: LoadedResource): boolean {
 		if (this.closedImages.has(resource.image)) return false
 		if (!this.isResourceEligible(target, resource)) return false
@@ -412,8 +427,7 @@ export class CanvasImagePresentationScheduler {
 
 	private getConsumer(elementId: string): ImagePresentationConsumer | null {
 		const element = this.canvas.elementManager.getElementInstance(elementId) as
-			| Partial<ImagePresentationConsumer>
-			| undefined
+			Partial<ImagePresentationConsumer> | undefined
 		if (
 			!element ||
 			typeof element.getDisplayResourceVariant !== "function" ||
@@ -486,6 +500,9 @@ export class CanvasImagePresentationScheduler {
 				continue
 			}
 			if (!consumer.applyPresentedResource(task.resource, target.variant)) continue
+			if (task.resource.variant !== "low") {
+				this.releaseSupersededLowIfUnused(target.path)
+			}
 			appliedCount += 1
 			if (task.resource.variant === "low") this.stats.appliedLowCount += 1
 			if (task.resource.variant === "preview") this.stats.appliedPreviewCount += 1

@@ -1,37 +1,60 @@
 import { fireEvent, render, screen } from "@testing-library/react"
+import type { ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
-import MagicDropdownDesktop from "@/components/base/MagicDropdown/MagicDropdownDesktop"
 import { TopicHistoryTrigger } from "../TopicHistoryTrigger"
 
-vi.mock("@/components/base", async () => {
-	const { default: MagicTooltip } = await import("@/components/base/MagicTooltip")
-	return { MagicTooltip }
-})
+vi.mock("@/components/base", () => ({
+	MagicTooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+}))
 
 describe("TopicHistoryTrigger", () => {
-	it("forwards dropdown trigger events when the tooltip is enabled", () => {
-		const handleOpenChange = vi.fn()
+	it("toggles history before notifying the caller", async () => {
+		const order: string[] = []
+		const onToggle = vi.fn(() => {
+			order.push("toggle")
+		})
+		const onTriggerAction = vi.fn(() => {
+			order.push("notify")
+		})
+
 		render(
 			<TopicHistoryTrigger
-				mode="dropdown"
+				mode="layout"
 				isActive={false}
-				tooltipTitle="History topics"
-				renderDropdown={(trigger) => (
-					<MagicDropdownDesktop
-						trigger={["click"]}
-						onOpenChange={handleOpenChange}
-						popupRender={() => <div>History</div>}
-					>
-						{trigger}
-					</MagicDropdownDesktop>
-				)}
+				tooltipTitle="History"
+				onToggle={onToggle}
+				onTriggerAction={onTriggerAction}
 			/>,
 		)
 
-		const button = screen.getByTestId("message-header-history-button")
-		expect(button).toHaveAttribute("data-slot", "dropdown-menu-trigger")
+		fireEvent.click(screen.getByTestId("message-header-history-button"))
 
-		fireEvent.keyDown(button, { key: "Enter", code: "Enter" })
-		expect(handleOpenChange).toHaveBeenCalledWith(true)
+		await vi.waitFor(() => {
+			expect(onTriggerAction).toHaveBeenCalledTimes(1)
+		})
+		expect(onToggle).toHaveBeenCalledTimes(1)
+		expect(order).toEqual(["toggle", "notify"])
+	})
+
+	it("keeps the history toggle when the caller notification fails", async () => {
+		const onToggle = vi.fn()
+		const onTriggerAction = vi.fn().mockRejectedValue(new Error("notify failed"))
+
+		render(
+			<TopicHistoryTrigger
+				mode="layout"
+				isActive={false}
+				tooltipTitle="History"
+				onToggle={onToggle}
+				onTriggerAction={onTriggerAction}
+			/>,
+		)
+
+		fireEvent.click(screen.getByTestId("message-header-history-button"))
+
+		await vi.waitFor(() => {
+			expect(onTriggerAction).toHaveBeenCalledTimes(1)
+		})
+		expect(onToggle).toHaveBeenCalledTimes(1)
 	})
 })

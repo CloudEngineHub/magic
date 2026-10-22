@@ -157,6 +157,7 @@ export class MagicPlatformService implements PlatformServiceInterface {
 					RouteName.SuperWorkspaceState,
 					RouteName.SuperWorkspaceProjectState,
 					RouteName.SuperWorkspaceProjectTopicState,
+					RouteName.AiCanvasProjectState,
 				].includes(route.name as RouteName)
 
 			if (route?.name === RouteName.MobileTabs) {

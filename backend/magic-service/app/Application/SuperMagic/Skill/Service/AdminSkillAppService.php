@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace App\Application\SuperMagic\Skill\Service;
 
+use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
 use App\Application\SuperMagic\Skill\Assembler\AdminSkillAssembler;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
@@ -45,6 +46,8 @@ use App\Interfaces\SuperMagic\Skill\DTO\Response\QuerySkillVersionsResponseAdmin
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\Coroutine\Coroutine;
 use Hyperf\DbConnection\Db;
+use Hyperf\Di\Annotation\Inject;
+use Psr\Container\ContainerInterface;
 use Throwable;
 
 /**
@@ -55,6 +58,9 @@ class AdminSkillAppService extends AbstractSkillAppService
     use HasLogger;
 
     private const VECTOR_REINDEX_EVENT_BATCH_SIZE = 100;
+
+    #[Inject]
+    protected ContainerInterface $container;
 
     public function __construct(
         protected SkillDomainService $skillDomainService,
@@ -389,6 +395,13 @@ class AdminSkillAppService extends AbstractSkillAppService
             Db::rollBack();
             throw $throwable;
         }
+
+        try {
+            $this->container->get(ReviewNotificationAppService::class)->publishSkillApproved($versionEntity, (string) ($skillEntity?->getId() ?? ''));
+        } catch (Throwable $throwable) {
+            // Notification delivery must not invalidate the committed approval.
+            $this->logger->warning('Skill approval notification failed', ['version_id' => $id, 'error' => $throwable->getMessage()]);
+        }
     }
 
     /**
@@ -575,6 +588,14 @@ class AdminSkillAppService extends AbstractSkillAppService
 
         if ($requestDTO->getAction() === ReviewStatus::APPROVED->value) {
             $version = $this->skillVersionDomainService->findSkillVersionByIdWithoutOrganizationFilter($id);
+            if ($version !== null) {
+                try {
+                    $skill = $this->skillDomainService->findSkillByCode($dataIsolation, $version->getCode());
+                    $this->container->get(ReviewNotificationAppService::class)->publishSkillApproved($version, (string) ($skill?->getId() ?? ''));
+                } catch (Throwable $throwable) {
+                    $this->logger->warning('Skill approval notification failed', ['version_id' => $id, 'error' => $throwable->getMessage()]);
+                }
+            }
             $market = $version === null ? null : $this->skillMarketDomainService->findStoreSkillBySkillCode($version->getCode());
             if ($market !== null && $market->getId() !== null) {
                 AsyncEventUtil::dispatch(new SkillMarketPublishedEvent(

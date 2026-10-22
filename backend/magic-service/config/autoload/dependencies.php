@@ -15,6 +15,7 @@ use App\Application\Flow\ExecuteManager\NodeRunner\Code\CodeExecutor\PythonExecu
 use App\Application\Flow\ExecuteManager\NodeRunner\ReplyMessage\Struct\BaseMessageAttachmentHandler;
 use App\Application\Flow\ExecuteManager\NodeRunner\ReplyMessage\Struct\MessageAttachmentHandlerInterface;
 use App\Application\Kernel\Contract\MagicPermissionInterface;
+use App\Application\Kernel\DataIsolationInitializer;
 use App\Application\Kernel\MagicPermission;
 use App\Application\KnowledgeBase\Port\EmbeddingProviderPort;
 use App\Application\KnowledgeBase\Port\FragmentHttpPassthroughPort;
@@ -42,6 +43,10 @@ use App\Application\MCP\Utils\MCPExecutor\ExternalStdioExecutor;
 use App\Application\MCP\Utils\MCPExecutor\ExternalStdioExecutorInterface;
 use App\Application\ModelGateway\Component\Points\PointComponent;
 use App\Application\ModelGateway\Component\Points\PointComponentInterface;
+use App\Application\Notification\Contract\NotificationEventPublisherInterface;
+use App\Application\Notification\Service\NotificationEventAppService;
+use App\Application\Notification\Strategy\DefaultNotificationCatalogStrategy;
+use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
 use App\Application\Provider\Policy\DefaultProviderControlPolicy;
 use App\Application\Provider\Policy\ProviderControlPolicyInterface;
 use App\Application\SuperMagic\Message\Event\Subscribe\SuperAgentMessageSubscriberV2;
@@ -217,6 +222,14 @@ use App\Domain\ModelGateway\Repository\Persistence\UserConfigRepository;
 use App\Domain\ModelGateway\Repository\QueueCoreRepositoryInterface;
 use App\Domain\ModelGateway\Repository\QueueExecutorConfigRepositoryInterface;
 use App\Domain\ModelGateway\Repository\VideoQueueOperationRepositoryInterface;
+use App\Domain\Notification\Entity\ValueObject\NotificationDataIsolation;
+use App\Domain\Notification\Repository\Facade\NotificationEventRepositoryInterface;
+use App\Domain\Notification\Repository\Facade\NotificationRepositoryInterface;
+use App\Domain\Notification\Repository\Facade\NotificationTemplateRepositoryInterface;
+use App\Domain\Notification\Repository\Persistence\NotificationEventRepository;
+use App\Domain\Notification\Repository\Persistence\NotificationRepository;
+use App\Domain\Notification\Repository\Persistence\NotificationTemplateRepository;
+use App\Domain\Notification\Service\NotificationEventTypeRegistry;
 use App\Domain\OrganizationEnvironment\Entity\Facade\OpenPlatformConfigInterface;
 use App\Domain\OrganizationEnvironment\Entity\Item\OpenPlatformConfigItem;
 use App\Domain\OrganizationEnvironment\Repository\Facade\EnvironmentRepositoryInterface;
@@ -226,8 +239,8 @@ use App\Domain\OrganizationEnvironment\Repository\Facade\OrganizationsPlatformRe
 use App\Domain\OrganizationEnvironment\Repository\MagicEnvironmentsRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsEnvironmentRepository;
 use App\Domain\OrganizationEnvironment\Repository\OrganizationsPlatformRepository;
-use App\Domain\Permission\Gateway\OrganizationAdminSyncInterface;
 use App\Domain\Permission\Gateway\NullOrganizationAdminSync;
+use App\Domain\Permission\Gateway\OrganizationAdminSyncInterface;
 use App\Domain\Permission\Repository\Facade\OperationPermissionRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\OrganizationAdminRepositoryInterface;
 use App\Domain\Permission\Repository\Facade\ResourceVisibilityRepositoryInterface;
@@ -236,6 +249,7 @@ use App\Domain\Permission\Repository\Persistence\OperationPermissionRepository;
 use App\Domain\Permission\Repository\Persistence\ResourceVisibilityRepository;
 use App\Domain\Provider\Repository\Facade\AiAbilityRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\MagicProviderAndModelsInterface;
+use App\Domain\Provider\Repository\Facade\ModelIdentifierMappingRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderConfigRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderModelConfigVersionRepositoryInterface;
 use App\Domain\Provider\Repository\Facade\ProviderModelRepositoryInterface;
@@ -243,6 +257,7 @@ use App\Domain\Provider\Repository\Facade\ProviderOriginalModelRepositoryInterfa
 use App\Domain\Provider\Repository\Facade\ProviderRepositoryInterface;
 use App\Domain\Provider\Repository\Persistence\AiAbilityRepository;
 use App\Domain\Provider\Repository\Persistence\MagicProviderAndModelsRepository;
+use App\Domain\Provider\Repository\Persistence\ModelIdentifierMappingRepository;
 use App\Domain\Provider\Repository\Persistence\ProviderConfigRepository;
 use App\Domain\Provider\Repository\Persistence\ProviderModelConfigVersionRepository;
 use App\Domain\Provider\Repository\Persistence\ProviderModelRepository;
@@ -290,6 +305,7 @@ use App\Infrastructure\Core\DataIsolation\BaseHandleDataIsolation;
 use App\Infrastructure\Core\DataIsolation\BaseOrganizationInfoManager;
 use App\Infrastructure\Core\DataIsolation\BaseSubscriptionManager;
 use App\Infrastructure\Core\DataIsolation\BaseThirdPlatformDataIsolationManager;
+use App\Infrastructure\Core\DataIsolation\DataIsolationInitializerInterface;
 use App\Infrastructure\Core\DataIsolation\HandleDataIsolationInterface;
 use App\Infrastructure\Core\DataIsolation\OrganizationInfoManagerInterface;
 use App\Infrastructure\Core\DataIsolation\SubscriptionManagerInterface;
@@ -319,6 +335,7 @@ use App\Infrastructure\Design\Contract\VideoGatewayClientInterface;
 use App\Infrastructure\Design\ModelGatewayVideoGatewayClient;
 use App\Infrastructure\Design\VideoGatewayPayloadBuilder;
 use App\Infrastructure\ExternalAPI\Proxy\EmptyProxyConfigResolverInterface;
+use App\Infrastructure\ExternalAPI\Proxy\LocalProxyConfigResolver;
 use App\Infrastructure\ExternalAPI\Proxy\ProxyConfigResolverInterface;
 use App\Infrastructure\ExternalAPI\Sms\SmsInterface;
 use App\Infrastructure\ExternalAPI\Sms\TemplateInterface;
@@ -361,6 +378,7 @@ use App\Infrastructure\Util\Video\VideoFrameExtractorInterface;
 use App\Interfaces\MCP\Facade\HttpTransportHandler\ApiKeyProviderAuthenticator;
 use Dtyq\PhpMcp\Shared\Auth\AuthenticatorInterface;
 use Dtyq\PhpMcp\Shared\Kernel\Packer\PackerInterface;
+use GuzzleHttp\ClientInterface as GuzzleClientInterface;
 use Hyperf\Config\ProviderConfig;
 use Hyperf\Crontab\Strategy\CoroutineStrategy;
 use Hyperf\Crontab\Strategy\StrategyInterface;
@@ -376,6 +394,14 @@ use Hyperf\SocketIOServer\SidProvider\SidProviderInterface;
 use Psr\Http\Client\ClientInterface;
 
 $dependencies = [
+    NotificationCatalogStrategyInterface::class => DefaultNotificationCatalogStrategy::class,
+    NotificationEventPublisherInterface::class => NotificationEventAppService::class,
+    NotificationEventTypeRegistry::class => NotificationEventTypeRegistry::class,
+    NotificationDataIsolation::class => NotificationDataIsolation::class,
+    NotificationRepositoryInterface::class => NotificationRepository::class,
+    NotificationEventRepositoryInterface::class => NotificationEventRepository::class,
+    NotificationTemplateRepositoryInterface::class => NotificationTemplateRepository::class,
+
     PointComponentInterface::class => new PriorityDefinition(PointComponent::class, 10),
 
     SmsInterface::class => VolceApiClient::class,
@@ -395,6 +421,7 @@ $dependencies = [
     TemplateInterface::class => Template::class,
 
     // core
+    DataIsolationInitializerInterface::class => DataIsolationInitializer::class,
     ThirdPlatformDataIsolationManagerInterface::class => BaseThirdPlatformDataIsolationManager::class,
     DocumentSplitterInterface::class => OdinRecursiveCharacterTextSplitter::class,
     TempAuthInterface::class => RedisTempAuth::class,
@@ -474,6 +501,7 @@ $dependencies = [
     ProviderModelConfigVersionRepositoryInterface::class => ProviderModelConfigVersionRepository::class,
     ProviderOriginalModelRepositoryInterface::class => ProviderOriginalModelRepository::class,
     MagicProviderAndModelsInterface::class => MagicProviderAndModelsRepository::class,
+    ModelIdentifierMappingRepositoryInterface::class => ModelIdentifierMappingRepository::class,
     AiAbilityRepositoryInterface::class => AiAbilityRepository::class,
     // magicbase
     MagicBaseTableRepositoryInterface::class => MagicBaseTableRepository::class,
@@ -537,6 +565,7 @@ $dependencies = [
     PermissionLabelServiceInterface::class => PermissionLabelService::class,
 
     // system
+    GuzzleClientInterface::class => SimpleClientFactory::class,
     ClientInterface::class => SimpleClientFactory::class,
     StrategyInterface::class => CoroutineStrategy::class,
 
@@ -724,5 +753,10 @@ foreach ($dependenciesPriority as $interface => $definition) {
 // regardless of the fallback bindings declared above or other provider order.
 $dependencies[AgentExecuteInterface::class] = SuperAgentMessageSubscriberV2::class;
 $dependencies[SuperAgentMessageInterface::class] = SuperAgentMessage::class;
+
+// 在服务商优先级配置合并后覆盖，仅供本地调试，避免读取数据库代理地址。
+if (\Hyperf\Support\env('APP_ENV', '') === 'local' && \Hyperf\Support\env('MODEL_GATEWAY_LOCAL_PROXY_ENABLED', false)) {
+    $dependencies[ProxyConfigResolverInterface::class] = LocalProxyConfigResolver::class;
+}
 
 return $dependencies;

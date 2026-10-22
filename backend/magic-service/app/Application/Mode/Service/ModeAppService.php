@@ -13,8 +13,12 @@ use App\Application\Mode\DTO\ModeGroupAggregateDTO;
 use App\Application\Permission\Service\UserModelAccessAppService;
 use App\Application\SuperMagic\Agent\Service\Old\SuperMagicAgentOldAppService;
 use App\Application\SuperMagic\Agent\Service\SuperMagicAgentAppService;
+use App\Domain\Kernel\Service\PlatformSettingsDomainService;
 use App\Domain\Mode\Entity\ModeAggregate;
 use App\Domain\Mode\Entity\ValueQuery\ModeQuery;
+use App\Domain\ModelGateway\Entity\ValueObject\ModelGatewayDataIsolation;
+use App\Domain\Permission\Entity\ValueObject\ModelAccessContext;
+use App\Domain\Permission\Entity\ValueObject\PermissionControlStatus;
 use App\Domain\Provider\Entity\ProviderModelEntity;
 use App\Domain\Provider\Entity\ValueObject\Category;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
@@ -324,7 +328,8 @@ class ModeAppService extends AbstractModeAppService
      */
     private function buildModeAggregateDTOs(MagicUserAuthorization $authorization, array $modeAggregates): array
     {
-        $allProviderModelsWithStatus = $this->getProviderModelsByModeAggregates($modeAggregates);
+        $availableProviderGroups = [];
+        $allProviderModelsWithStatus = $this->getProviderModelsByModeAggregates($modeAggregates, $availableProviderGroups);
 
         $allAggregateModels = [];
         $allAggregateImageModels = [];
@@ -368,6 +373,17 @@ class ModeAppService extends AbstractModeAppService
             $this->buildVideoGenerationConfigCandidates(array_keys($providerVideoModels))
         );
 
+        $reasoningCapabilities = $this->buildReasoningCapabilities($authorization, $providerModels, $allProviderModelsWithStatus);
+        // 倍率与后台配置共用持久化状态，整批模型只读取一次。
+        $multipliers = di(ModelBillingMultiplierCalculator::class)->calculate(
+            $reasoningCapabilities,
+            $availableProviderGroups,
+            di(PlatformSettingsDomainService::class)->getPersisted()->getModelBillingMultiplier()
+        );
+        foreach ($reasoningCapabilities as $modelId => &$capability) {
+            $capability['billing_multiplier'] = $multipliers[$modelId];
+        }
+        unset($capability);
         $modeAggregateDTOs = [];
         foreach ($modeAggregates as $aggregate) {
             $modeAggregateDTOs[$aggregate->getMode()->getIdentifier()] = ModeAssembler::aggregateToDTO(
@@ -376,7 +392,9 @@ class ModeAppService extends AbstractModeAppService
                 $upgradeRequiredModelIds,
                 $providerImageModels,
                 $providerVideoModels,
-                $featuredVideoGenerationConfigs
+                $featuredVideoGenerationConfigs,
+                true,
+                $reasoningCapabilities
             );
         }
 
@@ -496,6 +514,19 @@ class ModeAppService extends AbstractModeAppService
         return $context['is_restricted'] ? $context['accessible_model_id_map'] : null;
     }
 
+    /** 批量复用可用模型和权限策略，动态模型继承实际叶子模型的思考能力。 */
+    private function buildReasoningCapabilities(MagicUserAuthorization $authorization, array $models, array $preloadedModels): array
+    {
+        $access = di(UserModelAccessAppService::class)->resolveAccessContext($authorization);
+        $accessContext = new ModelAccessContext(
+            PermissionControlStatus::from($access['permission_control_status']),
+            $access['denied_model_ids'],
+            $access['accessible_model_ids']
+        );
+        $isolation = ModelGatewayDataIsolation::createByBaseDataIsolation($this->getModeDataIsolation($authorization));
+        return di(ModelReasoningCapabilityResolver::class)->resolve($models, $preloadedModels, $isolation, $accessContext);
+    }
+
     private function buildModeGroups(ModeAggregateDTO $modeAggregateDTO): array
     {
         $modeGroups = [];
@@ -531,7 +562,7 @@ class ModeAppService extends AbstractModeAppService
      * @param array $allModelIds 所有需要查询的modelId
      * @return array<string, ProviderModelEntity> 已通过级联状态筛选的可用模型
      */
-    private function getModelsBatch(array $allModelIds): array
+    private function getModelsBatch(array $allModelIds, array &$availableGroups = []): array
     {
         if (empty($allModelIds)) {
             return [];
@@ -542,6 +573,7 @@ class ModeAppService extends AbstractModeAppService
         $allModels = $this->expandModelGroupsForDynamicSubModels($providerDataIsolation, $allModels);
         $providerStatuses = $this->getProviderStatuses($providerDataIsolation, $allModels);
 
+        $availableGroups = $this->filterAvailableModelGroups($allModels, $providerStatuses);
         return $this->filterAvailableModels($allModels, $providerStatuses);
     }
 
@@ -633,7 +665,7 @@ class ModeAppService extends AbstractModeAppService
     /**
      * @return array<string, ProviderModelEntity> 已通过级联状态筛选的可用模型
      */
-    private function getProviderModelsByModeAggregates(array $modeAggregates): array
+    private function getProviderModelsByModeAggregates(array $modeAggregates, array &$availableGroups = []): array
     {
         $allModelIds = [];
         foreach ($modeAggregates as $aggregate) {
@@ -644,6 +676,6 @@ class ModeAppService extends AbstractModeAppService
             }
         }
 
-        return $this->getModelsBatch(array_unique($allModelIds));
+        return $this->getModelsBatch(array_unique($allModelIds), $availableGroups);
     }
 }

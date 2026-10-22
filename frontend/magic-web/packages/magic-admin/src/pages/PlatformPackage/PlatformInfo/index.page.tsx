@@ -20,7 +20,8 @@ import type { PlatformInfo } from "@admin/types/platformInfo"
 import { useStyles } from "./styles"
 import LogoUploadItemComponent from "./components/LogoUploadItem"
 import { useIsMobile } from "@admin/hooks/useIsMobile"
-import WatermarkSettings from "./WatermarkSettings"
+import ModelMultiplierSettings from "./ModelMultiplierSettings"
+import { WatermarkSettings } from "@admin/components/WatermarkSettings"
 
 export enum PlatformLogoType {
 	ZH = "zh",
@@ -93,6 +94,7 @@ const InfoManagementPage = () => {
 						[PlatformLogoType.FAVICON]: res.favicon || "",
 					})
 					form.setFieldsValue({
+						model_billing_multiplier: res.model_billing_multiplier,
 						default_language: res.default_language,
 						name_i18n: {
 							zh_CN: res.name_i18n.zh_CN || "",
@@ -410,6 +412,7 @@ const InfoManagementPage = () => {
 						</Flex>
 					</div>
 				</Flex>
+				<ModelMultiplierSettings form={form} disabled={!hasEditRight} />
 				<SubHeader title={tPlatform("globalSystemPrompt")} />
 				<Flex className={cx(styles.formWrapper, styles.formItem)}>
 					<div className={styles.formItemLabel}>{tPlatform("globalSystemPrompt")}</div>
@@ -526,7 +529,11 @@ const InfoManagementPage = () => {
 					)}
 				</Flex>
 				<SubHeader title={tPlatform("watermarkSettings")} />
-				<WatermarkSettings form={form} canEdit={hasEditRight} />
+				<WatermarkSettings
+					form={form}
+					namespace="admin/platform/info"
+					canEdit={hasEditRight}
+				/>
 			</Form>
 		</BaseLayout>
 	)

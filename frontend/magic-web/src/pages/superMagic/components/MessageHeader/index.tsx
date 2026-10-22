@@ -60,6 +60,7 @@ import {
 import { isTopicShareAllowed } from "@/pages/superMagic/utils/is-topic-share-allowed"
 import { isMagicApp } from "@/utils/devices"
 import { classifyRestartSandboxError } from "./restartSandboxError"
+import { type MessageHeaderBuiltinAction, type MessageHeaderTitlePresentation } from "./headerSlots"
 interface TopicMutationSuccessOptions {
 	onSuccess?: () => Promise<void> | void
 }
@@ -68,6 +69,16 @@ interface MessageHeaderProps {
 	enableSimpleMode?: boolean
 	/** 普通项目无预览时，标题与操作跟随正文居中；其它页面由原布局控制。 */
 	alignWithContent?: boolean
+	/** Replaces the single-line topic title. Omitted callers keep the normal title and rename flow. */
+	titlePresentation?: MessageHeaderTitlePresentation
+	/** Hides a built-in action when the callback returns false. Omitted means every action stays visible. */
+	isBuiltinActionVisible?: (action: MessageHeaderBuiltinAction) => boolean
+	/** Notified after a built-in action completes. It cannot cancel that action. */
+	onBuiltinAction?: (action: MessageHeaderBuiltinAction) => Promise<void> | void
+	/** Host-owned buttons placed before the topic actions, such as fullscreen and pin. */
+	addonActionsBefore?: ReactNode
+	/** Host-owned buttons placed after the overflow menu, such as close. */
+	addonActionsAfter?: ReactNode
 	isConversationPanelCollapsed?: boolean
 	onToggleConversationPanel?: () => void
 	onExpandConversationPanel?: () => void
@@ -259,12 +270,19 @@ function useTopicHistoryPanelController({
 		setEditingValue("")
 	}, [])
 
-	const handleCreateTopic = useMemoizedFn(() => {
-		if (shouldHideTopicEntry) return
+	/** Creates a topic and reports whether that creation finished. */
+	const handleCreateTopic = useMemoizedFn(async () => {
+		if (shouldHideTopicEntry) return false
 		if (isConversationPanelCollapsed) {
 			onExpandConversationPanel?.()
 		}
-		void topicActions.createTopic()
+		try {
+			await topicActions.createTopic()
+		} catch {
+			// Topic creation reports its own failure. Skip the host callback.
+			return false
+		}
+		return true
 	})
 
 	return {
@@ -357,6 +375,11 @@ export const MessageHeaderTopicHistoryPanel = observer(function MessageHeaderTop
 
 function MessageHeader({
 	alignWithContent = false,
+	titlePresentation,
+	isBuiltinActionVisible,
+	onBuiltinAction,
+	addonActionsBefore,
+	addonActionsAfter,
 	historyTriggerRef,
 	fileSidebarControl,
 	isConversationPanelCollapsed = false,
@@ -415,6 +438,24 @@ function MessageHeader({
 			}),
 		[selectedProject, selectedTopic, t],
 	)
+	const renameEnabled = titlePresentation?.renameEnabled !== false
+	const presentedSecondary =
+		titlePresentation?.secondaryMode === "fixed"
+			? (titlePresentation.secondaryText ?? "")
+			: titlePresentation
+				? headerTitle
+				: ""
+	/** Built-in actions stay visible unless a caller, such as the widget adapter, hides them. */
+	const isActionVisible = (action: MessageHeaderBuiltinAction) =>
+		isBuiltinActionVisible?.(action) !== false
+	const showNewTopicAction = !shouldHideTopicEntry && isActionVisible("newTopic")
+	// Read-only projects keep the history button on the collapsed rail. The expanded
+	// header still follows showTopicHistory. A caller can hide the collapsed button
+	// by returning false from isBuiltinActionVisible.
+	const showHistoryAction =
+		!shouldHideTopicEntry &&
+		isActionVisible("history") &&
+		(isConversationPanelCollapsed || showTopicHistory)
 	const headerEditableTitle = useMemo(
 		() =>
 			resolveMessageHeaderEditableTitle({
@@ -437,10 +478,10 @@ function MessageHeader({
 	const isHistoryButtonActive = isLayoutHistoryTrigger ? isHistoryPanelOpen : topicHistoryOpen
 
 	const handleRename = useCallback(() => {
-		if (!selectedTopic) return
+		if (!renameEnabled || !selectedTopic) return
 		setIsRenaming(true)
 		setRenamingValue(headerEditableTitle)
-	}, [headerEditableTitle, selectedTopic])
+	}, [headerEditableTitle, renameEnabled, selectedTopic])
 
 	const handleRenameSubmit = useMemoizedFn(async () => {
 		if (!selectedTopic || !renamingValue.trim()) {
@@ -550,6 +591,58 @@ function MessageHeader({
 		}
 	})
 
+	/** Tells the host about a built-in action after that action has already completed. */
+	const notifyBuiltinAction = useMemoizedFn((action: MessageHeaderBuiltinAction) => {
+		if (!onBuiltinAction) return
+		void Promise.resolve(onBuiltinAction(action)).catch(() => {
+			// A host callback failure must not undo the action that already completed.
+		})
+	})
+
+	/** Runs one built-in action immediately, then notifies the host only when it completes. */
+	const runBuiltinAction = useMemoizedFn(
+		(
+			action: MessageHeaderBuiltinAction,
+			run: () => Promise<boolean | void> | boolean | void,
+		) => {
+			let result: Promise<boolean | void> | boolean | void
+			try {
+				result = run()
+			} catch {
+				return
+			}
+			void Promise.resolve(result)
+				.then((completed) => {
+					if (completed === false) return
+					notifyBuiltinAction(action)
+				})
+				.catch(() => {
+					// A failed built-in action does not notify the host.
+				})
+		},
+	)
+
+	/** Opens sharing, then notifies the host that the share entry was triggered. */
+	const handleShareOpenChange = useMemoizedFn((open: boolean) => {
+		if (!open) {
+			setSharePopoverVisible(false)
+			return
+		}
+		if (!isAllowShare) return
+		setSharePopoverVisible(true)
+		notifyBuiltinAction("share")
+	})
+
+	/** Opens the overflow menu, then notifies the host. */
+	const handleMoreOpenChange = useMemoizedFn((open: boolean) => {
+		if (!open) {
+			setTopicMenuOpen(false)
+			return
+		}
+		setTopicMenuOpen(true)
+		notifyBuiltinAction("more")
+	})
+
 	function renderHistoryTrigger(placement: "bottomRight" | "leftBottom") {
 		return (
 			<MessageHeaderHistoryControl
@@ -558,6 +651,7 @@ function MessageHeader({
 				isHistoryButtonActive={isHistoryButtonActive}
 				tooltipTitle={t("messageHeader.historyTopics")}
 				onToggleHistoryPanel={onToggleHistoryPanel}
+				onTriggerAction={onBuiltinAction ? () => notifyBuiltinAction("history") : undefined}
 				dropdownProps={{
 					topics,
 					projectId: selectedProject?.id || "",
@@ -647,32 +741,36 @@ function MessageHeader({
 									</span>
 								</MagicTooltip>
 
-								{!shouldHideTopicEntry ? (
+								{showNewTopicAction || showHistoryAction ? (
 									<div className="w-6 border-t border-border" />
 								) : null}
 							</>
 						)}
 
-						{!shouldHideTopicEntry ? (
+						{showNewTopicAction || showHistoryAction ? (
 							<>
-								<MagicTooltip title={t("messageHeader.newTopic")}>
-									<span>
-										<Button
-											variant="ghost"
-											size="icon-sm"
-											className={headerIconButtonClassName}
-											data-testid="message-header-new-topic-button"
-											onClick={handleCreateTopic}
-										>
-											<MessageCirclePlus
-												size={16}
-												className="shrink-0 text-foreground"
-											/>
-										</Button>
-									</span>
-								</MagicTooltip>
+								{showNewTopicAction ? (
+									<MagicTooltip title={t("messageHeader.newTopic")}>
+										<span>
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												className={headerIconButtonClassName}
+												data-testid="message-header-new-topic-button"
+												onClick={() =>
+													runBuiltinAction("newTopic", handleCreateTopic)
+												}
+											>
+												<MessageCirclePlus
+													size={16}
+													className="shrink-0 text-foreground"
+												/>
+											</Button>
+										</span>
+									</MagicTooltip>
+								) : null}
 
-								{renderHistoryTrigger("bottomRight")}
+								{showHistoryAction ? renderHistoryTrigger("bottomRight") : null}
 							</>
 						) : null}
 						{trailingActions ? (
@@ -754,6 +852,34 @@ function MessageHeader({
 										}}
 										data-testid="message-header-rename-input"
 									/>
+								) : titlePresentation ? (
+									<div
+										className={cn(
+											"min-w-0 flex-1 text-sm font-normal leading-[1.43] text-foreground",
+											renameEnabled &&
+												"cursor-pointer transition-colors hover:text-primary",
+										)}
+										onClick={renameEnabled ? handleRename : undefined}
+										data-testid="message-header-topic-name"
+										data-topic-name={headerTitle}
+									>
+										{/* Block layout stays on a div so the two lines are valid HTML. */}
+										<div className="flex min-w-0 flex-col">
+											{titlePresentation.primaryVisible === false ? null : (
+												<span
+													className="truncate text-sm font-semibold"
+													data-testid="message-header-primary-title"
+												>
+													{titlePresentation.primary}
+												</span>
+											)}
+											{presentedSecondary ? (
+												<span className="truncate text-xs text-muted-foreground">
+													{presentedSecondary}
+												</span>
+											) : null}
+										</div>
+									</div>
 								) : (
 									<span
 										className="min-w-0 flex-1 cursor-pointer truncate text-sm font-normal leading-[1.43] text-foreground transition-colors hover:text-primary"
@@ -770,30 +896,38 @@ function MessageHeader({
 								className="flex shrink-0 items-center gap-1"
 								data-testid="message-header-action-buttons"
 							>
-								{!shouldHideTopicEntry ? (
+								{addonActionsBefore}
+								{showNewTopicAction || showHistoryAction ? (
 									<div
 										className="flex items-center gap-1"
 										data-testid="message-header-topic-group"
 										data-guide-anchor="message-header-topic-group"
 									>
-										<MagicTooltip title={t("messageHeader.newTopic")}>
-											<span>
-												<Button
-													variant="ghost"
-													size="icon-sm"
-													data-testid="message-header-new-topic-button"
-													onClick={handleCreateTopic}
-													className={headerIconButtonClassName}
-												>
-													<MessageCirclePlus
-														size={16}
-														className="shrink-0 text-foreground"
-													/>
-												</Button>
-											</span>
-										</MagicTooltip>
+										{showNewTopicAction ? (
+											<MagicTooltip title={t("messageHeader.newTopic")}>
+												<span>
+													<Button
+														variant="ghost"
+														size="icon-sm"
+														data-testid="message-header-new-topic-button"
+														onClick={() =>
+															runBuiltinAction(
+																"newTopic",
+																handleCreateTopic,
+															)
+														}
+														className={headerIconButtonClassName}
+													>
+														<MessageCirclePlus
+															size={16}
+															className="shrink-0 text-foreground"
+														/>
+													</Button>
+												</span>
+											</MagicTooltip>
+										) : null}
 
-										{showTopicHistory
+										{showHistoryAction
 											? renderHistoryTrigger(
 													isConversationPanelCollapsed
 														? "leftBottom"
@@ -803,15 +937,10 @@ function MessageHeader({
 									</div>
 								) : null}
 
-								{shareTopic ? (
+								{shareTopic && isActionVisible("share") ? (
 									<TopicSharePopover
 										open={sharePopoverVisible}
-										onOpenChange={(open) => {
-											// Only allow opening if share is allowed, always allow closing
-											if (!open || isAllowShare) {
-												setSharePopoverVisible(open)
-											}
-										}}
+										onOpenChange={(open) => void handleShareOpenChange(open)}
 										topicId={selectedTopic?.id || ""}
 										topicTitle={selectedTopic?.topic_name}
 									>
@@ -828,9 +957,12 @@ function MessageHeader({
 								) : null}
 
 								{/* Chat single-topic view hides the entire topic overflow menu (rename / AI rename / delete). */}
-								{!shouldHideTopicEntry ? (
+								{!shouldHideTopicEntry && isActionVisible("more") ? (
 									<>
-										<DropdownMenu onOpenChange={setTopicMenuOpen}>
+										<DropdownMenu
+											open={topicMenuOpen}
+											onOpenChange={(open) => void handleMoreOpenChange(open)}
+										>
 											<DropdownMenuTrigger asChild>
 												<span>
 													<MagicTooltip
@@ -867,20 +999,26 @@ function MessageHeader({
 														<DropdownMenuSeparator />
 													</>
 												)}
-												<DropdownMenuItem onClick={handleRename}>
-													<PenLine
-														size={16}
-														className="text-muted-foreground"
-													/>
-													{t("messageHeader.rename")}
-												</DropdownMenuItem>
-												<DropdownMenuItem onClick={() => handleAiRename()}>
-													<WandSparkles
-														size={16}
-														className="text-muted-foreground"
-													/>
-													{t("messageHeader.aiRename")}
-												</DropdownMenuItem>
+												{renameEnabled ? (
+													<>
+														<DropdownMenuItem onClick={handleRename}>
+															<PenLine
+																size={16}
+																className="text-muted-foreground"
+															/>
+															{t("messageHeader.rename")}
+														</DropdownMenuItem>
+														<DropdownMenuItem
+															onClick={() => handleAiRename()}
+														>
+															<WandSparkles
+																size={16}
+																className="text-muted-foreground"
+															/>
+															{t("messageHeader.aiRename")}
+														</DropdownMenuItem>
+													</>
+												) : null}
 												{topicActions.restartSandbox ? (
 													<DropdownMenuItem
 														disabled={isRestartingSandbox}
@@ -897,7 +1035,7 @@ function MessageHeader({
 														{t("messageHeader.restartSandbox")}
 													</DropdownMenuItem>
 												) : null}
-												<DropdownMenuSeparator />
+												{renameEnabled ? <DropdownMenuSeparator /> : null}
 												<DropdownMenuItem
 													variant="destructive"
 													onClick={() =>
@@ -924,6 +1062,7 @@ function MessageHeader({
 										/>
 									</>
 								) : null}
+								{addonActionsAfter}
 								{trailingActions ? (
 									<div data-testid="message-header-trailing-actions">
 										{trailingActions}

@@ -44,12 +44,19 @@ export default function DashboardLayout() {
 	const location = useLocation()
 	const routeBasePath = useResolvedPath(".").pathname
 	const routes = useRouteConfig()
-	const { access } = useRuntime()
+	const { access, organization } = useRuntime()
 	const platformInfoQuery = usePlatformInfoQuery()
 	const isBrandLoading = !platformInfoQuery.data && platformInfoQuery.isLoading
 	const platformBrand = useMemo(
-		() => getPlatformBrand(platformInfoQuery.data, language, t("app.name"), isBrandLoading),
-		[isBrandLoading, language, platformInfoQuery.data, t],
+		() =>
+			getPlatformBrand(
+				platformInfoQuery.data,
+				language,
+				t("app.name"),
+				isBrandLoading,
+				organization.current.logo,
+			),
+		[isBrandLoading, language, organization.current.logo, platformInfoQuery.data, t],
 	)
 	const navigation = useMemo(
 		() => createNavigation(routes, access, routeBasePath),
@@ -743,10 +750,14 @@ function BrandMark({ brand, href, isCollapsed = false }: BrandMarkProps) {
 			data-testid="dashboard-brand-link"
 			to={href}
 		>
-			{brand.isLoading ? (
+			{brand.isLoading && !brand.logoUrl ? (
 				<BrandLogoPlaceholder isCollapsed={isCollapsed} />
 			) : (
-				<BrandLogo isCollapsed={isCollapsed} logoUrl={brand.logoUrl} name={brand.name} />
+				<BrandLogo
+					isCollapsed={isCollapsed}
+					logoUrl={brand.logoUrl}
+					name={brand.isLoading ? "" : brand.name}
+				/>
 			)}
 			{!isCollapsed ? (
 				<div className="grid min-w-0 flex-1 text-left text-sm leading-tight">
@@ -854,12 +865,15 @@ function getPlatformBrand(
 	language: LanguageCode,
 	fallbackName: string,
 	isLoading: boolean,
+	organizationLogo?: string,
 ): PlatformBrand {
+	const organizationLogoUrl = organizationLogo?.trim() || ""
+
 	if (isLoading) {
 		return {
 			name: "",
-			logoUrl: "",
-			favicon: "",
+			logoUrl: organizationLogoUrl,
+			favicon: organizationLogoUrl,
 			isLoading: true,
 		}
 	}
@@ -867,15 +881,18 @@ function getPlatformBrand(
 	const locale = toPlatformLocale(language)
 	const fallbackLocale = normalizePlatformLocale(platformInfo?.default_language)
 	const name = getLocalizedValue(platformInfo?.name_i18n, locale, fallbackLocale) || fallbackName
-	const logoUrl =
+	const platformLogoUrl =
 		platformInfo?.minimal_logo ||
 		getLocalizedValue(platformInfo?.logo, locale, fallbackLocale) ||
 		""
+	const logoUrl = organizationLogoUrl || platformLogoUrl
+	const favicon =
+		organizationLogoUrl || platformInfo?.favicon || platformLogoUrl || ""
 
 	return {
 		name,
 		logoUrl,
-		favicon: platformInfo?.favicon || logoUrl,
+		favicon,
 		isLoading: false,
 	}
 }

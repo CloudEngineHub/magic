@@ -17,6 +17,11 @@ export interface ProjectCardProps {
 	actionWorkspace: Workspace | null
 	/** Custom className */
 	className?: string
+	/**
+	 * `compact`: one row (name with share and more beside it), without the collapse button, the
+	 * workspace row or the collaborator section. Used where the card floats over content.
+	 */
+	variant?: "default" | "compact"
 }
 
 export interface SeparatorProps {

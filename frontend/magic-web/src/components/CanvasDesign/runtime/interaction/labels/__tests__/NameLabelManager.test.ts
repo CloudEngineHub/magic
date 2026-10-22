@@ -126,6 +126,14 @@ class TestNameLabelManager extends NameLabelManager {
 		return this.updateLabelPosition(elementId, true, context)
 	}
 
+	public getLabelPositionForTest(
+		boundingRect: { x: number; y: number; width: number; height: number },
+		labelSize: { width: number; height: number },
+		inverseScale: number,
+	): { x: number; y: number } {
+		return this.calculateLabelPosition(boundingRect, labelSize, inverseScale)
+	}
+
 	public shouldSuppressSizeLabelForTest(elementId: string): boolean {
 		return this.shouldSuppressSizeLabel(elementId)
 	}
@@ -322,6 +330,37 @@ describe("NameLabelManager visibility", () => {
 		vi.restoreAllMocks()
 	})
 
+	it("keeps the label above the top-left control point clearance", () => {
+		const manager = createManager(
+			new Map([
+				[
+					"image-1",
+					{
+						getBoundingRect: () => ({ x: 10, y: 100, width: 100, height: 80 }),
+						getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+					},
+				],
+			]),
+		)
+
+		expect(
+			manager.getLabelPositionForTest(
+				{ x: 10, y: 100, width: 100, height: 80 },
+				{ width: 80, height: 16 },
+				1,
+			),
+		).toEqual({ x: 10, y: 75 })
+		expect(
+			manager.getLabelPositionForTest(
+				{ x: 10, y: 100, width: 100, height: 80 },
+				{ width: 80, height: 16 },
+				0.5,
+			),
+		).toEqual({ x: 10, y: 87.5 })
+
+		manager.destroy()
+	})
+
 	it("keeps audio labels visible without hover or selection", () => {
 		const elements = new Map<string, TestElement>([
 			[
@@ -412,7 +451,7 @@ describe("NameLabelManager visibility", () => {
 			0,
 		)
 		expect(renderedTextWidth).toBeLessThan(primaryNode?.width() ?? 0)
-		expect(suffixNode?.x()).toBe(renderedTextWidth)
+		expect(suffixNode?.x()).toBe((renderedTextWidth ?? 0) + 8)
 		expect((primaryNode?.width() ?? 0) + (suffixNode?.width() ?? 0)).toBeLessThanOrEqual(100)
 
 		manager.destroy()
@@ -558,11 +597,29 @@ describe("NameLabelManager visibility", () => {
 
 		manager.createOrUpdateLabelForTest("image-1")
 
-		expect(manager.getTextNodeForTest("image-1")?.text()).toBe(primaryText)
-		expect(manager.getSuffixNodeForTest("image-1")?.text()).toBe("(生成中)")
-		expect(manager.getSuffixBackgroundForTest("image-1")).toBeInstanceOf(Konva.Rect)
-		expect(manager.getRenameHitNodeForTest("image-1")).toBeInstanceOf(Konva.Rect)
-		expect(manager.getRenameHitNodeForTest("image-1")?.listening()).toBe(true)
+		const primaryNode = manager.getTextNodeForTest("image-1")
+		const suffixNode = manager.getSuffixNodeForTest("image-1")
+		const suffixBackground = manager.getSuffixBackgroundForTest("image-1")
+		const renderedTextWidth = primaryNode?.textArr.reduce(
+			(maxWidth, line) => Math.max(maxWidth, line.width),
+			0,
+		)
+
+		expect(primaryNode?.text()).toBe(primaryText)
+		expect(suffixNode?.text()).toBe("(生成中)")
+		expect(suffixBackground).toBeInstanceOf(Konva.Rect)
+		const renameHit = manager.getRenameHitNodeForTest("image-1")
+		const renderedNameEnd = (primaryNode?.x() ?? 0) + (renderedTextWidth ?? 0)
+		const statusBackgroundEnd = (suffixBackground?.x() ?? 0) + (suffixBackground?.width() ?? 0)
+		expect(suffixBackground?.x()).toBe(renderedNameEnd + 4)
+		expect(suffixNode?.x()).toBe((suffixBackground?.x() ?? 0) + 4)
+		expect(renameHit).toBeInstanceOf(Konva.Rect)
+		expect(renameHit?.x()).toBe(statusBackgroundEnd + 4)
+		expect((suffixNode?.x() ?? 0) - renderedNameEnd).toBe(8)
+		expect((renameHit?.x() ?? 0) - ((suffixNode?.x() ?? 0) + (suffixNode?.width() ?? 0))).toBe(
+			8,
+		)
+		expect(renameHit?.listening()).toBe(true)
 		expect(manager.getRenameIconNodeForTest("image-1")?.visible()).toBe(false)
 		expect(manager.getIconNodeForTest("image-1")?.x()).toBe(0)
 
@@ -620,7 +677,7 @@ describe("NameLabelManager visibility", () => {
 			(maxWidth, line) => Math.max(maxWidth, line.width),
 			0,
 		)
-		expect(renameHit?.x()).toBe((text?.x() ?? 0) + (renderedTextWidth ?? 0) + 2)
+		expect(renameHit?.x()).toBe((text?.x() ?? 0) + (renderedTextWidth ?? 0) + 4)
 		expect(renameHit?.fill()).toBe("rgba(0, 0, 0, 0.001)")
 		expect(renameIcon?.visible()).toBe(false)
 
@@ -931,15 +988,15 @@ describe("NameLabelManager visibility", () => {
 
 		expect(textNode?.textArr[0]?.text.endsWith("…")).toBe(true)
 		expect(renderedTextWidth).toBeLessThan(textNode?.width() ?? 0)
-		expect(renameHit?.x()).toBe((textNode?.x() ?? 0) + (renderedTextWidth ?? 0) + 2)
+		expect(renameHit?.x()).toBe((textNode?.x() ?? 0) + (renderedTextWidth ?? 0) + 4)
 		// The button must not inherit the unused tail of the constrained text box.
-		expect(renameHit?.x()).toBeLessThan((textNode?.x() ?? 0) + (textNode?.width() ?? 0) + 2)
+		expect(renameHit?.x()).toBeLessThan((textNode?.x() ?? 0) + (textNode?.width() ?? 0) + 4)
 		const labelSize = manager.getLabelSizeForElement("image-1")
 		expect(labelSize?.width).toBe(
-			(textNode?.x() ?? 0) + (renderedTextWidth ?? 0) + 2 + (renameHit?.width() ?? 0),
+			(textNode?.x() ?? 0) + (renderedTextWidth ?? 0) + 4 + (renameHit?.width() ?? 0),
 		)
 		expect(labelSize?.width).toBeLessThan(
-			(textNode?.x() ?? 0) + (textNode?.width() ?? 0) + 2 + (renameHit?.width() ?? 0),
+			(textNode?.x() ?? 0) + (textNode?.width() ?? 0) + 4 + (renameHit?.width() ?? 0),
 		)
 
 		manager.destroy()
@@ -1107,7 +1164,7 @@ describe("NameLabelManager visibility", () => {
 		manager.createOrUpdateLabelForTest("audio-1")
 		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(true)
 
-		elementWidth = 134
+		elementWidth = 136
 		manager.updateLabelPositionForTest("audio-1")
 		expect(manager.shouldSuppressSizeLabelForTest("audio-1")).toBe(false)
 		expect(manager.getRenderedTextWidthForTest("audio-1")).toBe(72)
@@ -1261,8 +1318,8 @@ describe("NameLabelManager visibility", () => {
 		size.setMediaLabelsAlwaysVisible(true)
 		name.createOrUpdateLabelForTest("lower")
 		size.createForTest("lower")
-		// The resolution yields first; the remaining 26px includes the rename gap and button.
-		expect(name.getLabelTextMetrics("lower")?.width).toBe(294)
+		// The resolution yields first; the remaining 28px includes the rename gap and button.
+		expect(name.getLabelTextMetrics("lower")?.width).toBe(292)
 		expect(size.visibleForTest("lower")).toBe(false)
 		options.viewportScale = 0.25
 		name.createOrUpdateLabelForTest("lower")
@@ -1270,7 +1327,7 @@ describe("NameLabelManager visibility", () => {
 		options.viewportScale = 1
 		name.createOrUpdateLabelForTest("lower")
 		size.createForTest("lower")
-		expect(name.getLabelTextMetrics("lower")?.width).toBe(294)
+		expect(name.getLabelTextMetrics("lower")?.width).toBe(292)
 		expect(size.visibleForTest("lower")).toBe(false)
 		upperX = 260
 		name.refreshVisibility()

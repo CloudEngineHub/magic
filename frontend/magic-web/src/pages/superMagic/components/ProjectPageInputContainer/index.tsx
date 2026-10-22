@@ -76,6 +76,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 	onSendSuccess,
 	onSendComplete,
 	createTopic,
+	getImplicitMentionItems,
 	editorRef,
 }) => {
 	const isMobile = useIsMobile()
@@ -267,6 +268,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 			showTopicExamplesPortal: showTopicModeExamplePortal,
 			onSendSuccess,
 			createTopic,
+			getImplicitMentionItems,
 			invalidModeFallback: TopicInvalidModeFallback,
 		}
 	}, [
@@ -306,6 +308,7 @@ const ProjectPageInputContainerComponent: React.FC<ProjectPageInputContainerProp
 		showModelSelector,
 		onSendSuccess,
 		createTopic,
+		getImplicitMentionItems,
 		onEditorFocus,
 		onEditorBlur,
 		onSendComplete,

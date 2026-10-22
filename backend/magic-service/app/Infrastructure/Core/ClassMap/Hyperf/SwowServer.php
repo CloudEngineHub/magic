@@ -2,12 +2,7 @@
 
 declare(strict_types=1);
 /**
- * This file is part of Hyperf.
- *
- * @link     https://www.hyperf.io
- * @document https://hyperf.wiki
- * @contact  group@hyperf.io
- * @license  https://github.com/hyperf/hyperf/blob/master/LICENSE
+ * Copyright (c) The Magic , Distributed under the software license
  */
 
 namespace Hyperf\Server;
@@ -45,7 +40,7 @@ class SwowServer implements ServerInterface
 {
     protected ?ServerConfig $config = null;
 
-    protected HttpServer|BaseServer|null $server = null;
+    protected null|BaseServer|HttpServer $server = null;
 
     protected bool $mainServerStarted = false;
 
@@ -107,7 +102,7 @@ class SwowServer implements ServerInterface
     /**
      * 获取协议服务对象，兼容组合 Socket 的 HTTP 服务。
      */
-    public function getServer(): HttpServer|BaseServer
+    public function getServer(): BaseServer|HttpServer
     {
         return $this->server;
     }
@@ -154,6 +149,7 @@ class SwowServer implements ServerInterface
 
     /**
      * 为各协议绑定请求和连接回调。
+     * @param mixed $server
      */
     protected function bindServerCallbacks($server, int $type, string $name, array $callbacks)
     {
@@ -267,6 +263,10 @@ class SwowServer implements ServerInterface
 
     /**
      * 根据协议类型创建服务。
+     * @param mixed $type
+     * @param mixed $host
+     * @param mixed $port
+     * @param mixed $settings
      */
     protected function makeServer($type, $host, $port, $settings)
     {
@@ -301,6 +301,8 @@ class SwowServer implements ServerInterface
 
     /**
      * 将配置项映射到服务设置方法。
+     * @param mixed $server
+     * @param mixed $settings
      */
     private function initServerSettings($server, $settings)
     {

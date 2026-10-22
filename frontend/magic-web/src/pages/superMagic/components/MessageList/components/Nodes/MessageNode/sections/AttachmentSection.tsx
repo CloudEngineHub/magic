@@ -12,7 +12,10 @@ import { cn } from "@/utils/cn"
 import { Attachment } from "@/pages/superMagic/components/MessageList/components/MessageAttachment"
 import type { AttachmentProps } from "@/pages/superMagic/components/MessageList/components/MessageAttachment/type"
 import { normalizeWorkspacePathForComparison } from "@/pages/superMagic/utils/markdownFileReference"
-import { useMessageListProjectFilesStore } from "@/pages/superMagic/components/MessageList/context"
+import {
+	useMessageListContext,
+	useMessageListProjectFilesStore,
+} from "@/pages/superMagic/components/MessageList/context"
 import {
 	buildFilePathAttachments,
 	findFilePathAttachment,
@@ -51,6 +54,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 	className,
 }: AttachmentSectionProps) {
 	const resolvedProjectFilesStore = useMessageListProjectFilesStore()
+	const { renderAttachments } = useMessageListContext()
 	const canDisplayAttachments = canRenderFinalAttachments(node)
 	const attachments = canDisplayAttachments
 		? (resolveAttachmentList(node, fallbackNode) as AttachmentProps[])
@@ -91,6 +95,7 @@ export const AttachmentSection = observer(function AttachmentSection({
 			{
 				...attachment,
 				filePath,
+				file: found,
 				presentation: resolveFilePresentation(found, {
 					context: resolvedProjectFilesStore.filePresentationContext,
 					index: resolvedProjectFilesStore.filePresentationIndex,
@@ -98,26 +103,33 @@ export const AttachmentSection = observer(function AttachmentSection({
 			},
 		]
 	})
-
 	const onFileClick = useMemoizedFn((item?: unknown) => {
 		openMessageFile(item)
 		onSelectDetail?.(item)
 	})
 
 	if (!canDisplayAttachments) return null
+	const scopedFiles =
+		filePathAttachments.length > 0
+			? filePathAttachments.map((attachment) => attachment.file)
+			: attachments
+	const scopedAttachments =
+		scopedFiles.length > 0 ? renderAttachments?.({ files: scopedFiles, className }) : null
+	if (scopedAttachments) return scopedAttachments
+	if (attachments.length > 0) {
+		return (
+			<Attachment
+				className={className}
+				attachments={attachments}
+				onSelectDetail={onFileClick}
+				onFileClick={handleFileClick}
+			/>
+		)
+	}
 	if (filePathAttachments.length > 0) {
 		return <FilePathAttachmentList attachments={filePathAttachments} className={className} />
 	}
-	if (attachments.length === 0) return null
-
-	return (
-		<Attachment
-			className={className}
-			attachments={attachments}
-			onSelectDetail={onFileClick}
-			onFileClick={handleFileClick}
-		/>
-	)
+	return null
 })
 
 interface FilePathAttachmentListProps {

@@ -32,6 +32,19 @@ function createCommand(requestId: string, command: string, content?: unknown) {
 	}
 }
 
+/** Builds one host-owned header action response request with fictional identifiers. */
+function createHeaderActionResponse(requestId: string, handled = true) {
+	return {
+		protocol: "magic-widget",
+		version: 1,
+		instanceId: INSTANCE_ID,
+		requestId,
+		type: "response",
+		ok: true,
+		result: { headerActionHandled: handled },
+	}
+}
+
 /** Creates fictional structured input covering every SDK-supported mention kind. */
 function createStructuredContent() {
 	return {
@@ -135,6 +148,99 @@ describe("useMagicWidgetBridge", () => {
 
 		pubsub.unsubscribe(PubSubEvents.Magic_Widget_Editor_Command, setInputListener)
 		unmount()
+	})
+
+	it("requests host-owned header actions and resolves whether the host handled them", async () => {
+		const { result, unmount } = renderHook(() =>
+			useMagicWidgetBridge({
+				context: { instanceId: INSTANCE_ID, hostOrigin: HOST_ORIGIN },
+				createNewConversation: vi.fn(),
+			}),
+		)
+
+		const actionPromise = result.current.requestHeaderAction("pin", {
+			topicId: "topic-mock-header",
+		})
+		const request = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		expect(request).toEqual(
+			expect.objectContaining({
+				type: "header_action",
+				action: "pin",
+				context: { action: "pin", topicId: "topic-mock-header" },
+			}),
+		)
+
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: HOST_ORIGIN,
+					source: parentWindow,
+					data: createHeaderActionResponse(request.requestId),
+				}),
+			)
+		})
+
+		await expect(actionPromise).resolves.toBe(true)
+		unmount()
+	})
+
+	it("rejects a header action when the host reports failure", async () => {
+		const { result, unmount } = renderHook(() =>
+			useMagicWidgetBridge({
+				context: { instanceId: INSTANCE_ID, hostOrigin: HOST_ORIGIN },
+				createNewConversation: vi.fn(),
+			}),
+		)
+
+		const actionPromise = result.current.requestHeaderAction("history")
+		const request = postMessage.mock.calls[0]?.[0] as { requestId: string }
+		act(() => {
+			window.dispatchEvent(
+				new MessageEvent("message", {
+					origin: HOST_ORIGIN,
+					source: parentWindow,
+					data: {
+						protocol: "magic-widget",
+						version: 1,
+						instanceId: INSTANCE_ID,
+						requestId: request.requestId,
+						type: "response",
+						ok: false,
+						error: {
+							code: "HEADER_ACTION_FAILED",
+							message: "Mock header action failed",
+						},
+					},
+				}),
+			)
+		})
+
+		await expect(actionPromise).rejects.toThrow("Mock header action failed")
+		unmount()
+	})
+
+	it("rejects a header action that receives no host response", async () => {
+		vi.useFakeTimers()
+		try {
+			const { result, unmount } = renderHook(() =>
+				useMagicWidgetBridge({
+					context: { instanceId: INSTANCE_ID, hostOrigin: HOST_ORIGIN },
+					createNewConversation: vi.fn(),
+				}),
+			)
+			const actionPromise = result.current.requestHeaderAction("share")
+			const assertion = expect(actionPromise).rejects.toThrow(
+				"Magic widget header action timed out",
+			)
+
+			await act(async () => {
+				await vi.advanceTimersByTimeAsync(10_000)
+			})
+			await assertion
+			unmount()
+		} finally {
+			vi.useRealTimers()
+		}
 	})
 
 	it("does not gate setInput on agent_ready", async () => {

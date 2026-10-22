@@ -18,6 +18,7 @@ interface PresenterScreenOption {
 
 interface PPTPresenterConsoleControlsProps {
 	activeIndex: number
+	buildProgress?: { step: number; total: number }
 	totalSlides: number
 	canGoPrevious?: boolean
 	canGoNext?: boolean
@@ -35,6 +36,7 @@ interface PPTPresenterConsoleControlsProps {
 export default function PPTPresenterConsoleControls({
 	activeIndex,
 	totalSlides,
+	buildProgress,
 	canGoPrevious = activeIndex > 0,
 	canGoNext = activeIndex < totalSlides - 1,
 	isTransitioning,
@@ -109,10 +111,19 @@ export default function PPTPresenterConsoleControls({
 				className="size-8 text-white hover:bg-white/15 hover:text-white"
 				disabled={!canGoPrevious || isTransitioning}
 				onClick={onPrevSlide}
-				aria-label={t("fileViewer.previousPage")}
+				aria-label={
+					buildProgress && buildProgress.step > 0
+						? t("ppt.build.previous")
+						: t("fileViewer.previousPage")
+				}
 			>
 				<ChevronLeft className="size-4" />
 			</Button>
+			{buildProgress && buildProgress.total > 0 && (
+				<span className="text-xs tabular-nums" aria-live="polite">
+					{t("ppt.build.progress", buildProgress)}
+				</span>
+			)}
 			{isPageInputVisible ? (
 				<input
 					autoFocus
@@ -153,7 +164,11 @@ export default function PPTPresenterConsoleControls({
 				className="size-8 text-white hover:bg-white/15 hover:text-white"
 				disabled={!canGoNext || isTransitioning}
 				onClick={onNextSlide}
-				aria-label={t("fileViewer.nextPage")}
+				aria-label={
+					buildProgress && buildProgress.step < buildProgress.total
+						? t("ppt.build.next")
+						: t("fileViewer.nextPage")
+				}
 			>
 				<ChevronRight className="size-4" />
 			</Button>

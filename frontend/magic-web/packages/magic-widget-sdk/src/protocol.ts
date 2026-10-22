@@ -1,3 +1,4 @@
+import { WIDGET_HEADER_ACTION_NAMES } from "./config"
 import type { MagicWidget } from "./types"
 
 export const WIDGET_PROTOCOL = "magic-widget"
@@ -6,8 +7,10 @@ export const WIDGET_QUERY_EMBED = "magicWidgetEmbed"
 export const WIDGET_QUERY_INSTANCE_ID = "magicWidgetInstanceId"
 export const WIDGET_QUERY_PROTOCOL_VERSION = "magicWidgetProtocolVersion"
 export const WIDGET_QUERY_HOST_ORIGIN = "magicWidgetHostOrigin"
+export const WIDGET_QUERY_RENDER_MODE = "magicWidgetRenderMode"
 export const WIDGET_QUERY_DEPLOYMENT_CODE = "magicWidgetDeploymentCode"
 export const WIDGET_QUERY_CONFIG = "magicWidgetConfig"
+const HEADER_ACTIONS = new Set<MagicWidget.HeaderActionName>(WIDGET_HEADER_ACTION_NAMES)
 
 export type WidgetCommandName =
 	"setInput" | "appendInput" | "clearInput" | "getInput" | "sendMessage" | "newConversation"
@@ -37,8 +40,45 @@ export interface WidgetResponseMessage {
 	requestId: string
 	type: "response"
 	ok: boolean
-	result?: { content?: string }
+	/** Command payload, ownership ack, or a non-fatal config filtering diagnostic. */
+	result?: {
+		content?: string
+		headerActionHandled?: boolean
+		configWarning?: MagicWidget.ConfigWarning
+		customMentionSearch?: MagicWidget.CustomMentionSearchResult[]
+	}
 	error?: { code: string; message: string }
+}
+
+/** Notifies the host after a header action. Built-in iframe behavior already completed; headerActionHandled is an ownership ack. */
+export interface WidgetHeaderActionMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	requestId: string
+	type: "header_action"
+	action: MagicWidget.HeaderActionName
+	context?: MagicWidget.HeaderActionContext
+}
+
+/** Requests host-owned custom Mention results for one active search scope. */
+export interface WidgetMentionSearchMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	requestId: string
+	type: "mention_search"
+	query: string
+	scope: MagicWidget.CustomMentionSearchContext["scope"]
+}
+
+/** Cancels an in-flight host-owned custom Mention search request. */
+export interface WidgetMentionSearchCancelMessage {
+	protocol: typeof WIDGET_PROTOCOL
+	version: typeof WIDGET_PROTOCOL_VERSION
+	instanceId: string
+	requestId: string
+	type: "mention_search_cancel"
 }
 
 export interface WidgetConfigMessage {
@@ -92,6 +132,9 @@ export type WidgetProtocolMessage =
 	| WidgetUiStateMessage
 	| WidgetUiCommandMessage
 	| WidgetRuntimeEventMessage
+	| WidgetHeaderActionMessage
+	| WidgetMentionSearchMessage
+	| WidgetMentionSearchCancelMessage
 	| WidgetResponseMessage
 
 /** Checks that mention data has the object-shaped container required by the bridge. */
@@ -158,6 +201,19 @@ export function isWidgetProtocolMessage(value: unknown): value is WidgetProtocol
 		message.type === "ui_state" ||
 		message.type === "ui_command" ||
 		message.type === "response" ||
+		(message.type === "header_action" &&
+			typeof message.requestId === "string" &&
+			typeof message.action === "string" &&
+			HEADER_ACTIONS.has(message.action as MagicWidget.HeaderActionName)) ||
+		(message.type === "mention_search" &&
+			typeof message.requestId === "string" &&
+			typeof message.query === "string" &&
+			Boolean(message.scope) &&
+			typeof message.scope === "object" &&
+			((message.scope as Record<string, unknown>).type === "global" ||
+				((message.scope as Record<string, unknown>).type === "group" &&
+					typeof (message.scope as Record<string, unknown>).groupId === "string"))) ||
+		(message.type === "mention_search_cancel" && typeof message.requestId === "string") ||
 		(message.type === "event" && isRuntimeEvent(message.event))
 	return (
 		message.protocol === WIDGET_PROTOCOL &&

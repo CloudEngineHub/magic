@@ -55,9 +55,6 @@
 		"searchWorkspaces": "Search workspaces",
 		"workspaceUnavailable": "Workspace unavailable. Choose another."
 	},
-	"pluginTips": {
-		"connectTools": "Connect your tools"
-	},
 	"promotionalBanner": {
 		"upgradeMessage": "Upgrade for a year of unlimited Premium AI."
 	},

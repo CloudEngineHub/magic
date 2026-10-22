@@ -21,8 +21,8 @@ interface UseSlideNavigation {
 
 interface UseSlideNavigationReturn {
 	changeSlide: (direction: "prev" | "next") => Promise<void>
-	goToFirstSlide: () => Promise<void>
-	handleJumpToPage: (targetIndex: number) => Promise<void>
+	goToFirstSlide: () => Promise<boolean>
+	handleJumpToPage: (targetIndex: number) => Promise<boolean>
 	/** Keep the clean, already-visible path synchronous to preserve browser user activation. */
 	preparePresentation: () => number | null | Promise<number | null>
 }
@@ -73,11 +73,11 @@ export function useSlideNavigation({
 
 	const goToFirstSlide = useMemoizedFn(async () => {
 		const target = isPresenting() ? visibleIndices()[0] : 0
-		if (target !== undefined) await navigate("first", target)
+		return target !== undefined && (await navigate("first", target)) !== null
 	})
 
 	const handleJumpToPage = useMemoizedFn(async (targetIndex: number) => {
-		await navigate("jump", targetIndex)
+		return (await navigate("jump", targetIndex)) !== null
 	})
 
 	const preparePresentation = useMemoizedFn((): number | null | Promise<number | null> => {

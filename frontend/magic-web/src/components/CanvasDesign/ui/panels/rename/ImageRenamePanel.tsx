@@ -250,8 +250,9 @@ export default function ImageRenamePanel({ element }: { element: ImageElement })
 			{/* 少量版本按内容决定高度；达到窗口上限时只有文件列表滚动。 */}
 			<div className={styles.renameFileList}>
 				<ScrollArea
+					data-floating-scroll-trap="dynamic"
 					className={`${styles.renameScrollable} min-h-0`}
-					viewportClassName="[&>div]:!block"
+					viewportClassName={`${styles.renameFileScrollViewport} [&>div]:!block`}
 				>
 					<ul className={`${styles.renameFileRows} divide-y divide-border`}>
 						{form.rows.map((row) => (

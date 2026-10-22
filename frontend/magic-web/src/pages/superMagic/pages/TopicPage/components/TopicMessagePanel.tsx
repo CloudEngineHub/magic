@@ -5,14 +5,12 @@ import type {
 } from "../../../components/Detail/components/FilesViewer/types"
 import { lazy, memo, useLayoutEffect, useMemo, useRef, type ReactNode, type RefObject } from "react"
 import { JSONContent } from "@/infrastructure/editors/tiptap/core"
-import { useMemoizedFn } from "ahooks"
 import { observer } from "mobx-react-lite"
 import MessageList, { MessageListProvider } from "../../../components/MessageList"
 import MessageHeader, { type MessageHeaderTopicActions } from "../../../components/MessageHeader"
 import { SuperMagicMessageItem } from "../../../components/MessageList/type"
 import { ProjectListItem, TaskStatus, Topic, TopicMode, Workspace } from "../../Workspace/types"
 import { cn } from "@/utils/cn"
-import { superMagicStore } from "@/pages/superMagic/stores"
 import { topicStore } from "../../../stores/core"
 import useTopicMode from "@/pages/superMagic/hooks/useTopicMode"
 import { createSuperMagicTopicModelStore } from "@/stores/superMagic/topicModelStore"
@@ -20,16 +18,11 @@ import useTopicModel from "@/pages/superMagic/components/MessageEditor/hooks/use
 import ModeAvatar from "@/pages/superMagic/components/ModeAvatar"
 import superMagicModeService from "@/services/superMagic/SuperMagicModeService"
 import { MessageListContextState } from "@/pages/superMagic/components/MessageList/context"
-import {
-	OptimisticMessage,
-	optimisticMessageStore,
-} from "@/pages/superMagic/stores/optimisticMessageStore"
-import { getNetworkMonitor } from "@/services/recordSummary/NetworkMonitor"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { useRetryOptimisticMessage } from "@/pages/superMagic/hooks/useRetryOptimisticMessage"
+import { useMessagesWithOptimisticMeta } from "@/pages/superMagic/hooks/useMessagesWithOptimisticMeta"
 import type { SendMessageOptions } from "@/pages/superMagic/components/MessagePanel/types"
 import type { HandleSendParams } from "@/pages/superMagic/services/messageSendFlowService"
-import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
-import type { ModelItem } from "@/pages/superMagic/components/MessageEditor/types"
 import projectFilesStore from "@/stores/projectFiles"
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import type { MentionPanelStore } from "@/components/business/MentionPanel/builtin-store"
@@ -38,67 +31,13 @@ import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/Con
 import { isSelfMediaComposerContext } from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
 import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
 import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import type { ProjectPageInputContainerProps } from "@/pages/superMagic/components/ProjectPageInputContainer/types"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
 )
 
 const noopTopicModeChange = () => undefined
-
-interface RetryMessageNode {
-	content?: string
-	extra?: SendMessageOptions["extra"]
-}
-
-interface RetrySendSuperAgentExtra {
-	mentions?: MentionListItem[]
-	model?: ModelItem | null
-	image_model?: ModelItem | null
-	video_model?: ModelItem | null
-	topic_pattern?: TopicMode
-}
-
-function isRetryJSONContent(content: unknown): content is JSONContent {
-	return Boolean(content) && typeof content === "object"
-}
-
-/** Recovers original content and send params from the v2 main store rich_text node; no body copy is kept in sidecar. */
-function resolveRetryMessagePayload(messageNode: unknown) {
-	const node = messageNode as RetryMessageNode
-	if (!node?.content) return undefined
-
-	let parsedContent: unknown
-	try {
-		// Historical rich_text may be corrupted by stale or abnormal writes; JSON.parse must not break the page flow during retry recovery.
-		parsedContent = JSON.parse(node.content)
-	} catch {
-		return undefined
-	}
-	if (!isRetryJSONContent(parsedContent)) return undefined
-
-	return {
-		content: parsedContent,
-		options: node.extra ? ({ extra: node.extra } as SendMessageOptions) : undefined,
-	}
-}
-
-function resolveRetrySendParams(
-	retryPayload: NonNullable<ReturnType<typeof resolveRetryMessagePayload>>,
-): HandleSendParams {
-	// Failed retry must go through the first-layer send entry, so we restore rich_text extra back to editor send params.
-	const superAgent = retryPayload.options?.extra?.super_agent as
-		RetrySendSuperAgentExtra | undefined
-
-	return {
-		value: retryPayload.content,
-		mentionItems: superAgent?.mentions ?? [],
-		selectedModel: superAgent?.model,
-		selectedImageModel: superAgent?.image_model,
-		selectedVideoModel: superAgent?.video_model,
-		topicMode: superAgent?.topic_pattern,
-		extra: retryPayload.options?.extra,
-	}
-}
 
 interface TopicMessagePanelProps {
 	selectedProject: ProjectListItem | null
@@ -138,6 +77,15 @@ interface TopicMessagePanelProps {
 	allowRecordingMode?: boolean
 	/** Chat detail composers use the featured default employee and hide employee switching. */
 	isChatDetail?: boolean
+	/**
+	 * Locks the composer to one built-in topic mode and hides mode switching.
+	 * AI canvas projects pass Design so every topic talks to the design digital employee.
+	 */
+	lockedTopicMode?: TopicMode
+	/** Mentions bound to every sent message, e.g. the AI canvas folder. */
+	getImplicitMentionItems?: ProjectPageInputContainerProps["getImplicitMentionItems"]
+	/** Overrides the mode placeholder, e.g. the AI canvas home's prompt hint. */
+	placeholder?: string
 }
 
 function TopicMessagePanel({
@@ -174,6 +122,9 @@ function TopicMessagePanel({
 	mentionPanelStore,
 	allowRecordingMode,
 	isChatDetail = false,
+	lockedTopicMode,
+	getImplicitMentionItems,
+	placeholder,
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
@@ -193,9 +144,13 @@ function TopicMessagePanel({
 	const defaultAgentSelection = isChatDetail ? resolveDefaultAgentSelection() : undefined
 	// Chat details intentionally ignore the historical topic employee: their composer is locked to
 	// the currently featured default employee, while task details retain their topic configuration.
-	const composerTopicMode = defaultAgentSelection?.topicPattern ?? topicMode
-	const composerAgentCode =
-		defaultAgentSelection?.agentCode ?? (!isChatDetail ? selectedTopic?.agent_code : undefined)
+	const composerTopicMode = lockedTopicMode ?? defaultAgentSelection?.topicPattern ?? topicMode
+	// A locked built-in mode needs no employee code; stale topic agent codes must not override it.
+	const isComposerModeLocked = isChatDetail || Boolean(lockedTopicMode)
+	const composerAgentCode = lockedTopicMode
+		? undefined
+		: (defaultAgentSelection?.agentCode ??
+			(!isChatDetail ? selectedTopic?.agent_code : undefined))
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -208,7 +163,6 @@ function TopicMessagePanel({
 	})
 	const shouldScrollAfterRetryRef = useRef(false)
 	const sendRetryMessageRef = useRef<(params: HandleSendParams) => Promise<boolean>>()
-	const retryingOptimisticMessageIdsRef = useRef<Set<string>>(new Set())
 
 	const topicModeConfig = useMemo(() => {
 		return superMagicModeService.getModeConfigWithLegacy(
@@ -219,59 +173,13 @@ function TopicMessagePanel({
 		)
 	}, [topicMode, selectedTopic?.agent_code])
 
-	const handleRetryOptimisticMessage = useMemoizedFn(async (message: SuperMagicMessageItem) => {
-		const chatTopicId = selectedTopic?.chat_topic_id
-		const appMessageId = message?.app_message_id
-		if (!chatTopicId || !appMessageId) return
-
-		const retryingKey = `${chatTopicId}:${appMessageId}`
-		if (retryingOptimisticMessageIdsRef.current.has(retryingKey)) return
-
-		// Retry entry only handles failed optimistic messages in the current topic to prevent accidental sends after state changes.
-		if (message?.topic_id && `${message.topic_id}` !== chatTopicId) return
-		if (
-			optimisticMessageStore.getStatus(chatTopicId, appMessageId) !==
-			OptimisticMessage.Status.Failed
-		)
-			return
-		if (getNetworkMonitor().isNetworkOffline()) {
-			// Offline retry keeps the original failed node intact to avoid generating a new failed message after deletion.
-			return
-		}
-
-		const retryPayload = resolveRetryMessagePayload(
-			superMagicStore.getMessageNode(message.super_message_id),
-		)
-		if (!retryPayload) return
-		if (!sendRetryMessageRef.current) return
-
-		retryingOptimisticMessageIdsRef.current.add(retryingKey)
-		// Retry reuses the first-layer editor send entry; normal send logic decides between direct send or queue.
-		let didStartRetry = false
-		try {
-			didStartRetry = await sendRetryMessageRef.current({
-				...resolveRetrySendParams(retryPayload),
-			})
-		} catch (e) {
-			return
-		} finally {
-			retryingOptimisticMessageIdsRef.current.delete(retryingKey)
-		}
-		if (!didStartRetry) return
-
-		// Before deleting the old failed message, re-anchor subsequent failed messages to the previous anchor point.
-		optimisticMessageStore.reanchorDependentsBeforeMessageRemoval({
-			chat_topic_id: chatTopicId,
-			app_message_id: appMessageId,
-		})
-		optimisticMessageStore.remove({
-			chat_topic_id: chatTopicId,
-			app_message_id: appMessageId,
-		})
-		superMagicStore.removeUserMessage(chatTopicId, appMessageId)
-
-		shouldScrollAfterRetryRef.current =
-			!showLoading && currentTopicStatus !== TaskStatus.RUNNING
+	const handleRetryOptimisticMessage = useRetryOptimisticMessage({
+		chatTopicId: selectedTopic?.chat_topic_id,
+		getSendMessage: () => sendRetryMessageRef.current,
+		onRetryStarted: () => {
+			shouldScrollAfterRetryRef.current =
+				!showLoading && currentTopicStatus !== TaskStatus.RUNNING
+		},
 	})
 
 	const value = useMemo<MessageListContextState>(() => {
@@ -315,24 +223,7 @@ function TopicMessagePanel({
 	])
 
 	const currentTopicId = selectedTopic?.chat_topic_id
-	const topicOptimisticMessages = currentTopicId
-		? optimisticMessageStore.topicOptimisticMap[currentTopicId]
-		: undefined
-	const messagesWithOptimisticMeta = useMemo(() => {
-		return messages.map((message) => {
-			const optimisticStatus = currentTopicId
-				? topicOptimisticMessages?.[message?.app_message_id || ""]?.status
-				: undefined
-			if (!optimisticStatus) return message
-
-			return {
-				...message,
-				optimisticMeta: {
-					status: optimisticStatus,
-				},
-			}
-		})
-	}, [currentTopicId, messages, topicOptimisticMessages])
+	const messagesWithOptimisticMeta = useMessagesWithOptimisticMeta(currentTopicId, messages)
 
 	useLayoutEffect(() => {
 		if (!shouldScrollAfterRetryRef.current) return
@@ -395,14 +286,16 @@ function TopicMessagePanel({
 			mentionPanelStore={mentionPanelStore}
 			topicStore={scopedTopicStore}
 			allowRecordingMode={allowRecordingMode}
-			agentCode={isChatDetail ? (composerAgentCode ?? null) : composerAgentCode}
+			agentCode={isComposerModeLocked ? (composerAgentCode ?? null) : composerAgentCode}
 			isShowLoadingInit={isShowLoadingInit}
 			topicModeLogic={{
 				topicMode: composerTopicMode,
-				setTopicMode: isChatDetail ? noopTopicModeChange : setTopicMode,
-				recoverTopicMode: isChatDetail ? noopTopicModeChange : recoverTopicMode,
+				setTopicMode: isComposerModeLocked ? noopTopicModeChange : setTopicMode,
+				recoverTopicMode: isComposerModeLocked ? noopTopicModeChange : recoverTopicMode,
 			}}
-			showModeToggle={isChatDetail ? false : undefined}
+			showModeToggle={isComposerModeLocked ? false : undefined}
+			getImplicitMentionItems={getImplicitMentionItems}
+			placeholder={placeholder}
 			size={detailPanelVisible ? "small" : "default"}
 		/>
 	)

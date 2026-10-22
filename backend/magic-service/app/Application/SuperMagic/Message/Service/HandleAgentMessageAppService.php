@@ -10,6 +10,7 @@ namespace App\Application\SuperMagic\Message\Service;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Application\SuperMagic\File\Service\FileProcessAppService;
 use App\Application\SuperMagic\Message\DTO\TaskMessageDTO;
+use App\Application\SuperMagic\Task\Service\TaskNotificationLabelResolver;
 use App\Application\SuperMagic\Task\Service\TopicTaskAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\SuperMagic\Common\Entity\ValueObject\StorageType;
@@ -74,6 +75,7 @@ class HandleAgentMessageAppService extends AbstractAppService
         private readonly FileProcessAppService $fileProcessAppService,
         private readonly ClientMessageAppService $clientMessageAppService,
         private readonly AgentDomainService $agentDomainService,
+        private readonly TaskNotificationLabelResolver $taskNotificationLabelResolver,
         private readonly LockerInterface $locker,
         private readonly Redis $redis,
         LoggerFactory $loggerFactory
@@ -306,7 +308,7 @@ class HandleAgentMessageAppService extends AbstractAppService
      */
     private function prepareDataIsolation(TopicTaskMessageDTO $messageDTO): DataIsolation
     {
-        return DataIsolation::create(
+        return $this->createContactDataIsolationByUser(
             $messageDTO->getMetadata()->getOrganizationCode(),
             $messageDTO->getMetadata()->getUserId()
         );
@@ -453,6 +455,10 @@ class HandleAgentMessageAppService extends AbstractAppService
         TaskContext $taskContext,
         TopicEntity $topicEntity
     ): void {
+        $labels = $this->taskNotificationLabelResolver->resolve(
+            task: $taskContext->getTask(),
+            topic: $topicEntity,
+        );
         AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
             $taskContext->getCurrentOrganizationCode(),
             $taskContext->getCurrentUserId(),
@@ -460,7 +466,11 @@ class HandleAgentMessageAppService extends AbstractAppService
             $topicEntity->getTopicName(),
             $taskContext->getTask()->getId(),
             $messageDTO,
-            $messageDTO->getMetadata()->getLanguage()
+            $messageDTO->getMetadata()->getLanguage(),
+            $labels['project_id'],
+            $labels['project_name'],
+            $labels['workspace_id'],
+            $labels['workspace_name']
         ));
     }
 

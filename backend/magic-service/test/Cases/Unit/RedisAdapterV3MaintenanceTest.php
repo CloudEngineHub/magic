@@ -53,17 +53,6 @@ final class RedisAdapterV3MaintenanceTest extends TestCase
         parent::tearDown();
     }
 
-    /** 覆盖批量失败、单条失败、合法空键续期及零变更结果。 */
-    public static function pipelineResults(): iterable
-    {
-        yield '整体失败' => [false, null, true];
-        yield '单条类型错误' => [[false, true], 'WRONGTYPE mock command failed', true];
-        yield '末条类型错误' => [[1, false], 'WRONGTYPE mock command failed', true];
-        yield '空键续期' => [[0, false], null, false];
-        yield '空错误状态' => [[0, false], '', false];
-        yield '正常写入' => [[1, true], null, false];
-    }
-
     /** 校验真实错误会抛出异常，而合法的 false 或零结果保持原样。 */
     #[DataProvider('pipelineResults')]
     public function testPipelineDistinguishesCommandErrorsFromMissingKeys(array|false $result, ?string $error, bool $fails): void
@@ -88,11 +77,15 @@ final class RedisAdapterV3MaintenanceTest extends TestCase
         self::assertSame($result, $actual);
     }
 
-    /** 重建成功与失败均使用合成命令结果，不依赖真实 Redis。 */
-    public static function rebuildResults(): iterable
+    /** 覆盖批量失败、单条失败、合法空键续期及零变更结果。 */
+    public static function pipelineResults(): iterable
     {
-        yield '重建成功' => [null, false];
-        yield '重建再次失败' => ['WRONGTYPE mock rebuild failed', true];
+        yield '整体失败' => [false, null, true];
+        yield '单条类型错误' => [[false, true], 'WRONGTYPE mock command failed', true];
+        yield '末条类型错误' => [[1, false], 'WRONGTYPE mock command failed', true];
+        yield '空键续期' => [[0, false], null, false];
+        yield '空错误状态' => [[0, false], '', false];
+        yield '正常写入' => [[1, true], null, false];
     }
 
     /** 部分写入失败必须标脏，下一轮成功重建后才允许清除脏标记。 */
@@ -117,15 +110,11 @@ final class RedisAdapterV3MaintenanceTest extends TestCase
         self::assertArrayHasKey($sid, $this->property($adapter, 'sidRooms'));
     }
 
-    /** 清理检查覆盖在线、失联、关闭、身份不匹配及映射已被替换的连接。 */
-    public static function connectionStates(): iterable
+    /** 重建成功与失败均使用合成命令结果，不依赖真实 Redis。 */
+    public static function rebuildResults(): iterable
     {
-        yield '在线连接' => [true, true, 101, true, true, false];
-        yield '连接已丢失' => [false, false, 101, true, true, true];
-        yield '套接字已关闭' => [true, false, 101, true, true, true];
-        yield '连接身份不匹配' => [true, true, 102, true, true, true];
-        yield '映射已被替换' => [false, false, 101, true, false, true];
-        yield '非本地连接' => [true, true, 101, false, true, true];
+        yield '重建成功' => [null, false];
+        yield '重建再次失败' => ['WRONGTYPE mock rebuild failed', true];
     }
 
     /** 保留在线连接，回收失联房间，且不得撤销已属于其他 SID 的映射。 */
@@ -170,6 +159,17 @@ final class RedisAdapterV3MaintenanceTest extends TestCase
         self::assertSame((int) $cleaned, $adapter->cleanUpLocalOrphanSidsOnce());
         self::assertSame($cleaned ? [] : [$sid], array_keys($this->property($adapter, 'sidRooms')));
         self::assertSame($cleaned ? [] : ['room:' . $sid => [$sid => true]], $this->property($adapter, 'roomSids'));
+    }
+
+    /** 清理检查覆盖在线、失联、关闭、身份不匹配及映射已被替换的连接。 */
+    public static function connectionStates(): iterable
+    {
+        yield '在线连接' => [true, true, 101, true, true, false];
+        yield '连接已丢失' => [false, false, 101, true, true, true];
+        yield '套接字已关闭' => [true, false, 101, true, true, true];
+        yield '连接身份不匹配' => [true, true, 102, true, true, true];
+        yield '映射已被替换' => [false, false, 101, true, false, true];
+        yield '非本地连接' => [true, true, 101, false, true, true];
     }
 
     /** 构建不连接外部服务的原生 Redis 替身，并约束错误状态的读取顺序。 */

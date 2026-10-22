@@ -27,6 +27,41 @@ describe("HTML preview refresh feedback", () => {
 		rerender(<HtmlPreviewFreshness phase="updating" hasRendered onRetry={vi.fn()} />)
 		expect(screen.getByRole("status")).toHaveTextContent("htmlEditor.previewUpdating")
 	})
+	it("explains a slow first load and shows download progress", () => {
+		const { rerender } = render(
+			<HtmlPreviewFreshness phase="updating" hasRendered={false} onRetry={vi.fn()} />,
+		)
+		expect(screen.queryByRole("status")).toBeNull()
+		rerender(
+			<HtmlPreviewFreshness
+				phase="updating"
+				hasRendered={false}
+				slow
+				progress={{ loaded: 4_200_000, total: 10_000_000 }}
+				onRetry={vi.fn()}
+			/>,
+		)
+		expect(screen.getByRole("status")).toHaveTextContent("htmlEditor.previewSlowLoading")
+		expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "42")
+		expect(screen.getByRole("status")).toHaveTextContent("42%")
+		rerender(
+			<HtmlPreviewFreshness
+				phase="updating"
+				hasRendered={false}
+				slow
+				progress={{ loaded: 4_200_000 }}
+				onRetry={vi.fn()}
+			/>,
+		)
+		expect(screen.queryByRole("progressbar")).toBeNull()
+		expect(screen.getByRole("status")).toHaveTextContent("4.20 MB")
+	})
+	it("says the page is still rendering when the document was sent but not acknowledged", () => {
+		render(
+			<HtmlPreviewFreshness phase="rendering" hasRendered={false} slow onRetry={vi.fn()} />,
+		)
+		expect(screen.getByRole("status")).toHaveTextContent("htmlEditor.previewSlowRendering")
+	})
 	it("exposes a visible retry action after failure without requiring hover", () => {
 		const retry = vi.fn()
 		render(<HtmlPreviewFreshness phase="failed" hasRendered onRetry={retry} />)

@@ -38,6 +38,7 @@ import {
 	type Topic,
 } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
+import { hasAiCanvasDefaultName } from "../utils/isAiCanvasProject"
 import { superMagicStore } from "../stores"
 import type { TopicStore } from "../stores/core/topic"
 import { optimisticMessageStore } from "../stores/optimisticMessageStore"
@@ -48,6 +49,8 @@ import { shouldClearEditorAfterSend } from "./messageSendEditorPolicy"
 import { startMessageSendRenameTask, trackProjectRenameTask } from "./messageSendRenameTask"
 import { projectVisibleMessagesByRevokedTail } from "../utils/project-visible-messages-by-revoked-tail"
 import { analyticsService } from "@/services/analytics"
+import i18next from "i18next"
+import magicToast from "@/components/base/MagicToaster/utils"
 import { getConversationTopicModeOverride } from "./conversationTopicModeOverride"
 
 const logger = Logger.createLogger("messageSendService")
@@ -84,6 +87,8 @@ export interface HandleSendParams {
 	isFromQueue?: boolean
 	queueId?: string
 	shouldClearEditorAfterSend?: boolean
+	/** Programmatic surfaces keep focus in their own input after sending. */
+	shouldFocusEditorAfterSend?: boolean
 	throwOnError?: boolean
 	extra?: Record<string, unknown>
 	targetTopic?: Topic | null
@@ -337,6 +342,7 @@ class MessageSendService {
 			if (getNetworkMonitor().isNetworkOffline()) {
 				markLocalExecutionFailed()
 				optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
+				this.reportSendFailure("network_offline", chat_topic_id)
 				return
 			}
 			this.deps.chatApi
@@ -347,6 +353,12 @@ class MessageSendService {
 							?.seq ?? (res as { seq?: SeqResponse<ConversationQueryMessage> })?.seq
 					if (!responseSeq?.message) {
 						markLocalExecutionFailed()
+						// Keep the sidecar consistent with the rolled-back topic status instead of waiting for the ACK timer.
+						optimisticMessageStore.markFailed({
+							chat_topic_id,
+							app_message_id: messageId,
+						})
+						this.reportSendFailure("ack_without_seq", chat_topic_id)
 						return
 					}
 					// 响应成功后替换 superMagicStore 中对应数据
@@ -354,9 +366,9 @@ class MessageSendService {
 					optimisticMessageStore.confirm({ chat_topic_id, app_message_id: messageId })
 				})
 				.catch((error) => {
-					console.log("error", error)
 					markLocalExecutionFailed()
 					optimisticMessageStore.markFailed({ chat_topic_id, app_message_id: messageId })
+					this.reportSendFailure("chat_request_rejected", chat_topic_id, error)
 				})
 		}
 
@@ -457,7 +469,7 @@ class MessageSendService {
 				editorRef?.clearContentAfterSend()
 			}
 
-			if (!params.isFromQueue) {
+			if (!params.isFromQueue && params.shouldFocusEditorAfterSend !== false) {
 				if (isMobile) {
 					setFocused(false)
 				} else {
@@ -485,6 +497,22 @@ class MessageSendService {
 		} finally {
 			setIsSending(false)
 		}
+	}
+
+	/**
+	 * Surfaces a failed send. The failed sidecar only renders a small icon next to the bubble, which users
+	 * overlook when the chat WebSocket cannot connect; a toast plus a log record makes the loss visible
+	 * and traceable (previously the rejection was only written to the console).
+	 */
+	private reportSendFailure(reason: string, chatTopicId: string, error?: unknown) {
+		this.deps.logger.error({
+			eventKey: "message_send_failed",
+			errorKind: "network",
+			error,
+			message: "message send failed",
+			context: { reason, chatTopicId },
+		})
+		magicToast.error(i18next.t("messageSendFailed", { ns: "super" }))
 	}
 
 	private buildSendOptions({
@@ -606,7 +634,9 @@ class MessageSendService {
 			return
 		}
 
-		if (!project.project_name) {
+		// AI canvas projects are created as "Untitled canvas" rather than unnamed; they are renamed
+		// the same way, and their canvas folder follows the new project name (useAiCanvasDocument).
+		if (!project.project_name || hasAiCanvasDefaultName(project)) {
 			const workspaceId =
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""

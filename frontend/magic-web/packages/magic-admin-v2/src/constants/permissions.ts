@@ -46,6 +46,11 @@ export const PERMISSION_KEY_MAP = {
 	/** 平台模型管理-编辑。 */
 	PLATFORM_MODEL_MANAGEMENT_EDIT: "platform.ai.model_management.edit",
 
+	/** 模型倍率-查询。 */
+	MODEL_MULTIPLIER_QUERY: "platform.ai.model_multiplier.query",
+	/** 模型倍率-编辑。 */
+	MODEL_MULTIPLIER_EDIT: "platform.ai.model_multiplier.edit",
+
 	/* ---------- 平台管理：智能体增强 ---------- */
 
 	/** 系统智能体/模式管理/内置员工-查询。 */
@@ -132,6 +137,15 @@ export const PERMISSION_KEY_MAP = {
 	PARTNER_EDIT: "TeamshareOS_console_partner.edit",
 	/** 用户组管理。 */
 	USER_GROUP_ALL: "TeamshareOS_user_group.all",
+
+	/* ---------- 企业管理：组织身份水印 ---------- */
+
+	/**
+	 * 组织身份水印的读取与保存（资源 admin.setting.identity_watermark、操作 edit）。
+	 * 与旧版 admin 的取值保持一致；后端权限目录尚未下发该 key，
+	 * 因此当前由「企业信息」路由权限 + 服务端 42003 共同兜底。
+	 */
+	IDENTITY_WATERMARK_EDIT: "admin.setting.identity_watermark.edit",
 
 	/* ---------- AI 管理：模型与用量管控 ---------- */
 

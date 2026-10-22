@@ -128,4 +128,43 @@ describe("BorderDecorator", () => {
 			Konva.autoDrawEnabled = previousAutoDrawEnabled
 		}
 	})
+
+	it("pauses and resumes animated borders with render visibility", () => {
+		const previousAutoDrawEnabled = Konva.autoDrawEnabled
+		Konva.autoDrawEnabled = false
+		const startSpy = vi.spyOn(Konva.Animation.prototype, "start")
+		const stopSpy = vi.spyOn(Konva.Animation.prototype, "stop")
+		try {
+			const container = document.createElement("div")
+			document.body.appendChild(container)
+			const stage = new Konva.Stage({ container, width: 500, height: 500 })
+			const layer = new Konva.Layer()
+			stage.add(layer)
+			const { eventEmitter, runtimeScheduler } = createEventEmitterMock()
+			const group = new Konva.Group({ width: 120, height: 80 })
+			const decorator = new BorderDecorator(group, 120, 80, {
+				isAnimated: true,
+				elementId: "image-visibility",
+				canvas: {
+					eventEmitter,
+					runtimeScheduler,
+					selectionManager: { isSelected: () => false },
+				} as never,
+			})
+			layer.add(group)
+
+			decorator.create()
+			const initialStartCalls = startSpy.mock.calls.length
+			const initialStopCalls = stopSpy.mock.calls.length
+			decorator.setRenderVisibility(false)
+			expect(stopSpy).toHaveBeenCalledTimes(initialStopCalls + 1)
+			decorator.setRenderVisibility(true)
+
+			expect(startSpy).toHaveBeenCalledTimes(initialStartCalls + 1)
+			decorator.destroy()
+			stage.destroy()
+		} finally {
+			Konva.autoDrawEnabled = previousAutoDrawEnabled
+		}
+	})
 })

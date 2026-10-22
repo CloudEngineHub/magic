@@ -123,6 +123,8 @@ export type ReferenceResourcePanelAssetType = "image" | "video" | "audio"
 export interface ReferenceResourcePanelSelectionSummary {
 	currentCounts: Record<ReferenceResourcePanelAssetType, number>
 	limits: Partial<Record<ReferenceResourcePanelAssetType, number>>
+	/** 所有资源类型的总上限；与 per-type 独立，非有限值表示无总上限。 */
+	totalLimit?: number
 	getItemAssetType?: (
 		item: ReferenceResourcePanelItem,
 	) => ReferenceResourcePanelAssetType | undefined

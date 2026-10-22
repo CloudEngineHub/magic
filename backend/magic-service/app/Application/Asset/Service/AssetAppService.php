@@ -387,7 +387,8 @@ class AssetAppService extends AbstractAssetAppService
     {
         $isolation = $this->createAssetDataIsolation($authorization);
         $isolation->setContainOfficialOrganization(true);
-        return $this->assetTagDomainService->listVisible($isolation);
+        // 用户侧只看通用素材的标签；其它业务类型（如头像库）的标签不在素材库筛选里出现。
+        return $this->assetTagDomainService->listVisible($isolation, AssetTagEntity::DEFAULT_BUSINESS_TYPE);
     }
 
     public function saveTag(Authenticatable|BaseDataIsolation $authorization, string $name, string $nodeType, int $parentId = 0): AssetTagEntity

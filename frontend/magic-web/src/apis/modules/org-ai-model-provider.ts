@@ -8,6 +8,16 @@ export const MODEL_TYPE_VIDEO = 5
 
 export type ServiceProviderCategory = "llm" | "vlm" | "vgm"
 
+/**
+ * 「我的模型 / 企业模型」按 category 归类：llm=语言、vlm=生图、vgm=视频。
+ * 列表接口返回的 model_type 不可靠（例如 vlm 模型会返回 1），不再用它判断模型属于哪一类。
+ */
+export const MODEL_CATEGORY_BY_TYPE = {
+	[MODEL_TYPE_LLM]: "llm",
+	[MODEL_TYPE_IMAGE]: "vlm",
+	[MODEL_TYPE_VIDEO]: "vgm",
+} as const satisfies Record<number, ServiceProviderCategory>
+
 /** Response from GET /service-providers */
 export interface ServiceProviderConfig {
 	id: string

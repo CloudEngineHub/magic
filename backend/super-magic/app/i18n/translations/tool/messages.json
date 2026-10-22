@@ -1,4 +1,8 @@
 {
+    "ask_user.invalid_questions": {
+        "zh_CN": "问题生成失败，请重新生成问卷",
+        "en_US": "Could not prepare the questions. Please generate the questionnaire again."
+    },
     "send_wechat_message.error.text_too_long": {
         "zh_CN": "正文超过当前发送长度，请分成多条发送；本批未发送",
         "en_US": "Text exceeds the current budget; divide it into messages. This batch was not sent."
@@ -7248,5 +7252,213 @@
     "update_slide_transitions.direction_up": {"zh_CN": "向上", "en_US": "Up"},
     "update_slide_transitions.direction_down": {"zh_CN": "向下", "en_US": "Down"},
     "update_slide_transitions.easing_linear": {"zh_CN": "匀速", "en_US": "Linear"},
-    "update_slide_transitions.easing_ease-in-out": {"zh_CN": "平滑", "en_US": "Smooth"}
+    "update_slide_transitions.easing_ease-in-out": {"zh_CN": "平滑", "en_US": "Smooth"},
+    "persona_chat.before_interview": {
+        "zh_CN": "正在向受访者提问",
+        "en_US": "Asking the participant"
+    },
+    "persona_chat.before_group": {
+        "zh_CN": "正在主持 {{count}} 人小组讨论",
+        "en_US": "Moderating a {{count}}-person group discussion"
+    },
+    "persona_chat.success": {
+        "zh_CN": "已收到 {{count}} 位受访者的回答",
+        "en_US": "Received answers from {{count}} participants"
+    },
+    "persona_chat.partial": {
+        "zh_CN": "{{ok}} 位受访者已回答，{{failed}} 位未能回答",
+        "en_US": "{{ok}} participants answered, {{failed}} could not answer"
+    },
+    "persona_chat.error": {
+        "zh_CN": "受访者暂时没能回答，AI 正在调整",
+        "en_US": "The participant could not answer yet; the AI is adjusting"
+    },
+    "persona_chat.reason.invalid_request": {
+        "zh_CN": "访谈参数不正确，AI 会修正后重试",
+        "en_US": "The interview request was invalid; the AI will correct it and retry"
+    },
+    "persona_chat.reason.profile_unavailable": {
+        "zh_CN": "人设档案缺失或格式不完整",
+        "en_US": "The persona profile is missing or incomplete"
+    },
+    "persona_chat.reason.model_error": {
+        "zh_CN": "回答生成服务暂时不可用",
+        "en_US": "The answer service is temporarily unavailable"
+    },
+    "persona_chat.reason.empty_answer": {
+        "zh_CN": "没有生成有效回答",
+        "en_US": "No valid answer was generated"
+    },
+    "finish_persona_transcript.success": {
+        "zh_CN": "访谈已完成，共 {{rounds}} 轮",
+        "en_US": "Interview finished after {{rounds}} rounds"
+    },
+    "finish_persona_transcript.failed": {
+        "zh_CN": "访谈未能完成，已保留 {{rounds}} 轮记录",
+        "en_US": "Interview could not finish; {{rounds}} rounds kept"
+    },
+    "finish_persona_transcript.error": {
+        "zh_CN": "访谈收尾未通过核对，AI 正在修正",
+        "en_US": "The interview wrap-up did not pass checks; the AI is correcting it"
+    },
+    "finish_persona_transcript.detail_title": {
+        "zh_CN": "访谈小结",
+        "en_US": "Interview summary"
+    },
+    "finish_persona_transcript.detail_findings": {
+        "zh_CN": "关键发现",
+        "en_US": "Key findings"
+    },
+    "finish_persona_transcript.detail_quotes": {
+        "zh_CN": "受访者原话",
+        "en_US": "Participant quotes"
+    },
+    "update_study.created": {
+        "zh_CN": "已创建研究",
+        "en_US": "Study created"
+    },
+    "update_study.progress": {
+        "zh_CN": "进入{{phase}}",
+        "en_US": "Moved to {{phase}}"
+    },
+    "update_study.done": {
+        "zh_CN": "研究已完成",
+        "en_US": "Study completed"
+    },
+    "update_study.error": {
+        "zh_CN": "研究进度未更新，AI 正在调整",
+        "en_US": "Study progress was not updated; the AI is adjusting"
+    },
+    "save_personas.success": {
+        "zh_CN": "{{count}} 位人设：新建 {{new}} 位，复用 {{reused}} 位",
+        "en_US": "{{count}} personas: {{new}} new, {{reused}} reused"
+    },
+    "save_personas.error": {
+        "zh_CN": "人设未保存，AI 正在修正",
+        "en_US": "Personas were not saved; the AI is correcting them"
+    },
+    "check_interviews.success": {
+        "zh_CN": "{{done}}/{{total}} 位已完成访谈",
+        "en_US": "{{done}}/{{total}} interviews done"
+    },
+    "check_interviews.error": {
+        "zh_CN": "暂时无法检查访谈进度",
+        "en_US": "Could not check interview progress"
+    },
+    "check_interviews.detail_title": {
+        "zh_CN": "访谈进度",
+        "en_US": "Interview progress"
+    },
+    "check_interviews.col_persona": {
+        "zh_CN": "人设",
+        "en_US": "Persona"
+    },
+    "check_interviews.col_status": {
+        "zh_CN": "状态",
+        "en_US": "Status"
+    },
+    "check_interviews.col_rounds": {
+        "zh_CN": "轮数",
+        "en_US": "Rounds"
+    },
+    "check_interviews.status.not_started": {
+        "zh_CN": "未开始",
+        "en_US": "Not started"
+    },
+    "check_interviews.status.running": {
+        "zh_CN": "进行中",
+        "en_US": "In progress"
+    },
+    "check_interviews.status.done": {
+        "zh_CN": "已完成",
+        "en_US": "Done"
+    },
+    "check_interviews.status.failed": {
+        "zh_CN": "失败",
+        "en_US": "Failed"
+    },
+    "save_study_synthesis.success": {
+        "zh_CN": "{{themes}} 个主题，引文核对 {{located}}/{{total}}",
+        "en_US": "{{themes}} themes, {{located}}/{{total}} quotes verified"
+    },
+    "save_study_synthesis.error": {
+        "zh_CN": "综合分析未保存，AI 正在修正",
+        "en_US": "The synthesis was not saved; the AI is correcting it"
+    },
+    "save_study_synthesis.detail_title": {
+        "zh_CN": "综合分析",
+        "en_US": "Synthesis"
+    },
+    "save_study_synthesis.detail_summary": {
+        "zh_CN": "共 {{themes}} 个主题；{{located}}/{{total}} 条引文已逐字核对",
+        "en_US": "{{themes}} themes; {{located}}/{{total}} quotes verified word for word"
+    },
+    "save_study_synthesis.detail_saturated": {
+        "zh_CN": "已饱和：每份访谈新增主题 {{series}}",
+        "en_US": "Saturated: new themes per interview {{series}}"
+    },
+    "save_study_synthesis.detail_not_saturated": {
+        "zh_CN": "未饱和：每份访谈新增主题 {{series}}，建议扩大样本",
+        "en_US": "Not saturated: new themes per interview {{series}}; a larger sample is recommended"
+    },
+    "save_study_synthesis.detail_homogeneity": {
+        "zh_CN": "同质化提醒：{{count}} 个主题 AI 受访者全员一致，更可能是模型的「平均答案」，不能当作强证据",
+        "en_US": "Homogeneity warning: {{count}} themes drew unanimous AI agreement, which more likely reflects the model's average answer than strong evidence"
+    },
+    "save_study_synthesis.detail_adjusted": {
+        "zh_CN": "按规则调整的结论",
+        "en_US": "Conclusions adjusted by rule"
+    },
+    "save_validation_questionnaire.success": {
+        "zh_CN": "已生成 {{count}} 道题的问卷表格",
+        "en_US": "Questionnaire sheet with {{count}} questions"
+    },
+    "save_validation_questionnaire.error": {
+        "zh_CN": "问卷表格未生成，AI 正在修正",
+        "en_US": "The questionnaire sheet was not saved; the AI is correcting it"
+    },
+    "save_validation_questionnaire.detail_title": {
+        "zh_CN": "真人验证问卷",
+        "en_US": "Real-person validation questionnaire"
+    },
+    "update_study.phase.clarify": {
+        "zh_CN": "需求澄清",
+        "en_US": "Clarify"
+    },
+    "update_study.phase.plan": {
+        "zh_CN": "研究设计",
+        "en_US": "Design"
+    },
+    "update_study.phase.desk_research": {
+        "zh_CN": "市场洞察",
+        "en_US": "Market insights"
+    },
+    "update_study.phase.interview": {
+        "zh_CN": "人设访谈",
+        "en_US": "Interviews"
+    },
+    "update_study.phase.report": {
+        "zh_CN": "研究产出",
+        "en_US": "Outputs"
+    },
+    "update_study.phase.validation": {
+        "zh_CN": "真人验证",
+        "en_US": "Validation"
+    },
+    "update_study.phase.done": {
+        "zh_CN": "已完成",
+        "en_US": "Done"
+    },
+    "persona_portraits.updated": {
+        "zh_CN": "头像显示已更新，不可用的图片继续使用原显示。人设仍为 AI 模拟。",
+        "en_US": "Avatar display updated; unavailable images keep their fallback. Personas remain AI-simulated."
+    },
+    "persona_portraits.failed": {
+        "zh_CN": "头像未能更新，继续使用原显示。研究内容不受影响。",
+        "en_US": "Avatars could not be updated. The existing display and research content are retained."
+    },
+    "persona_portraits.library_summary": {
+        "zh_CN": "已绑定或复用 {bound} 个头像，{unresolved} 个继续保留原显示。没有新增生图费用。人设仍为 AI 模拟。",
+        "en_US": "Bound or reused {bound} avatars; {unresolved} keep their existing display. No images were generated. Personas remain AI-simulated."
+    }
 }

@@ -15,6 +15,7 @@ import {
 } from "@/pages/superMagic/constants"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
 import { isOwner } from "@/pages/superMagic/utils/permission"
+import { isAiCanvasProject } from "@/pages/superMagic/utils/isAiCanvasProject"
 
 /** 跨工作区列表的动作使用项目本身的归属；共享项目不暴露对方私人目录。 */
 export default function useProjectWorkspace(project: ProjectListItem) {
@@ -39,20 +40,31 @@ export default function useProjectWorkspace(project: ProjectListItem) {
 		: project.is_bind_workspace && project.bind_workspace_id
 			? project.bind_workspace_id
 			: SHARE_WORKSPACE_ID
+	// The ai-canvas workspace is system-managed and hidden from workspace lists; it reads as its
+	// sidebar entry, "AI canvas", wherever a project's location is shown.
+	const aiCanvasWorkspaceName =
+		owner && isAiCanvasProject(project) ? t("sidebar:aiCanvas.title") : null
+	const listedWorkspace = workspaceStore.getWorkspaceById(workspaceId)
 	const workspace: Workspace = specialWorkspace
 		? specialWorkspace
 		: workspaceId === SHARE_WORKSPACE_ID
 			? SHARE_WORKSPACE_DATA(t)
-			: (workspaceStore.getWorkspaceById(workspaceId) ?? {
-					id: workspaceId,
-					name: owner ? project.workspace_name : t("workspace.unnamedWorkspace"),
-					workspace_type: "default",
-					is_archived: 0,
-					workspace_status: WorkspaceStatus.WAITING,
-					project_count: 0,
-					current_project_id: project.id,
-					current_topic_id: project.current_topic_id ?? "",
-				})
+			: listedWorkspace
+				? aiCanvasWorkspaceName
+					? { ...listedWorkspace, name: aiCanvasWorkspaceName }
+					: listedWorkspace
+				: {
+						id: workspaceId,
+						name:
+							aiCanvasWorkspaceName ??
+							(owner ? project.workspace_name : t("workspace.unnamedWorkspace")),
+						workspace_type: "default",
+						is_archived: 0,
+						workspace_status: WorkspaceStatus.WAITING,
+						project_count: 0,
+						current_project_id: project.id,
+						current_topic_id: project.current_topic_id ?? "",
+					}
 
 	return {
 		workspace,

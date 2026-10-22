@@ -1,6 +1,9 @@
 <?php
 
 declare(strict_types=1);
+/**
+ * Copyright (c) The Magic , Distributed under the software license
+ */
 
 namespace Hyperf\Engine;
 
@@ -19,6 +22,7 @@ class Constant
 
     /**
      * 判断是否为 Swow 协程服务，兼容 HTTP、WebSocket 和 TCP 服务。
+     * @param mixed $server
      */
     public static function isCoroutineServer($server): bool
     {

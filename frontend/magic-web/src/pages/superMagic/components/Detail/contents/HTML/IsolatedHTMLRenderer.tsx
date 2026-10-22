@@ -210,11 +210,15 @@ import {
 	type HtmlNavigationRequest,
 } from "./utils/html-navigation"
 import type { HtmlPermissionScope } from "./iframe-api/types"
+import { PPTBuildPanel } from "./components/PPTBuildPanel/PPTBuildPanel"
 import { useHostConversation } from "@/pages/superMagic/contexts/HostConversationContext"
 
 const ignoreDevicePreviewChange = () => undefined
 
 interface IsolatedHTMLRendererProps {
+	buildPanelOpen?: boolean
+	onBuildPanelOpenChange?: (open: boolean) => void
+	onBuildSave?: () => Promise<boolean>
 	devicePreview?: DevicePreviewControls & { enabled: boolean }
 	onDeviceContentScaledChange?: (scaled: boolean) => void
 	content: string
@@ -469,6 +473,9 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			sandboxType = "iframe",
 			className,
 			isPptRender,
+			buildPanelOpen = false,
+			onBuildPanelOpenChange,
+			onBuildSave,
 			isPlaybackPaused = false,
 			isFullscreen,
 			documentFlowFullscreen = false,
@@ -641,12 +648,14 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 		const [stylesExpanded, setStylesExpanded] = useState(true)
 		const [domTreeRevision, setDomTreeRevision] = useState(0)
 		const handleToggleSidebar = useCallback(() => {
+			onBuildPanelOpenChange?.(false)
 			setSidebarOpen((open) => !open)
-		}, [])
+		}, [onBuildPanelOpenChange])
 		const handleRevealMoreStyles = useCallback(() => {
+			onBuildPanelOpenChange?.(false)
 			setSidebarOpen(true)
 			setStylesExpanded(true)
-		}, [])
+		}, [onBuildPanelOpenChange])
 		const [contentInjected, setContentInjected] = useState(false) // 标记内容是否已注入到 iframe
 		const { revision: previewDocumentRevision, restart: restartPreviewDocument } =
 			usePreviewDocumentRevision(content, isEditMode)
@@ -944,9 +953,13 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 				)
 			},
 		)
-		useHTMLEditorV2({
+		const { isEditorReady } = useHTMLEditorV2({
 			iframeRef,
-			isEditMode,
+			isEditMode: isEditMode && !buildPanelOpen,
+			isPPTBuildMode:
+				Boolean(isPptRender && buildPanelOpen) &&
+				isVisible !== false &&
+				isTabActive !== false,
 			sandboxType,
 			iframeLoaded,
 			contentInjected,
@@ -2605,7 +2618,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 			if (isMediaScenario) {
 				// Media场景直接保存说话人配置
 				saveMediaConfiguration()
-			} else if (isEditMode && editorRef.current) {
+			} else if ((isEditMode || buildPanelOpen) && editorRef.current) {
 				// 使用新的编辑机制 V2 保存
 				try {
 					const saveResult = await editorRef.current.save()
@@ -2661,6 +2674,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 					{/* 顶部工具栏与下方工作区共享同一个编辑器外框。 */}
 					{sandboxType === "iframe" &&
 						isEditMode &&
+						!buildPanelOpen &&
 						isVisible !== false &&
 						isTabActive !== false && (
 							<>
@@ -2688,7 +2702,7 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							</>
 						)}
 
-					<div className="flex min-h-0 min-w-0 flex-1">
+					<div className="relative flex min-h-0 min-w-0 flex-1">
 						<div
 							ref={inspectorViewportRef}
 							className="relative flex min-h-0 min-w-0 flex-1 flex-col"
@@ -2842,37 +2856,39 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 										{sandboxType === "iframe" && (
 											<>
 												{/* 选择覆盖层 - 在父窗口中渲染元素高亮 */}
-												{isEditMode && isVisible !== false && (
-													<SelectionOverlay
-														containerRef={
-															devicePreviewEnabled
-																? canvasViewportRef
-																: contentWrapperRef
-														}
-														scrollContainerRef={scrollContainerRef}
-														iframeRef={iframeRef}
-														editorRef={editorRef}
-														scaleRatio={effectiveScaleRatio}
-														isPptRender={
-															shouldApplyScaling ||
-															devicePreviewEnabled
-														}
-														layoutKey={deviceLayoutKey}
-														disabled={isSaving}
-														onSelectedElementChange={
-															setSelectedElementRect
-														}
-														onSelectedElementViewportChange={
-															setSelectedElementViewportRect
-														}
-														onElementMoveStart={() =>
-															setIsContextPanelDismissed(true)
-														}
-														onElementMoveEnd={() =>
-															setIsContextPanelDismissed(true)
-														}
-													/>
-												)}
+												{(isEditMode || buildPanelOpen) &&
+													isVisible !== false && (
+														<SelectionOverlay
+															containerRef={
+																devicePreviewEnabled
+																	? canvasViewportRef
+																	: contentWrapperRef
+															}
+															readOnly={buildPanelOpen || !isEditMode}
+															scrollContainerRef={scrollContainerRef}
+															iframeRef={iframeRef}
+															editorRef={editorRef}
+															scaleRatio={effectiveScaleRatio}
+															isPptRender={
+																shouldApplyScaling ||
+																devicePreviewEnabled
+															}
+															layoutKey={deviceLayoutKey}
+															disabled={isSaving}
+															onSelectedElementChange={
+																setSelectedElementRect
+															}
+															onSelectedElementViewportChange={
+																setSelectedElementViewportRect
+															}
+															onElementMoveStart={() =>
+																setIsContextPanelDismissed(true)
+															}
+															onElementMoveEnd={() =>
+																setIsContextPanelDismissed(true)
+															}
+														/>
+													)}
 												{/* 元素检查覆盖层 - 独立于编辑模式 */}
 												{isVisible !== false && (
 													<ElementInspectorOverlay
@@ -3000,6 +3016,21 @@ const IsolatedHTMLRendererInner = forwardRef<IsolatedHTMLRendererRef, IsolatedHT
 							</div>
 						</div>
 						{sandboxType === "iframe" &&
+						isPptRender &&
+						isVisible !== false &&
+						isTabActive !== false &&
+						buildPanelOpen &&
+						isEditorReady ? (
+							<PPTBuildPanel
+								editorRef={editorRef}
+								contentRevision={domTreeRevision}
+								disabled={isSaving}
+								onCommit={isEditMode ? undefined : onBuildSave}
+								onClose={() => onBuildPanelOpenChange?.(false)}
+							/>
+						) : null}
+						{!buildPanelOpen &&
+						sandboxType === "iframe" &&
 						isEditMode &&
 						isVisible !== false &&
 						sidebarOpen ? (

@@ -18,6 +18,7 @@ use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileTreeRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\GetFileVersionsRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListChildrenPageRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\ListFilesRequestDTO;
+use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\RenameFileRequestDTO;
 use App\Interfaces\SuperMagic\File\MagicFS\DTO\Request\UpdateFileRequestDTO;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -172,6 +173,25 @@ class MagicFSApi extends AbstractApi
         $responseDTO = $this->magicFSFileAppService->updateFile($authorization, $id, $requestDTO);
 
         return $responseDTO->toArray();
+    }
+
+    /**
+     * Rename a file onto a destination, with an explicit collision policy.
+     *
+     * POST /api/v1/open-api/magicfs/files/{id}/rename.
+     *
+     * Separate from updateFile because a rename carries an identity decision
+     * ("whose row survives when the name is taken?") that a partial update
+     * cannot express.
+     */
+    public function renameFile(string $id): array
+    {
+        $authorization = $this->getCurrentUser();
+        $requestDTO = RenameFileRequestDTO::fromRequest($this->request);
+
+        return $this->magicFSFileAppService
+            ->renameFile($authorization, $id, $requestDTO)
+            ->toArray();
     }
 
     /**

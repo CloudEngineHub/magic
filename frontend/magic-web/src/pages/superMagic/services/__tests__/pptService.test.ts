@@ -80,6 +80,21 @@ describe("pptService lazy export providers", () => {
 		await expect(nextPage).rejects.toMatchObject({ name: "AbortError" })
 	})
 
+	it("exports all authored build content without presentation visibility or scripts", async () => {
+		const source = `<h1>Title</h1><p data-ppt-step="1">First</p><p data-ppt-step="2" data-ppt-effect="appear">Second</p>`
+		mocks.loadSlide.mockResolvedValue(source)
+		const pages = []
+		for await (const page of iterateSingleExportSlide({
+			fileId: "slide-1",
+			fileName: "slide-1.html",
+			attachmentList,
+		}))
+			pages.push(page)
+		expect(pages[0].html).toBe(source)
+		expect(pages[0].html).not.toContain("data-magic-ppt-build-hidden")
+		expect(pages[0].html).not.toContain("ppt-build:set")
+	})
+
 	it("exports a single HTML file when no cancellation signal is provided", async () => {
 		mocks.loadSlide.mockResolvedValue("<main>single</main>")
 

@@ -204,6 +204,20 @@ final class CreateShareOwnershipTest extends TestCase
         self::assertSame('resource-1', $saved->getShareCode());
     }
 
+    public function testOwnerUpdateRepairsMissingShareCode(): void
+    {
+        $share = $this->share(ResourceType::Project, false)->setShareCode('');
+        $repository = $this->repository($share);
+        $repository->expects(self::once())->method('save')->with(self::identicalTo($share))->willReturnArgument(0);
+
+        $saved = $this->domain($repository)->saveShare('resource-1', ResourceType::Project->value, 'owner', 'org-1', [
+            'resource_name' => 'updated',
+            'share_type' => 4,
+        ]);
+
+        self::assertSame('resource-1', $saved->getShareCode());
+    }
+
     private function share(ResourceType $type, bool $deleted): ResourceShareEntity
     {
         return (new ResourceShareEntity())->setId(123)->setResourceId('resource-1')

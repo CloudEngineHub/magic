@@ -34,6 +34,7 @@ export class BorderDecorator {
 	private backgroundNode?: Konva.Image
 	private currentBackgroundType?: "selected" | "unselected"
 	private backgroundSwitchRequestId = 0
+	private renderVisibilityEnabled = true
 
 	constructor(group: Konva.Group, width: number, height: number, config: BorderDecoratorConfig) {
 		this.group = group
@@ -107,7 +108,7 @@ export class BorderDecorator {
 		this.borderRect = borderRect
 
 		// 如果是动画状态，启动旋转动画
-		if (this.config.isAnimated) {
+		if (this.config.isAnimated && this.renderVisibilityEnabled) {
 			this.startAnimation()
 		}
 
@@ -139,7 +140,7 @@ export class BorderDecorator {
 			this.borderRect.visible(true)
 			if (this.config.isAnimated) this.updateStrokeWidth()
 			// 如果是动画状态且动画未运行，启动动画
-			if (this.config.isAnimated && !this.borderAnimation) {
+			if (this.config.isAnimated && this.renderVisibilityEnabled && !this.borderAnimation) {
 				this.startAnimation()
 			}
 			// 切换到未选中状态背景
@@ -183,6 +184,27 @@ export class BorderDecorator {
 
 			// 更新尺寸后，确保边框在最上层
 			this.moveToTop()
+		}
+	}
+
+	/**
+	 * Far elements remain mounted in the Konva tree, so visibility culling must also stop their
+	 * element-local animation. The owning element reapplies this state after each rerender.
+	 */
+	public setRenderVisibility(enabled: boolean): void {
+		if (this.renderVisibilityEnabled === enabled) return
+		this.renderVisibilityEnabled = enabled
+		if (!enabled) {
+			this.stopAnimation()
+			return
+		}
+
+		if (
+			this.config.isAnimated &&
+			this.borderRect &&
+			!this.config.canvas.selectionManager.isSelected(this.config.elementId)
+		) {
+			this.startAnimation()
 		}
 	}
 
@@ -317,7 +339,7 @@ export class BorderDecorator {
 		this.stopAnimation()
 
 		const layer = this.group.getLayer()
-		if (!layer || !this.borderRect) return
+		if (!layer || !this.borderRect || !this.renderVisibilityEnabled) return
 
 		// 创建渐变旋转动画（让渐变色围绕边框流动）
 		this.borderAnimation = new Konva.Animation((frame) => {

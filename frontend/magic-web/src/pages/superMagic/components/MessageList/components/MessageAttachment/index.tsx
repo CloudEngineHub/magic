@@ -3,7 +3,7 @@ import { FileResourceIcon } from "@/pages/superMagic/components/TopicFilesButton
 import { resolveFilePresentation } from "@/pages/superMagic/components/TopicFilesButton/utils/file-presentation"
 import { useFileAccess } from "@/pages/superMagic/providers/FileAccessProvider"
 import { getFileType } from "@/pages/superMagic/utils/handleFIle"
-import { useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import type { AttachmentProps } from "./type"
 import MagicIcon from "@/components/base/MagicIcon"
 import { IconChevronDown, IconChevronRight, IconDownload, IconEye } from "@tabler/icons-react"
@@ -25,11 +25,13 @@ import {
 	HomeOnboardingAnchor,
 	startHomeOnboardingDeliverableRunIfDue,
 } from "@/pages/superMagic/components/LazyGuideTour/GuideTourManager"
-import { Send } from "lucide-react"
+import { LocateFixed } from "lucide-react"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { useCanvasElementFileIndex } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasElementFileIndex"
-
-const EMPTY_CANVAS_ELEMENT_IDS: readonly string[] = []
+import { requestCanvasElementFocus } from "@/pages/superMagic/components/Detail/contents/Design/hooks/useDesignFocusElement"
+import { useCanvasAttachmentLocationIndex } from "@/pages/superMagic/components/Detail/contents/Design/utils/canvasAttachmentLocationIndex"
+import type { FileItem } from "@/pages/superMagic/components/Detail/components/FilesViewer/types"
+import { isCanvasAttachmentMediaType } from "@/components/CanvasDesign/public/attachment-media"
+import MagicTooltip from "@/components/base/MagicTooltip"
 
 export const Attachment = observer(function Attachment({
 	attachments,
@@ -43,18 +45,35 @@ export const Attachment = observer(function Attachment({
 	className?: string
 }) {
 	const { t } = useTranslation("super")
-	const { t: tCanvas } = useTranslation("canvasDesign")
-	const {
-		projectFilesStore: resolvedProjectFilesStore,
-		activeFileId,
-		activeDetailTabType,
-		detailPanelVisible,
-	} = useMessageListContext()
-	const canvasElementFileIndex = useCanvasElementFileIndex(activeFileId)
+	const { projectFilesStore: resolvedProjectFilesStore } = useMessageListContext()
 	const isMobile = useIsMobile()
 	const { permissions: access } = useFileAccess()
 	const handleDownload = useMessageAttachmentDownload(attachments)
 	const [expanded, setExpanded] = useState(false)
+	const canvasCandidateFileIds = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					(attachments || [])
+						.filter((item) => {
+							const mediaType = getFileType(item.file_extension || "")
+							return (
+								item.file_tag === "final" &&
+								isCanvasAttachmentMediaType(mediaType) &&
+								Boolean(item.file_id) &&
+								isEmpty(item.display_config)
+							)
+						})
+						.map((item) => String(item.file_id)),
+				),
+			),
+		[attachments],
+	)
+	const canvasAttachmentLocations = useCanvasAttachmentLocationIndex({
+		attachments: resolvedProjectFilesStore.workspaceFileTree as FileItem[],
+		flatAttachments: resolvedProjectFilesStore.workspaceFilesList as FileItem[],
+		candidateFileIds: canvasCandidateFileIds,
+	})
 	/**
 	 * The block the new-user guide frames when it is opened from here.
 	 *
@@ -195,22 +214,18 @@ export const Attachment = observer(function Attachment({
 							magicProjectResolution?.projectName ||
 							getMetaDataName(display_config) ||
 							fileName
-						const canvasElementIds = item.file_id
-							? (canvasElementFileIndex?.elementIdsByFileId.get(
-									String(item.file_id),
-								) ?? EMPTY_CANVAS_ELEMENT_IDS)
-							: EMPTY_CANVAS_ELEMENT_IDS
 						const mediaType = getFileType(item.file_extension || "")
+						const canvasLocations = item.file_id
+							? (canvasAttachmentLocations.get(String(item.file_id)) ?? [])
+							: []
+						// The file must belong to exactly one Canvas directory.
 						const locateTarget =
 							item.file_tag === "final" &&
-							(mediaType === "image" || mediaType === "video") &&
-							activeDetailTabType === "file" &&
-							detailPanelVisible === true &&
-							activeFileId &&
-							canvasElementIds.length === 1
+							isCanvasAttachmentMediaType(mediaType) &&
+							canvasLocations.length === 1
 								? {
-										canvasDesignId: activeFileId,
-										elementId: canvasElementIds[0],
+										canvasDesignId: canvasLocations[0].canvasDesignId,
+										mediaFileId: canvasLocations[0].mediaFileId,
 									}
 								: undefined
 						return (
@@ -260,26 +275,38 @@ export const Attachment = observer(function Attachment({
 										{attachmentName}
 									</span>
 									{isEmpty(attachmentDisplayConfig) && locateTarget && (
-										<button
-											type="button"
-											aria-label={tCanvas("menu.locateProjectFile")}
-											className="inline-flex size-[18px] shrink-0 items-center justify-center text-muted-foreground hover:text-foreground/80"
-											onClick={(event) => {
-												event.preventDefault()
-												event.stopPropagation()
-												pubsub.publish(
-													PubSubEvents.Super_Magic_Focus_Canvas_Element,
-													{
+										<MagicTooltip title={t("operationResultList.viewInCanvas")}>
+											<button
+												type="button"
+												aria-label={t("operationResultList.viewInCanvas")}
+												className="inline-flex size-[18px] shrink-0 items-center justify-center text-muted-foreground hover:text-foreground/80"
+												onClick={(event) => {
+													event.preventDefault()
+													event.stopPropagation()
+													pubsub.publish(PubSubEvents.Open_File_Tab, {
+														fileId: locateTarget.canvasDesignId,
+													})
+													requestCanvasElementFocus({
 														canvasDesignId: locateTarget.canvasDesignId,
-														elementIds: [locateTarget.elementId],
-														selectElement: false,
+														mediaFileId: locateTarget.mediaFileId,
+														selectElement: true,
 														animated: true,
-													},
-												)
-											}}
-										>
-											<Send aria-hidden="true" size={16} strokeWidth={2} />
-										</button>
+														padding: {
+															top: "25%",
+															right: "25%",
+															bottom: "25%",
+															left: "25%",
+														},
+													})
+												}}
+											>
+												<LocateFixed
+													aria-hidden="true"
+													size={16}
+													strokeWidth={2}
+												/>
+											</button>
+										</MagicTooltip>
 									)}
 									{access.view && access.preview && (
 										<MagicIcon

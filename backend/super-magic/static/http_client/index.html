@@ -268,6 +268,20 @@
                             </select>
                         </div>
 
+                        <!-- 调试思考强度固定提供七档，不依赖模型能力接口；默认不传递。 -->
+                        <div class="model-config" id="reasoningEffortGroup">
+                            <select id="reasoningEffortSelect" class="agent-mode-select" aria-label="思考强度">
+                                <option value="" selected>思考强度（不传递）</option>
+                                <option value="none">关闭（none）</option>
+                                <option value="minimal">最低（minimal）</option>
+                                <option value="low">低（low）</option>
+                                <option value="medium">中（medium）</option>
+                                <option value="high">高（high）</option>
+                                <option value="xhigh">超高（xhigh）</option>
+                                <option value="max">极致（max）</option>
+                            </select>
+                        </div>
+
                         <!-- 图片模型配置（加载模型列表后显示，IM 模式下隐藏） -->
                         <div class="model-config" id="imageModelGroup" style="display:none">
                             <select id="imageModelSelect" class="agent-mode-select">
@@ -432,7 +446,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/micro_app_runtime.js?v=debug-workspace-files-7"></script>
     <script src="js/model_picker.js?v=unified-model-picker-4"></script>
-    <script src="js/client.js?v=reply-order-2"></script>
+    <script src="js/client.js?v=reasoning-effort-1"></script>
 </body>
 
 </html>

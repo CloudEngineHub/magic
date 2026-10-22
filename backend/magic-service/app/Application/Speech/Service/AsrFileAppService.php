@@ -658,11 +658,8 @@ class AsrFileAppService extends AbstractAppService
             $this->saveTaskStatusToRedis($taskStatus);
         }
 
-        // Per-call DataIsolation. DataIsolation::create() auto-fetches the
-        // user-authorization token from the magic_tokens stable user-token
-        // table, so every downstream SandboxGatewayInterface call in the
-        // matched branch carries User-Authorization.
-        $dataIsolation = DataIsolation::create($organizationCode, $userId);
+        // 在应用边界注册延迟授权，首次沙箱消费时才获取 token。
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
 
         // 根据状态处理
         return match ($status) {
@@ -774,11 +771,8 @@ class AsrFileAppService extends AbstractAppService
             }
             $this->setFinishRecoverableContext($taskStatus, $fileTitle);
 
-            // DataIsolation::create() auto-fetches the user-authorization
-            // token, so every downstream SandboxGatewayInterface call
-            // (merge / ensureSandbox / finishTask / queryTask / ...) in
-            // AsrSandboxService forwards the same User-Authorization header.
-            $dataIsolation = DataIsolation::create($organizationCode, $userId);
+            // 首次读取时才按用户查询授权，后续录音沙箱请求复用同一结果。
+            $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
 
             // 合并音频（沙箱会重命名目录但不会通知文件变动）
             $this->asrSandboxService->mergeAudioFiles($dataIsolation, $taskStatus, $fileTitle, AsrTaskStatusEnum::COMPLETED);
@@ -1406,11 +1400,8 @@ class AsrFileAppService extends AbstractAppService
         string $organizationCode,
         ?string $generatedTitle = null
     ): void {
-        // DataIsolation::create() auto-fetches the user-authorization
-        // token from the stable user-token table, so every downstream
-        // AsrSandboxService call (merge / ensureSandbox / finishTask
-        // / queryTask) forwards the same User-Authorization header.
-        $dataIsolation = DataIsolation::create($organizationCode, $userId);
+        // 首次读取时才按用户查询授权 token。
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
 
         $lockName = sprintf(AsrRedisKeys::FINISH_RECORDING_LOCK, $taskKey);
         $lockOwner = sprintf('%s:%s:%s', $userId, $taskKey, microtime(true));
@@ -1535,10 +1526,8 @@ class AsrFileAppService extends AbstractAppService
         }
 
         try {
-            // DataIsolation::create() auto-fetches the user-authorization
-            // token from the stable user-token table, so downstream
-            // AsrSandboxService forwards it as User-Authorization header.
-            $dataIsolation = DataIsolation::create($organizationCode, $userId);
+            // 首次读取时才按用户查询授权 token。
+            $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
 
             $taskStatus = $this->loadRecoverFinishRecordingTaskStatus($taskKey, $userId, $organizationCode);
 
@@ -2670,7 +2659,7 @@ class AsrFileAppService extends AbstractAppService
             // 更新话题名称
             $topicEntity = $this->superAgentTopicDomainService->getTopicById($topicId);
             if ($topicEntity && empty(trim($topicEntity->getTopicName() ?? ''))) {
-                $dataIsolation = DataIsolation::simpleMake($organizationCode, $userId);
+                $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $userId);
                 $this->superAgentTopicDomainService->updateTopic($dataIsolation, $topicId, $generatedTitle);
             }
         } catch (Throwable $e) {
@@ -2775,8 +2764,8 @@ class AsrFileAppService extends AbstractAppService
 
         // Build DataIsolation once for downstream sandbox calls. Note
         // $taskStatus->userId is the record-ownership identity here.
-        // DataIsolation::create() auto-fetches the user-authorization token.
-        $dataIsolation = DataIsolation::create($organizationCode, $taskStatus->userId);
+        // 首次读取时才按用户查询授权 token。
+        $dataIsolation = $this->createContactDataIsolationByUser($organizationCode, $taskStatus->userId);
 
         // Merge audio files and get merge result (includes duration and file_size)
         $mergeResult = $this->asrSandboxService->mergeAudioFiles(
@@ -3090,7 +3079,7 @@ class AsrFileAppService extends AbstractAppService
      */
     private function queueChatMessage(ProcessSummaryTaskDTO $dto, ChatRequest $chatRequest, MagicUserAuthorization $userAuthorization): void
     {
-        $dataIsolation = DataIsolation::create($userAuthorization->getOrganizationCode(), $userAuthorization->getId());
+        $dataIsolation = $this->createContactDataIsolationByUser($userAuthorization->getOrganizationCode(), $userAuthorization->getId());
         $topicEntity = $this->superAgentTopicDomainService->getTopicById((int) $dto->topicId);
         if ($topicEntity === null) {
             ExceptionBuilder::throw(AsrErrorCode::TopicNotExist, '', ['topicId' => $dto->topicId]);
@@ -3308,7 +3297,7 @@ class AsrFileAppService extends AbstractAppService
         $this->asrTaskDomainService->saveTaskStatusAndDeleteHeartbeat($taskStatus);
 
         // 准备 DataIsolation 对象（用于删除目录）
-        $dataIsolation = DataIsolation::simpleMake(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $taskStatus->organizationCode,
             $taskStatus->userId
         );

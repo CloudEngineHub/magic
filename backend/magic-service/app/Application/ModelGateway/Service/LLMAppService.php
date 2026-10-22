@@ -40,6 +40,7 @@ use App\Domain\Provider\Entity\ValueObject\ProviderCode;
 use App\Domain\Provider\Entity\ValueObject\ProviderDataIsolation;
 use App\Domain\Provider\Entity\ValueObject\Status;
 use App\Domain\Provider\Service\AiAbilityDomainService;
+use App\Domain\Provider\Service\ModelIdentifierMappingDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\ErrorCode\ServiceProviderErrorCode;
 use App\Infrastructure\Core\Exception\BusinessException;
@@ -104,6 +105,9 @@ use InvalidArgumentException;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Throwable;
 
+/**
+ * 模型网关应用服务，协调模型调用、鉴权及请求生命周期。
+ */
 class LLMAppService extends AbstractLLMAppService
 {
     /**
@@ -1162,6 +1166,10 @@ class LLMAppService extends AbstractLLMAppService
         $modelGatewayDataIsolation = null;
         $modelAttributes = null;
         $accessContext = null;
+        // 每次处理都重新从实际模型取默认值，不接受外部注入或上一轮路由残留。
+        if ($proxyModelRequest instanceof CompletionDTO) {
+            $proxyModelRequest->setModelReasoningEffortDefault(null);
+        }
         $originalModelId = $proxyModelRequest->getModel();
         $requestExtra = $proxyModelRequest->getExtra();
         $invocationSuccessAudited = false;
@@ -1186,6 +1194,12 @@ class LLMAppService extends AbstractLLMAppService
             $modeId = $this->aggregateModelResolverService->resolve($originalModelId, $modelGatewayDataIsolation, $accessContext);
             // 动态模型解析后仍需二次校验，确保最终落到的真实子模型也在用户可访问范围内。
             $this->modelGatewayModelAccessService->assertCanAccess($accessContext, $modeId);
+
+            // 将高可用最终确定的模型标识替换为平台配置的目标模型标识。
+            $modeId = di(ModelIdentifierMappingDomainService::class)->replaceModelIdentifier(
+                ProviderDataIsolation::create()->disabled(),
+                $modeId,
+            );
 
             // 设置原始 model_id（目前用于识别是否动态模型）.
             if ($proxyModelRequest instanceof AbstractRequestDTO) {
@@ -1214,6 +1228,9 @@ class LLMAppService extends AbstractLLMAppService
                 };
                 if ($model instanceof ModelEntry) {
                     $proxyModelRequest->setExtra($this->mergeModelExtra($model->getExtra(), $requestExtra));
+                    if ($proxyModelRequest instanceof CompletionDTO) {
+                        $proxyModelRequest->setModelReasoningEffortDefault($model->getReasoningEffortDefault());
+                    }
                     $modelAttributes = $model->getAttributes();
                     $impl = $model->getModel();
                     $model = $impl instanceof OdinModel ? $impl->getModel() : $impl;
@@ -1228,6 +1245,9 @@ class LLMAppService extends AbstractLLMAppService
                     };
                     if ($model instanceof ModelEntry) {
                         $proxyModelRequest->setExtra($this->mergeModelExtra($model->getExtra(), $requestExtra));
+                        if ($proxyModelRequest instanceof CompletionDTO) {
+                            $proxyModelRequest->setModelReasoningEffortDefault($model->getReasoningEffortDefault());
+                        }
                         $modelAttributes = $model->getAttributes();
                         $impl = $model->getModel();
                         $model = $impl instanceof OdinModel ? $impl->getModel() : $impl;
@@ -1879,7 +1899,7 @@ class LLMAppService extends AbstractLLMAppService
     }
 
     /**
-     * Call model using Odin.
+     * 使用 Odin 调用模型，统一思考强度优先于旧配置，均为空时沿用模型默认值。
      */
     private function callWithOdinChat(ModelInterface $odinModel, CompletionDTO $sendMsgDTO): ChatCompletionResponse|ChatCompletionStreamResponse|TextCompletionResponse
     {
@@ -1912,7 +1932,11 @@ class LLMAppService extends AbstractLLMAppService
         $chatRequest->setFrequencyPenalty($sendMsgDTO->getFrequencyPenalty());
         $chatRequest->setPresencePenalty($sendMsgDTO->getPresencePenalty());
         $chatRequest->setBusinessParams($sendMsgDTO->getBusinessParams());
-        $chatRequest->setThinking($sendMsgDTO->getThinking());
+        if ($sendMsgDTO->getEffectiveReasoningEffort() !== null) {
+            $chatRequest->setReasoningEffort($sendMsgDTO->getEffectiveReasoningEffort());
+        } else {
+            $chatRequest->setThinking($sendMsgDTO->getThinking());
+        }
         $chatRequest->setExtra($sendMsgDTO->getExtra() ?? []);
 
         return match ($sendMsgDTO->getCallMethod()) {

@@ -42,6 +42,7 @@ import {
 import {
 	buildMediaSourceReplacementPatch,
 	finalizeMediaSourceReplacement,
+	isMediaSourceChanged,
 } from "../../document/mediaSourceReplacement"
 import { ImageElement as ImageElementClass } from "../../elements/image/ImageElement"
 import { VideoElement as VideoElementClass } from "../../elements/video/VideoElement"
@@ -1299,10 +1300,15 @@ export class CanvasFileUploadManager {
 		const historyManager = this.canvas.historyManager
 		historyManager.disable()
 		try {
+			// 音频 Content 只有 src/assetId 两个字段，不能写入图片/视频专用的合规字段，
+			// 否则 v3 校验会因多余字段拒绝整条元素数据。
+			const patch = isMediaSourceChanged(previousContent?.src, nextPath)
+				? { src: nextPath, assetId: undefined }
+				: {}
 			const next = updateContent(
 				target.data as never,
 				target.contentId,
-				buildMediaSourceReplacementPatch(previousContent?.src, nextPath) as never,
+				patch as never,
 			) as CanvasFileElement
 			if (next === target.data) return false
 			// 直接提交完整 contents，确保异步替换仍写入点击时捕获的 Content。

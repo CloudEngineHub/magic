@@ -111,6 +111,7 @@ class TopicTaskAppService extends AbstractAppService
         private readonly ClientMessageAppService $clientMessageAppService,
         private readonly ProjectDomainService $projectDomainService,
         private readonly TopicDomainService $topicDomainService,
+        private readonly TaskNotificationLabelResolver $taskNotificationLabelResolver,
         private readonly TaskDomainService $taskDomainService,
         private readonly TaskFileDomainService $taskFileDomainService,
         private readonly TaskMessageDomainService $taskMessageDomainService,
@@ -178,7 +179,7 @@ class TopicTaskAppService extends AbstractAppService
                 // 2. 在应用层完成DTO到实体的转换
                 // Get message ID (prefer message ID from payload, generate new one if none)
                 $messageId = $messageDTO->getPayload()?->getMessageId() ?: IdGenerator::getSnowId();
-                $dataIsolation = DataIsolation::simpleMake($topicEntity->getUserOrganizationCode(), $topicEntity->getUserId());
+                $dataIsolation = $this->createContactDataIsolationByUser($topicEntity->getUserOrganizationCode(), $topicEntity->getUserId());
                 $aiUserEntity = $this->userDomainService->getByAiCode($dataIsolation, AgentConstant::SUPER_MAGIC_CODE);
                 $messageEntity = $messageDTO->toTaskMessageEntity($topicId, $aiUserEntity->getUserId(), $topicEntity->getUserId());
 
@@ -351,7 +352,7 @@ class TopicTaskAppService extends AbstractAppService
                     errMsg: ''
                 );
                 // 5. 派发回调事件 - 仅在任务完成或失败时触发，不包括 Stopped 状态
-                $this->dispatchCallbackEvent($messageDTO, $dataIsolation, $topicId, $taskEntity);
+                $this->dispatchCallbackEvent($messageDTO, $dataIsolation, $topicId, $taskEntity, $topicEntity);
             }
 
             $this->logger->debug('话题任务消息处理完成', [
@@ -870,7 +871,7 @@ class TopicTaskAppService extends AbstractAppService
         SuperMagicExecutionSource $executionSource = SuperMagicExecutionSource::HumanChat
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -894,7 +895,7 @@ class TopicTaskAppService extends AbstractAppService
         SuperMagicExecutionSource $executionSource = SuperMagicExecutionSource::OpenApi
     ): array {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -938,7 +939,7 @@ class TopicTaskAppService extends AbstractAppService
     public function cancelTask(RequestContext $requestContext, string $taskId): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -989,7 +990,7 @@ class TopicTaskAppService extends AbstractAppService
     public function getTaskStatusById(RequestContext $requestContext, int $taskId): array
     {
         $userAuthorization = $requestContext->getUserAuthorization();
-        $dataIsolation = DataIsolation::create(
+        $dataIsolation = $this->createContactDataIsolationByUser(
             $userAuthorization->getOrganizationCode(),
             $userAuthorization->getId()
         );
@@ -1767,7 +1768,8 @@ class TopicTaskAppService extends AbstractAppService
         TopicTaskMessageDTO $messageDTO,
         DataIsolation $dataIsolation,
         int $topicId,
-        TaskEntity $taskEntity
+        TaskEntity $taskEntity,
+        TopicEntity $topicEntity,
     ): void {
         $this->logger->debug('派发 RunTaskCallbackEvent 事件', [
             'topic_id' => $topicId,
@@ -1777,6 +1779,10 @@ class TopicTaskAppService extends AbstractAppService
             'user_id' => $dataIsolation->getCurrentUserId(),
         ]);
         // 派发 RunTaskCallbackEvent
+        $labels = $this->taskNotificationLabelResolver->resolve(
+            task: $taskEntity,
+            topic: $topicEntity,
+        );
         AsyncEventUtil::dispatch(new RunTaskCallbackEvent(
             $dataIsolation->getCurrentOrganizationCode(),
             $dataIsolation->getCurrentUserId(),
@@ -1784,7 +1790,11 @@ class TopicTaskAppService extends AbstractAppService
             '', // 话题名称传空字符串
             $taskEntity->getId(),
             $messageDTO,
-            $messageDTO->getMetadata()->getLanguage()
+            $messageDTO->getMetadata()->getLanguage(),
+            $labels['project_id'],
+            $labels['project_name'],
+            $labels['workspace_id'],
+            $labels['workspace_name']
         ));
     }
 

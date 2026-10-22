@@ -10,12 +10,11 @@ namespace HyperfTest\Cases\Application\SuperMagic\Skill;
 use App\Application\SuperMagic\Skill\Service\SkillAppService;
 use App\Domain\Permission\Entity\ValueObject\OperationPermission\Operation;
 use App\Domain\SuperMagic\Skill\Entity\SkillEntity;
-use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Entity\ValueObject\Query\SkillQuery;
+use App\Domain\SuperMagic\Skill\Entity\ValueObject\SkillDataIsolation;
 use App\Domain\SuperMagic\Skill\Service\SkillDomainService;
 use App\Domain\SuperMagic\Skill\Service\SkillVersionDomainService;
 use App\Infrastructure\Core\ValueObject\Page;
-
 use App\Infrastructure\Util\Context\RequestContext;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;

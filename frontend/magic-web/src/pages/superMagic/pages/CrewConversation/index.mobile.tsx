@@ -9,7 +9,11 @@ import CrewStateView from "./components/CrewStateView"
 import CrewTopicList from "./components/CrewTopicList"
 
 interface CrewConversationMobileProps {
-	widgetContext?: { instanceId: string; hostOrigin: string } | null
+	widgetContext?: {
+		instanceId: string
+		hostOrigin: string
+		renderMode?: "inline" | "floating"
+	} | null
 }
 
 /** Renders the mobile Crew layout and forwards optional widget bridge metadata. */

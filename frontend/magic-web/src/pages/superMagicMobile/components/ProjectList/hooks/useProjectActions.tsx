@@ -72,6 +72,10 @@ interface UseProjectListActionsOptions {
 	actionContext?: "default" | "project-detail" | "shell-recent"
 	deleteSelectedProjectBehavior?: "switch-next" | "navigate-home"
 	visibleActionKeys?: ProjectActionKey[]
+	/** Actions removed for this caller on top of the other rules (e.g. "move" for AI canvas). */
+	hiddenActionKeys?: ProjectActionKey[]
+	/** Keeps "pin" in the project-detail menu, where it is normally left out (AI canvas). */
+	showPinInProjectDetail?: boolean
 }
 
 export type ProjectActionKey =
@@ -94,6 +98,8 @@ export function useProjectListActions({
 	actionContext = "default",
 	deleteSelectedProjectBehavior = "switch-next",
 	visibleActionKeys,
+	hiddenActionKeys,
+	showPinInProjectDetail = false,
 }: UseProjectListActionsOptions = {}) {
 	const { t } = useTranslation("super")
 	const navigate = useNavigate()
@@ -365,7 +371,7 @@ export function useProjectListActions({
 					closeActionsPopup()
 				},
 				variant: "default",
-				visible: !isProjectDetailActionContext,
+				visible: !isProjectDetailActionContext || showPinInProjectDetail,
 				"data-testid": "project-actions-pin-project",
 			},
 			{
@@ -489,6 +495,7 @@ export function useProjectListActions({
 			: null
 		const filtered = actions.filter((action) => {
 			if (!action.visible) return false
+			if (hiddenActionKeys?.includes(action.key)) return false
 			if (simplifiedActionKeySet) {
 				return simplifiedActionKeySet.has(action.key as SharedProjectVisibleActionKey)
 			}
@@ -516,6 +523,8 @@ export function useProjectListActions({
 		isChatMode,
 		shouldShowSaveAsProject,
 		visibleActionKeys,
+		hiddenActionKeys,
+		showPinInProjectDetail,
 		sharedProjectActionPolicy,
 		isProjectDetailActionContext,
 		isShellRecentActionContext,

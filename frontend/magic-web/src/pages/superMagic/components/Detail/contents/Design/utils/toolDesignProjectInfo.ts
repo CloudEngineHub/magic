@@ -1,6 +1,7 @@
 import { LayerElement } from "@/components/CanvasDesign/runtime/document/types"
 import projectFilesStore from "@/stores/projectFiles"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { requestCanvasElementFocus } from "../hooks/useDesignFocusElement"
 
 export function getToolDesignProjectInfo(
 	tool: unknown,
@@ -69,18 +70,15 @@ export function focusCanvasElementByProjectPath(options: {
 		fileId: designProject.id,
 	})
 
-	// 复用 Canvas 详情区已有的初始化等待队列；事件先发出，Canvas 准备好后再执行聚焦。
-	setTimeout(() => {
-		pubsub.publish(PubSubEvents.Super_Magic_Focus_Canvas_Element, {
-			canvasDesignId: designProject.id,
-			elementIds: [options.elementId],
-			selectElement: [options.elementId],
-			contentId: options.contentId,
-			showGenerationDetails: options.showGenerationDetails,
-			animated: false,
-			padding: { top: "25%", right: "25%", bottom: "25%", left: "25%" },
-		})
-	}, 200)
+	requestCanvasElementFocus({
+		canvasDesignId: designProject.id,
+		elementIds: [options.elementId],
+		selectElement: [options.elementId],
+		contentId: options.contentId,
+		showGenerationDetails: options.showGenerationDetails,
+		animated: false,
+		padding: { top: "25%", right: "25%", bottom: "25%", left: "25%" },
+	})
 
 	return true
 }

@@ -103,6 +103,7 @@ export async function loadStandaloneSession({
 				editionOrganization?.teamshareOrganizationCode ||
 				organization.third_platform_organization_code ||
 				organization.magic_organization_code,
+			logo: organization.organization_logo || editionOrganization?.logo || undefined,
 			name:
 				contactOrganization?.name ||
 				editionOrganization?.name ||

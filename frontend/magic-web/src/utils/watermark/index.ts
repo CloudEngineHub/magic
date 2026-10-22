@@ -80,14 +80,14 @@ export const WATERMARK_CONFIG = {
 }
 
 /**
- * 个人组织版 user_id 水印的文字色：接近透明，肉眼几乎不可见。
- * 个人组织版只用它做隐性的溯源标记，不应干扰成员正常阅读。
+ * 环境变量开启的调试水印（`MAGIC_WATERMARK_ENABLED`）文字色：接近透明，肉眼几乎不可见。
+ * 它只做隐性溯源标记，不应干扰成员阅读；个人组织与团队/企业组织统一使用。
  */
 const USER_ID_WATERMARK_TEXT_COLOR = "rgba(0, 0, 0, 0.01)"
 
 /**
- * 个人组织版（由 `MAGIC_WATERMARK_ENABLED` 环境变量开启）使用的 user_id 页面水印。
- * 与 {@link WATERMARK_CONFIG} 的区别只在文字颜色：个人组织版几乎透明。
+ * 环境变量开启的 user_id 调试水印配置，各组织类型共用。
+ * 与 {@link WATERMARK_CONFIG} 的区别只在文字颜色：调试水印几乎透明。
  */
 export const USER_ID_WATERMARK_CONFIG = {
 	...WATERMARK_CONFIG,
@@ -1101,12 +1101,12 @@ export function resolveUserWatermarkRenderConfig(mode: UserWatermarkMode): {
 		}
 	}
 
-	// 个人组织版保留环境变量开启的 user_id 水印，颜色接近透明。
-	if (currentIsPersonalOrganization) {
-		return { key: "user-id", config: USER_ID_WATERMARK_CONFIG }
+	// 环境变量开启的调试水印只做隐性溯源，个人组织与团队/企业组织统一用近乎透明的颜色。
+	// 保留不同的渲染键，避免切换组织时命中缓存而沿用旧节点。
+	return {
+		key: currentIsPersonalOrganization ? "user-id" : "legacy",
+		config: USER_ID_WATERMARK_CONFIG,
 	}
-
-	return { key: "legacy", config: WATERMARK_CONFIG }
 }
 
 if (typeof window !== "undefined") {

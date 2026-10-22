@@ -51,6 +51,19 @@ export enum TopicMode {
 	MicroApp = "micro-app",
 
 	/**
+	 * AI 画布项目模式
+	 * 只用于识别 ai-canvas 专属工作区里的项目并跳转到 AI 画布页；
+	 * 对话仍使用 Design 话题模式（design 数字员工）。
+	 */
+	AiCanvas = "ai-canvas",
+
+	/**
+	 * AI 消费者研究
+	 * 不会在模式列表中存在，只用于 AI 研究独立页面的话题
+	 */
+	PersonaResearch = "persona_research",
+
+	/**
 	 * 默认模式
 	 * 用于获取默认模式模型列表
 	 */

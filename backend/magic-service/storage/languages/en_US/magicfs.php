@@ -20,5 +20,6 @@ return [
 
     'invalid_file_key' => 'Invalid value',
     'topic_id_required' => 'Unable to resolve topic_id for topic space',
+    'invalid_on_exists' => 'Invalid collision policy for rename: :on_exists (expected replace or fail)',
     'unsupported_space_type' => 'Unsupported space type',
 ];

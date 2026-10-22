@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { ImageResourceManager, type ImageResourceVariant } from "../image/ImageResourceManager"
 import { createImageResourceDiagnostics } from "../diagnostics/CanvasResourceDiagnostics"
-import {
-	DEFAULT_MEDIA_DECODE_CONCURRENT_PIXEL_BUDGET,
-	MediaDecodePixelBudgetGate,
-} from "../offline-cache/MediaDecodePixelBudget"
 import { MediaResourceBodyCache } from "../offline-cache/MediaResourceBodyCache"
 import type { DecodedImageRetentionHint } from "../visibility/CanvasVisibilityManager"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
@@ -145,7 +141,6 @@ function createManager() {
 		entries: Map<string, ReturnType<typeof createEntry>>
 		previewLoadQueue: unknown[]
 		activePreviewLoadPipelineCount: number
-		decodePixelBudgetGate: MediaDecodePixelBudgetGate
 		lastSuccessfulDecodeIdentityByPathVariant: Map<string, string>
 		bodyCache: MediaResourceBodyCache<ReturnType<typeof createEntry>>
 		displayVariantPersistentCache: {
@@ -203,9 +198,6 @@ function createManager() {
 	manager.entries = new Map()
 	manager.previewLoadQueue = []
 	manager.activePreviewLoadPipelineCount = 0
-	manager.decodePixelBudgetGate = new MediaDecodePixelBudgetGate(
-		DEFAULT_MEDIA_DECODE_CONCURRENT_PIXEL_BUDGET,
-	)
 	manager.lastSuccessfulDecodeIdentityByPathVariant = new Map()
 	manager.bodyCache = new MediaResourceBodyCache({ ttlMs: 120_000, maxBytes: 256 * 1024 * 1024 })
 	manager.displayVariantPersistentCache = {
@@ -418,13 +410,10 @@ describe("ImageResourceManager image resources", () => {
 		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
 	})
 
-	it("passes the pipeline signal to the decode pixel budget gate", async () => {
+	it("passes decode priority, pixel cost and signal to the worker client", async () => {
 		const { manager } = createManager()
 		const controller = new AbortController()
-		const release = vi.fn()
-		const acquire = vi
-			.spyOn(manager.decodePixelBudgetGate, "acquire")
-			.mockResolvedValue(release)
+		const sendToWorker = vi.fn(async () => null)
 		const entry = createEntry()
 		const loadImageResource = (
 			manager as unknown as {
@@ -450,7 +439,11 @@ describe("ImageResourceManager image resources", () => {
 		;(
 			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
 		).estimateImageDecodePixelCost = vi.fn(async () => 1)
-		;(manager.canvas.resourceScheduler.run as ReturnType<typeof vi.fn>).mockResolvedValue(null)
+		;(manager as unknown as { sendToWorker: typeof sendToWorker }).sendToWorker = sendToWorker
+		;(manager.canvas.resourceScheduler.run as ReturnType<typeof vi.fn>).mockImplementation(
+			async (_kind: string, task: (signal: AbortSignal) => Promise<unknown>) =>
+				task(controller.signal),
+		)
 		manager.lastSuccessfulDecodeIdentityByPathVariant.set(
 			"images/decode-signal.png\u0000preview",
 			"images/decode-signal.png\u0000decode-signal\u0000preview",
@@ -468,8 +461,11 @@ describe("ImageResourceManager image resources", () => {
 		)
 
 		expect(result).toBeNull()
-		expect(acquire).toHaveBeenCalledWith(1, "visible", controller.signal)
-		expect(release).toHaveBeenCalledTimes(1)
+		expect(sendToWorker).toHaveBeenCalledWith(expect.objectContaining({ variant: "preview" }), {
+			signal: controller.signal,
+			priority: "visible",
+			pixelCost: 1,
+		})
 		expect(manager.getSnapshot().decodeRepeatAttemptCount).toBe(1)
 	})
 
@@ -477,7 +473,6 @@ describe("ImageResourceManager image resources", () => {
 		const { manager } = createManager()
 		const controller = new AbortController()
 		const close = vi.fn()
-		const release = vi.fn()
 		;(
 			manager.canvas as unknown as {
 				resourceScheduler: {
@@ -504,9 +499,6 @@ describe("ImageResourceManager image resources", () => {
 		;(
 			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
 		).estimateImageDecodePixelCost = vi.fn(async () => 1)
-		;(
-			manager as unknown as { acquireImageDecodePermit: ReturnType<typeof vi.fn> }
-		).acquireImageDecodePermit = vi.fn(async () => release)
 		;(manager as unknown as { sendToWorker: ReturnType<typeof vi.fn> }).sendToWorker = vi.fn(
 			async () => ({
 				imageSource: { width: 10, height: 10, close } as unknown as ImageBitmap,
@@ -546,7 +538,6 @@ describe("ImageResourceManager image resources", () => {
 
 		expect(result).toBeNull()
 		expect(close).toHaveBeenCalledTimes(1)
-		expect(release).toHaveBeenCalledTimes(1)
 		expect(entry.displaySlots.preview.resource).toBeNull()
 		expect(manager.getSnapshot().staleRequestDropCount).toBe(1)
 	})
@@ -555,7 +546,6 @@ describe("ImageResourceManager image resources", () => {
 		const { manager } = createManager()
 		const path = "images/decode-generation.png"
 		const close = vi.fn()
-		const release = vi.fn()
 		;(
 			manager.canvas as unknown as {
 				resourceScheduler: { run: ReturnType<typeof vi.fn> }
@@ -581,9 +571,6 @@ describe("ImageResourceManager image resources", () => {
 		;(
 			manager as unknown as { estimateImageDecodePixelCost: ReturnType<typeof vi.fn> }
 		).estimateImageDecodePixelCost = vi.fn(async () => 1)
-		;(
-			manager as unknown as { acquireImageDecodePermit: ReturnType<typeof vi.fn> }
-		).acquireImageDecodePermit = vi.fn(async () => release)
 		;(manager as unknown as { sendToWorker: ReturnType<typeof vi.fn> }).sendToWorker = vi.fn(
 			async () => ({
 				imageSource: { width: 10, height: 10, close } as unknown as ImageBitmap,
@@ -618,7 +605,6 @@ describe("ImageResourceManager image resources", () => {
 
 		expect(result).toBeNull()
 		expect(close).toHaveBeenCalledOnce()
-		expect(release).toHaveBeenCalledOnce()
 		expect(entry.displaySlots.preview.resource).toBeNull()
 	})
 
@@ -992,6 +978,8 @@ describe("ImageResourceManager image resources", () => {
 		manager.loadResource("images/display.png", { variant: "preview" })
 		await Promise.resolve()
 		await manager.getResource("images/export.png", { variant: "preview" })
+		manager.loadResource("images/full-display.png", { variant: "full" })
+		await Promise.resolve()
 
 		expect(loadImageInternal).toHaveBeenNthCalledWith(1, "images/display.png", {
 			variant: "preview",
@@ -999,6 +987,10 @@ describe("ImageResourceManager image resources", () => {
 		})
 		expect(loadImageInternal).toHaveBeenNthCalledWith(2, "images/export.png", {
 			variant: "preview",
+		})
+		expect(loadImageInternal).toHaveBeenNthCalledWith(3, "images/full-display.png", {
+			variant: "full",
+			restorePersistentLow: false,
 		})
 	})
 
@@ -1751,6 +1743,45 @@ describe("ImageResourceManager image resources", () => {
 		} finally {
 			createObjectURL.mockRestore()
 			revokeObjectURL.mockRestore()
+		}
+	})
+
+	it("releases superseded low decoded resources without breaking low URL leases", () => {
+		const restoreAnimationFrame = installImmediateAnimationFrame()
+		try {
+			const { manager } = createManager()
+			const close = vi.fn()
+			const lowResource = createImageResource("low", { close })
+			const previewResource = createImageResource("preview")
+			const entry = createEntry({
+				displaySlots: {
+					low: {
+						resource: lowResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+					preview: {
+						resource: previewResource,
+						loadingPromise: null,
+						version: null,
+						lastAccessAt: 1,
+					},
+				},
+			})
+			manager.entries.set("./images/test.png", entry)
+
+			manager.releaseSupersededLowIfUnused("./images/test.png")
+
+			expect(entry.displaySlots.low.resource).toBeNull()
+			expect(close).toHaveBeenCalledTimes(1)
+
+			entry.displaySlots.low.resource = lowResource
+			entry.lowDisplayLeaseCount = 1
+			manager.releaseSupersededLowIfUnused("./images/test.png")
+			expect(entry.displaySlots.low.resource).toBe(lowResource)
+		} finally {
+			restoreAnimationFrame()
 		}
 	})
 

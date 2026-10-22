@@ -16,6 +16,7 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\ErrorCode\DesignErrorCode;
 use App\Infrastructure\Core\Exception\ExceptionBuilder;
 use App\Infrastructure\SuperMagic\ExternalAPI\SandboxOS\Gateway\SandboxGatewayInterface;
+use InvalidArgumentException;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
@@ -36,15 +37,15 @@ readonly class DesignCanvasCompositionSubmissionService
     }
 
     /** 提交画布合成任务并返回统一轮询快照。 */
-    public function submit(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): array
+    public function submit(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, ContactDataIsolation $contactIsolation): array
     {
         $requestPayload = $entity->getRequestPayload();
         $composition = is_array($requestPayload['composition'] ?? null) ? $requestPayload['composition'] : [];
         $generation = is_array($requestPayload['generation'] ?? null) ? $requestPayload['generation'] : [];
-        $contactIsolation = ContactDataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId(),
-        );
+        if ($contactIsolation->getCurrentOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode()
+            || $contactIsolation->getCurrentUserId() !== $dataIsolation->getCurrentUserId()) {
+            throw new InvalidArgumentException('画布合成必须使用应用层准备的当前用户隔离对象');
+        }
         $sandboxId = $this->resolveSandboxId($contactIsolation, $entity);
         $this->logger->info('design video canvas composition sandbox resolved', [
             'video_id' => $entity->getGenerationId(),
@@ -93,12 +94,12 @@ readonly class DesignCanvasCompositionSubmissionService
     }
 
     /** 查询 Super Magic 合成任务并转换成现有视频轮询协议。 */
-    public function query(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity): array
+    public function query(DesignDataIsolation $dataIsolation, DesignGenerationTaskEntity $entity, ContactDataIsolation $contactIsolation): array
     {
-        $contactIsolation = ContactDataIsolation::create(
-            $dataIsolation->getCurrentOrganizationCode(),
-            $dataIsolation->getCurrentUserId(),
-        );
+        if ($contactIsolation->getCurrentOrganizationCode() !== $dataIsolation->getCurrentOrganizationCode()
+            || $contactIsolation->getCurrentUserId() !== $dataIsolation->getCurrentUserId()) {
+            throw new InvalidArgumentException('画布合成必须使用应用层准备的当前用户隔离对象');
+        }
         $sandboxId = (string) ($entity->getProviderPayload()['sandbox_id'] ?? '');
         if ($sandboxId === '') {
             $sandboxId = $this->resolveSandboxId($contactIsolation, $entity);

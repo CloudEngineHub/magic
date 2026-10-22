@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace App\Application\SuperMagic\Agent\Service;
 
 use App\Application\SuperMagic\Agent\Assembler\AdminSuperMagicAgentAssembler;
+use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
 use App\Domain\Permission\Entity\ValueObject\PermissionDataIsolation;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\ResourceType as ResourceVisibilityResourceType;
 use App\Domain\Permission\Entity\ValueObject\ResourceVisibility\VisibilityType;
@@ -39,6 +40,7 @@ use App\Interfaces\SuperMagic\Agent\DTO\Response\QueryAgentVersionsResponseAdmin
 use Dtyq\AsyncEvent\AsyncEventUtil;
 use Hyperf\DbConnection\Db;
 use Hyperf\Di\Annotation\Inject;
+use Psr\Container\ContainerInterface;
 use Qbhy\HyperfAuth\Authenticatable;
 use Throwable;
 
@@ -63,6 +65,9 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
 
     #[Inject]
     protected AgentMarketVectorIndexDomainService $agentMarketVectorIndexDomainService;
+
+    #[Inject]
+    protected ContainerInterface $container;
 
     /**
      * 管理后台：分页查询员工（Agent）版本列表.
@@ -313,6 +318,14 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
             throw $throwable;
         }
 
+        try {
+            $agent = $this->superMagicAgentDomainService->getByCodeWithException($dataIsolation, $versionEntity->getCode());
+            $this->container->get(ReviewNotificationAppService::class)->publishAgentApproved($versionEntity, (string) ($agent->getId() ?? ''));
+        } catch (Throwable $throwable) {
+            // Notification delivery must not invalidate the committed approval.
+            $this->logger->warning('Agent approval notification failed', ['version_id' => $id, 'error' => $throwable->getMessage()]);
+        }
+
         AsyncEventUtil::dispatch(new AgentMarketPublishedEvent(
             (string) $publishedMarketId,
             $dataIsolation->getCurrentOrganizationCode(),
@@ -464,6 +477,12 @@ class AdminSuperMagicAgentAppService extends AbstractSuperMagicAppService
         } catch (Throwable $throwable) {
             Db::rollBack();
             throw $throwable;
+        }
+
+        try {
+            $this->container->get(ReviewNotificationAppService::class)->publishAgentApproved($pendingVersion, (string) ($agentEntity->getId() ?? ''));
+        } catch (Throwable $throwable) {
+            $this->logger->warning('Agent approval notification failed', ['version_id' => $pendingVersion->getId(), 'error' => $throwable->getMessage()]);
         }
 
         if ($publishedMarketId !== null) {

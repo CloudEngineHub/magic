@@ -7,9 +7,15 @@ import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
 import { isEmpty } from "lodash-es"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router"
 import { ErrorDisplay, PasswordVerification, ShareEmptyState } from "./components"
+import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
+
+/** Research topics open on their results instead of the conversation replay. */
+const ResearchShareView = lazy(
+	() => import("@/pages/superMagic/pages/PersonaResearch/share/ResearchShareView"),
+)
 import ShareContent from "./components/ShareContent"
 import CopyProjectModal from "./components/CopyProjectModal"
 import CreatedByBadge from "./components/CreatedByBadge"
@@ -848,6 +854,40 @@ function Share() {
 		)
 	}
 
+	// Research topics wrap this replay inside their results view; other topics show it directly.
+	const isResearchShare =
+		!isFileShare && !isProjectShare && data?.data?.topic_mode === TopicMode.PersonaResearch
+	const shareContent = (
+		<ShareContent
+			isMobile={isMobile}
+			data={data}
+			attachments={attachments}
+			isLogined={isLogined}
+			isFileShare={isFileShare || isProjectShare}
+			isProjectShare={isProjectShare}
+			fileId={fileId}
+			defaultOpenFileId={defaultOpenFileId}
+			enableImmersiveShareChrome={enableImmersiveShareChrome}
+			isImmersiveFullscreen={isImmersiveFullscreen}
+			projectId={projectId}
+			shareCode={data?.share_code || data?.data?.share_code || resourceId}
+			sharePassword={verifiedPassword}
+			onCopySharedFilesComplete={handleCopySharedFilesComplete}
+			topicId={resourceId}
+			showAllProjectFiles={showAllProjectFiles || viewFileList}
+			viewFileList={viewFileList}
+			showCreatedByBadge={data?.extra?.hide_created_by_super_magic === false}
+			allowDownloadProjectFile={allowDownloadProjectFile}
+			allowCopyProjectFiles={allowCopyProjectFiles}
+			forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
+			documentFlowFullscreen={shareDisplayOptions.documentFlowFullscreen}
+			hidePreviewHeader={shareDisplayOptions.hideHeader}
+			showFileHeader={shareDisplayOptions.showFileHeader}
+			onPreviewFileChange={setCurrentPreviewFileId}
+			onPreviewFullscreenChange={setPreviewIsFullscreen}
+		/>
+	)
+
 	return (
 		<FileAccessIdentityProvider value={shareAccess}>
 			<div
@@ -1088,37 +1128,21 @@ function Share() {
 									/>
 								)
 							) : null
+						) : isResearchShare ? (
+							<Suspense fallback={<MagicSpin />}>
+								<ResearchShareView
+									topicId={resourceId}
+									topicName={data?.resource_name || ""}
+									projectId={projectId || data?.data?.project_id || ""}
+									projectName={data?.data?.project_name || ""}
+									attachments={attachments}
+									access={shareAccess}
+									isMobile={isMobile}
+									replay={shareContent}
+								/>
+							</Suspense>
 						) : (
-							<ShareContent
-								isMobile={isMobile}
-								data={data}
-								attachments={attachments}
-								isLogined={isLogined}
-								isFileShare={isFileShare || isProjectShare}
-								isProjectShare={isProjectShare}
-								fileId={fileId}
-								defaultOpenFileId={defaultOpenFileId}
-								enableImmersiveShareChrome={enableImmersiveShareChrome}
-								isImmersiveFullscreen={isImmersiveFullscreen}
-								projectId={projectId}
-								shareCode={data?.share_code || data?.data?.share_code || resourceId}
-								sharePassword={verifiedPassword}
-								onCopySharedFilesComplete={handleCopySharedFilesComplete}
-								topicId={resourceId}
-								showAllProjectFiles={showAllProjectFiles || viewFileList}
-								viewFileList={viewFileList}
-								showCreatedByBadge={
-									data?.extra?.hide_created_by_super_magic === false
-								}
-								allowDownloadProjectFile={allowDownloadProjectFile}
-								allowCopyProjectFiles={allowCopyProjectFiles}
-								forceFullscreenMode={shareDisplayOptions.forceFullscreenMode}
-								documentFlowFullscreen={shareDisplayOptions.documentFlowFullscreen}
-								hidePreviewHeader={shareDisplayOptions.hideHeader}
-								showFileHeader={shareDisplayOptions.showFileHeader}
-								onPreviewFileChange={setCurrentPreviewFileId}
-								onPreviewFullscreenChange={setPreviewIsFullscreen}
-							/>
+							shareContent
 						)
 					) : null}
 				</div>

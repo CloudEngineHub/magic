@@ -316,35 +316,6 @@ class OrganizationAdminDomainService
         $this->syncTeamshareAdmin($dataIsolation, $userId, 'revoke');
     }
 
-    private function syncTeamshareAdmin(DataIsolation $dataIsolation, string $userId, string $operation): void
-    {
-        // A nested domain operation may still be inside its caller's transaction.
-        // Let the outer operation finish and rely on reconciliation for that rare path.
-        if (Db::connection()->transactionLevel() > 0) {
-            return;
-        }
-
-        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
-        if ($organization === null || $organization->isPersonal()) {
-            return;
-        }
-
-        try {
-            $this->organizationAdminSync->sync(
-                $dataIsolation->getCurrentOrganizationCode(),
-                $userId,
-                $operation
-            );
-        } catch (Throwable $e) {
-            $this->logger->warning('Failed to sync organization admin to Teamshare', [
-                'organizationCode' => $dataIsolation->getCurrentOrganizationCode(),
-                'userId' => $userId,
-                'operation' => $operation,
-                'exception' => $e,
-            ]);
-        }
-    }
-
     /**
      * 获取组织下所有组织管理员.
      */
@@ -472,5 +443,34 @@ class OrganizationAdminDomainService
     public function getOrganizationInfo(DataIsolationInterface $dataIsolation): ?OrganizationEntity
     {
         return $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+    }
+
+    private function syncTeamshareAdmin(DataIsolation $dataIsolation, string $userId, string $operation): void
+    {
+        // A nested domain operation may still be inside its caller's transaction.
+        // Let the outer operation finish and rely on reconciliation for that rare path.
+        if (Db::connection()->transactionLevel() > 0) {
+            return;
+        }
+
+        $organization = $this->organizationRepository->getByCode($dataIsolation->getCurrentOrganizationCode());
+        if ($organization === null || $organization->isPersonal()) {
+            return;
+        }
+
+        try {
+            $this->organizationAdminSync->sync(
+                $dataIsolation->getCurrentOrganizationCode(),
+                $userId,
+                $operation
+            );
+        } catch (Throwable $e) {
+            $this->logger->warning('Failed to sync organization admin to Teamshare', [
+                'organizationCode' => $dataIsolation->getCurrentOrganizationCode(),
+                'userId' => $userId,
+                'operation' => $operation,
+                'exception' => $e,
+            ]);
+        }
     }
 }

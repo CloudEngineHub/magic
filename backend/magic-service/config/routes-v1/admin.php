@@ -9,8 +9,11 @@ use App\Interfaces\Admin\Facade\Agent\AdminAgentApi;
 use App\Interfaces\Admin\Facade\Agent\AgentGlobalSettingsApi;
 use App\Interfaces\Admin\Facade\AppMenu\AppMenuAdminApi;
 use App\Interfaces\Asset\Facade\AdminAssetApi;
+use App\Interfaces\Asset\Facade\AdminPersonaAvatarApi;
 use App\Interfaces\Audit\Facade\AdminOperationLogApi;
 use App\Interfaces\Contact\Facade\Admin\PlatformUserApi;
+use App\Interfaces\Kernel\Facade\ModelBillingMultiplierApi;
+use App\Interfaces\Kernel\Facade\ModelBillingPreviewApi;
 use App\Interfaces\Kernel\Facade\PlatformSettingsApi;
 use App\Interfaces\Middleware\Auth\UserAuthMiddleware;
 use App\Interfaces\OrganizationEnvironment\Facade\Admin\OrganizationApi;
@@ -20,6 +23,7 @@ use App\Interfaces\Permission\Facade\OrganizationAdminApi;
 use App\Interfaces\Permission\Facade\PermissionApi;
 use App\Interfaces\Permission\Facade\RoleApi;
 use App\Interfaces\Provider\Facade\AiAbilityApi;
+use App\Interfaces\Provider\Facade\ModelIdentifierMappingApi;
 use App\Interfaces\Provider\Facade\ServiceProviderApi;
 use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateApi;
 use App\Interfaces\SlidesTemplate\Facade\AdminSlidesTemplateCategoryApi;
@@ -65,6 +69,20 @@ Router::addGroup('/api/v1/admin', static function () {
     Router::addGroup('/provider-models', static function () {
         Router::post('/queries', [ServiceProviderApi::class, 'queriesProviderModels']);
         Router::post('/groups/queries', [ServiceProviderApi::class, 'queriesProviderModelGroups']);
+    }, ['middleware' => [RequestContextMiddleware::class]]);
+
+    // 官方模型标识映射。静态批量和候选路由必须先于 groupId 动态路由注册。
+    Router::addGroup('/model-identifier-mappings', static function () {
+        Router::post('/queries', [ModelIdentifierMappingApi::class, 'query']);
+        Router::post('', [ModelIdentifierMappingApi::class, 'create']);
+        Router::post('/batch-status', [ModelIdentifierMappingApi::class, 'batchStatus']);
+        Router::post('/batch-delete', [ModelIdentifierMappingApi::class, 'batchDelete']);
+        Router::get('/source-options', [ModelIdentifierMappingApi::class, 'sourceOptions']);
+        Router::get('/target-options', [ModelIdentifierMappingApi::class, 'targetOptions']);
+        Router::get('/{groupId}', [ModelIdentifierMappingApi::class, 'get']);
+        Router::put('/{groupId}', [ModelIdentifierMappingApi::class, 'update']);
+        Router::put('/{groupId}/status', [ModelIdentifierMappingApi::class, 'updateStatus']);
+        Router::delete('/{groupId}', [ModelIdentifierMappingApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class]]);
 
     // AI能力管理
@@ -218,10 +236,21 @@ Router::addGroup('/api/v1/admin', static function () {
         Router::patch('/{assetId:\d+}', [AdminAssetApi::class, 'update']);
         Router::delete('/{assetId:\d+}', [AdminAssetApi::class, 'delete']);
     }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
+
+    // 人设头像库管理：只管理业务类型为 PERSONA_AVATAR 的官方素材，暂无界面，供导入脚本使用。
+    Router::addGroup('/persona-avatars', static function (): void {
+        Router::post('', [AdminPersonaAvatarApi::class, 'create']);
+        Router::post('/queries', [AdminPersonaAvatarApi::class, 'queries']);
+        Router::patch('/{assetId:\d+}', [AdminPersonaAvatarApi::class, 'update']);
+        Router::delete('/{assetId:\d+}', [AdminPersonaAvatarApi::class, 'delete']);
+    }, ['middleware' => [RequestContextMiddleware::class, UserAuthMiddleware::class]]);
 });
 
 // 平台设置（管理端）
 Router::addGroup('/api/v1/platform', static function () {
     Router::get('/setting', [PlatformSettingsApi::class, 'show']);
+    Router::get('/setting/model-billing-multiplier', [ModelBillingMultiplierApi::class, 'show']);
+    Router::put('/setting/model-billing-multiplier', [ModelBillingMultiplierApi::class, 'update']);
+    Router::get('/setting/model-billing-preview', [ModelBillingPreviewApi::class, 'show']);
     Router::put('/setting', [PlatformSettingsApi::class, 'update']);
 }, ['middleware' => [RequestContextMiddleware::class]]);

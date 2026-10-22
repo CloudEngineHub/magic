@@ -60,7 +60,7 @@ return [
             ],
             'options' => [
                 'endpoint_url' => $endpointUrl,
-                'timeout' => env('ZIPKIN_TIMEOUT', 1),
+                'timeout' => (float) env('ZIPKIN_TIMEOUT', 1),
             ],
             'sampler' => BinarySampler::createAsAlwaysSample(),
         ],
@@ -76,7 +76,7 @@ return [
             ],
             'options' => [
                 'endpoint_url' => $endpointUrl,
-                'timeout' => env('ZIPKIN_TIMEOUT', 1),
+                'timeout' => (float) env('ZIPKIN_TIMEOUT', 1),
             ],
             'sampler' => BinarySampler::createAsAlwaysSample(),
         ],

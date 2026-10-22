@@ -116,6 +116,12 @@ describe("useSuperMobileShellNavItems", () => {
 				nativeRecordingTab: "ai_recording",
 			},
 			{
+				key: "personaResearch",
+				label: "label:mobile.shell.navPersonaResearch",
+				routeName: RouteName.PersonaResearch,
+				nativeRecordingTab: undefined,
+			},
+			{
 				key: "myCrew",
 				label: "label:mobile.shell.navMyCrew",
 				routeName: RouteName.MyCrew,
@@ -125,6 +131,12 @@ describe("useSuperMobileShellNavItems", () => {
 				key: "magiClaw",
 				label: "label:mobile.shell.navMagiClaw",
 				routeName: RouteName.MagiClaw,
+				nativeRecordingTab: undefined,
+			},
+			{
+				key: "aiCanvas",
+				label: "label:mobile.shell.navAiCanvas",
+				routeName: RouteName.AiCanvas,
 				nativeRecordingTab: undefined,
 			},
 			{

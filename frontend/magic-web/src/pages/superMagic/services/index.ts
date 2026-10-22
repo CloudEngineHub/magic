@@ -918,7 +918,7 @@ class SuperMagicService {
 	 * 跳转回首页
 	 * @returns
 	 */
-	async navigateToHome(lastUsedWorkspaceId?: string | null) {
+	async navigateToHome(lastUsedWorkspaceId?: string | null, query?: Record<string, string>) {
 		projectStore.setSelectedProject(null)
 		this.topicStore.setSelectedTopic(null)
 
@@ -926,7 +926,7 @@ class SuperMagicService {
 		const shouldReplace = interfaceStore.isMobile
 		if (interfaceStore.isMobile) {
 			workspaceStore.setSelectedWorkspace(null)
-			this.route.navigateToHome(shouldReplace)
+			this.route.navigateToHome(shouldReplace, query)
 			return
 		}
 
@@ -973,10 +973,14 @@ class SuperMagicService {
 		}
 
 		if (workspaceId) {
-			this.route.navigateToWorkspace(workspaceId, shouldReplace)
+			if (query && Object.keys(query).length > 0) {
+				this.route.navigateToWorkspace(workspaceId, shouldReplace, query)
+			} else {
+				this.route.navigateToWorkspace(workspaceId, shouldReplace)
+			}
 		} else {
 			workspaceStore.setSelectedWorkspace(null)
-			this.route.navigateToHome(shouldReplace)
+			this.route.navigateToHome(shouldReplace, query)
 		}
 	}
 
@@ -1000,10 +1004,12 @@ class SuperMagicService {
 		workspaceId,
 		projectId,
 		topicId,
+		enableErrorMessagePrompt = false,
 	}: {
 		workspaceId?: string
 		projectId?: string
 		topicId?: string
+		enableErrorMessagePrompt?: boolean
 	}) {
 		this.resetState(false)
 
@@ -1015,7 +1021,8 @@ class SuperMagicService {
 			? null
 			: await this.project
 					.getProjectDetail(projectId, {
-						enableErrorMessagePrompt: false,
+						// Notification navigation must explain missing or inaccessible targets.
+						enableErrorMessagePrompt,
 					})
 					.catch(() => null)
 
@@ -1099,10 +1106,12 @@ class SuperMagicService {
 		workspaceId,
 		projectId,
 		topicId,
+		enableErrorMessagePrompt = false,
 	}: {
 		workspaceId?: string
 		projectId?: string
 		topicId?: string
+		enableErrorMessagePrompt?: boolean
 	}) {
 		const initialRouteProjectId = this.route.getCurrentRouteParams().projectId
 		const fallbackWorkspaceId = UserWorkspaceMapCache.get(userStore.user.userInfo) || undefined
@@ -1123,7 +1132,7 @@ class SuperMagicService {
 		let projectFromLookup: ProjectListItem | null = null
 		if (!resolvedWorkspaceId && projectId) {
 			projectFromLookup = await this.project
-				.getProjectDetail(projectId, { enableErrorMessagePrompt: false })
+				.getProjectDetail(projectId, { enableErrorMessagePrompt })
 				.catch(() => null)
 			if (projectFromLookup) {
 				resolvedWorkspaceId = projectFromLookup.workspace_id
@@ -1146,9 +1155,10 @@ class SuperMagicService {
 		}
 
 		let project: ProjectListItem | null = projectFromLookup
-		if (projectId && !project) {
+		// A failed project-only lookup is final; repeating it produces duplicate error prompts.
+		if (projectId && !project && workspaceId) {
 			project = await this.project
-				.getProjectDetail(projectId, { enableErrorMessagePrompt: false })
+				.getProjectDetail(projectId, { enableErrorMessagePrompt })
 				.catch(() => null)
 		}
 
@@ -1165,6 +1175,14 @@ class SuperMagicService {
 		}
 
 		if (this.route.isStaleScopedRefresh(initialRouteProjectId, projectId)) {
+			return
+		}
+
+		if (enableErrorMessagePrompt && projectId && !project) {
+			// Do not leave the previous project's content under an unavailable notification URL.
+			projectStore.setSelectedProject(null)
+			this.topicStore.setSelectedTopic(null)
+			this.route.fixRouteParams()
 			return
 		}
 

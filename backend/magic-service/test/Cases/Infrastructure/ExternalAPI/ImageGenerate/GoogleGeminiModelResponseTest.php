@@ -108,6 +108,75 @@ class GoogleGeminiModelResponseTest extends TestCase
         ], $response->getUsage()->toArray());
     }
 
+    public function testImageOutputTokensUseImageModalityDetails(): void
+    {
+        $result = [
+            'candidates' => [
+                [
+                    'content' => [
+                        'parts' => [
+                            [
+                                'inlineData' => [
+                                    'data' => 'final-image-data',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'usageMetadata' => [
+                'promptTokenCount' => 1904,
+                'candidatesTokenCount' => 2172,
+                'candidatesTokensDetails' => [
+                    [
+                        'modality' => 'IMAGE',
+                        'tokenCount' => 1120,
+                    ],
+                ],
+                'thoughtsTokenCount' => 0,
+                'totalTokenCount' => 4076,
+            ],
+        ];
+
+        $model = new TestableGoogleGeminiModel();
+        $request = new GoogleGeminiRequest('1024', '1024', '小猫吃鱼', '', 'gemini-image');
+        $response = new OpenAIFormatResponse([
+            'created' => time(),
+            'provider' => 'google',
+            'data' => [],
+        ]);
+
+        $reflection = new ReflectionClass(GoogleGeminiModel::class);
+        $method = $reflection->getMethod('addImageDataToResponseGemini');
+        $method->setAccessible(true);
+        $method->invoke($model, $response, $result, $request);
+
+        $this->assertSame([
+            'prompt_tokens' => 1904,
+            'completion_tokens' => 1120,
+            'total_tokens' => 4076,
+            'generated_images' => 1,
+            'thoughts_tokens' => 0,
+        ], $response->getUsage()->toArray());
+    }
+
+    public function testImageOutputTokensFallbackToCandidateCountWithoutImageDetails(): void
+    {
+        $model = new TestableGoogleGeminiModel();
+        $reflection = new ReflectionClass(GoogleGeminiModel::class);
+        $method = $reflection->getMethod('extractTokenUsage');
+        $method->setAccessible(true);
+
+        $usage = $method->invoke($model, [
+            'candidatesTokenCount' => 34,
+            'candidatesTokensDetails' => [
+                ['modality' => 'TEXT', 'tokenCount' => 34],
+            ],
+        ]);
+
+        self::assertSame(34, $usage['completion_tokens']);
+    }
+
     public function testImageSafetyResponseThrowsBusinessExceptionWithRawResponse(): void
     {
         $finishMessage = 'Unable to show the generated image because it violated safety policies.';

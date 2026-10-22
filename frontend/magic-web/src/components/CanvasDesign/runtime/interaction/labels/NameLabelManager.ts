@@ -38,6 +38,7 @@ import {
 } from "../../resources/asset/assetComplianceState"
 import { getCanvasResourceFileName } from "../../shared/path/canvasResourcePath"
 import type { MediaLabelLayout } from "./mediaLabelLayout"
+import { STANDARD_TRANSFORMER_STYLE } from "../frame/FrameEditorShared"
 
 /**
  * 名称标签配置
@@ -51,6 +52,8 @@ const NAME_LABEL_CONFIG = {
 	FONT_FAMILY: "Arial, sans-serif",
 	/** 标签距离元素顶部的距离（像素） */
 	OFFSET_TOP: 5,
+	/** 为元素顶部外侧的 Transformer 角点保留视觉安全间距。 */
+	CONTROL_CLEARANCE: STANDARD_TRANSFORMER_STYLE.ANCHOR_SIZE / 2,
 	/** 标签左侧对齐偏移（像素） */
 	OFFSET_LEFT: 0,
 	/** 透明命中区相对文字的内边距，避免短名称难以点中 */
@@ -63,8 +66,8 @@ const NAME_LABEL_CONFIG = {
 	LABEL_GAP: 4,
 	/** 让 size label 在边界附近保持稳定，避免缩放时反复切换可见性 */
 	SIZE_LABEL_PRIORITY_EPSILON: 2,
-	/** 状态后缀紧跟主名称，保持与原有拼接文案一致 */
-	SUFFIX_GAP: 0,
+	/** 状态后缀与主名称、右侧操作区使用相同的视觉间距。 */
+	SUFFIX_GAP: 4,
 	STATUS_FONT_RATIO: 5 / 6,
 	STATUS_PADDING_X: 4,
 	STATUS_PADDING_Y: 2,
@@ -72,10 +75,10 @@ const NAME_LABEL_CONFIG = {
 	MIN_TEXT_WIDTH: 1,
 	/** 图片重命名按钮的固定局部宽度，屏幕宽度由媒体行比例统一控制 */
 	RENAME_BUTTON_WIDTH: 24,
-	/** 名称内容与重命名按钮之间的局部间距，与左侧 icon 使用同一视觉尺度 */
-	RENAME_GAP: 2,
+	/** 名称内容与重命名按钮之间的局部间距，与状态后缀两侧保持一致。 */
+	RENAME_GAP: 4,
 	/** 按钮总预算包含名称与按钮之间的间距 */
-	RENAME_OPERATION_WIDTH: 26,
+	RENAME_OPERATION_WIDTH: 28,
 	/** 铅笔图标的可见尺寸，命中区仍保持 24px */
 	RENAME_ICON_SIZE: 14,
 	/** hover 时显示的轻量按钮底色；未 hover 时按钮保持透明但仍接收命中 */
@@ -522,6 +525,7 @@ export class NameLabelManager extends BaseLabelManager {
 			state.renderedTextWidth = renderedTextWidth
 			changed = true
 		}
+		const statusBackground = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
 		const suffixOffsetX =
 			textOffsetX + renderedTextWidth + (state.suffixText ? NAME_LABEL_CONFIG.SUFFIX_GAP : 0)
 		if (state.suffixOffsetX !== suffixOffsetX) {
@@ -560,14 +564,15 @@ export class NameLabelManager extends BaseLabelManager {
 		if (suffixNode) {
 			// 胶囊整体与标题居中，内部文字独立居中；字号较小也不会沿标题底部排列。
 			const suffixY = (labelHeight - state.suffixHeight) / 2
-			const suffixTextX = suffixOffsetX
-			const background = labelGroup.findOne<Konva.Rect>(".name-label-status-background")
-			const suffixTextY = suffixY + (background ? NAME_LABEL_CONFIG.STATUS_PADDING_Y : 0)
-			const backgroundGeometryChanged = background
-				? background.x() !== suffixOffsetX - NAME_LABEL_CONFIG.STATUS_PADDING_X ||
-					background.y() !== suffixY ||
-					background.width() !== state.suffixNaturalTextWidth ||
-					background.height() !== state.suffixHeight
+			const suffixTextX =
+				suffixOffsetX + (statusBackground ? NAME_LABEL_CONFIG.STATUS_PADDING_X : 0)
+			const suffixTextY =
+				suffixY + (statusBackground ? NAME_LABEL_CONFIG.STATUS_PADDING_Y : 0)
+			const backgroundGeometryChanged = statusBackground
+				? statusBackground.x() !== suffixOffsetX ||
+					statusBackground.y() !== suffixY ||
+					statusBackground.width() !== state.suffixNaturalTextWidth ||
+					statusBackground.height() !== state.suffixHeight
 				: false
 			if (
 				suffixNode.x() !== suffixTextX ||
@@ -575,8 +580,8 @@ export class NameLabelManager extends BaseLabelManager {
 				backgroundGeometryChanged
 			) {
 				suffixNode.position({ x: suffixTextX, y: suffixTextY })
-				background?.setAttrs({
-					x: suffixOffsetX - NAME_LABEL_CONFIG.STATUS_PADDING_X,
+				statusBackground?.setAttrs({
+					x: suffixOffsetX,
 					y: suffixY,
 					width: state.suffixNaturalTextWidth,
 					height: state.suffixHeight,
@@ -1298,18 +1303,20 @@ export class NameLabelManager extends BaseLabelManager {
 	): { x: number; y: number } {
 		const offsetTop = this.labelConfig.offsetTop
 		const offsetLeft = this.labelConfig.offsetLeft
+		const controlClearance = NAME_LABEL_CONFIG.CONTROL_CLEARANCE
 
 		// 由于标签应用了 inverseScale，在计算位置时需要将 labelHeight 和 offsetTop 也应用 inverseScale
 		// 这样才能保证在不同缩放级别下，标签的视觉位置保持一致
 		const scaledLabelHeight = labelSize.height * inverseScale
 		const scaledOffsetTop = offsetTop * inverseScale
+		const scaledControlClearance = controlClearance * inverseScale
 
 		// 计算标签位置（元素左上角上方）
 		// 标签的 y 坐标 = 元素顶部 - 间距 - 标签高度
 		// 这样标签的底部会距离元素顶部 offsetTop 的距离
 		return {
 			x: boundingRect.x + offsetLeft,
-			y: boundingRect.y - scaledLabelHeight - scaledOffsetTop,
+			y: boundingRect.y - scaledLabelHeight - scaledOffsetTop - scaledControlClearance,
 		}
 	}
 

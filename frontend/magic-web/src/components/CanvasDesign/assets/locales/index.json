@@ -93,6 +93,42 @@
 		"uploadFailed": "音频上传失败",
 		"uploading": "正在上传中..."
 	},
+	"canvasSettings": {
+		"description": "统一管理画布操作、显示和合规偏好",
+		"display": {
+			"mediaLabels": "常驻显示媒体标题和分辨率",
+			"minimap": "显示小地图",
+			"title": "画布显示"
+		},
+		"operation": {
+			"currentNode": "原节点",
+			"currentNodeDescription": "保留当前节点身份并提交新的内容或版本",
+			"generateAgain": "再次生成",
+			"newNode": "新节点",
+			"newNodeDescription": "沿用新节点创建逻辑，在画布中生成一个新节点",
+			"reEdit": "重新编辑",
+			"title": "操作设置"
+		},
+		"points": {
+			"description": "关闭后将沿用“下次不再提示”的设置",
+			"prompt": "生成前提示积分消耗",
+			"title": "积分提示"
+		},
+		"seedance": {
+			"agreement": "协议状态",
+			"available": "可用",
+			"capability": "合规能力",
+			"querying": "查询中",
+			"readOnlyHint": "协议签署后当前仅支持查看状态，暂不支持重新查看或取消同意",
+			"sign": "同意并签署",
+			"signed": "已同意",
+			"title": "Seedance 合规校验",
+			"unavailable": "不可用",
+			"unknown": "暂不可确认",
+			"unsigned": "未同意"
+		},
+		"title": "画布设置"
+	},
 	"common": {
 		"cancel": "取消",
 		"close": "关闭",
@@ -143,14 +179,29 @@
 		"unsupportedReferenceImageType": "当前仅支持添加图片类型的参考图"
 	},
 	"elementBottomToolbar": {
+		"closeVersionPanel": "关闭版本面板",
+		"collapseVersions": "收起版本",
 		"deleteVersion": "删除版本",
+		"deleteVersionNumber": "删除 V{{number}}",
 		"discardedDraft": "废稿",
 		"label": "元素底部工具栏",
 		"mainVersion": "主版本",
 		"nextVersion": "下一个版本",
 		"previousVersion": "上一个版本",
 		"setMainVersion": "设为主版本",
-		"versionCount": "{{current}}/{{total}}"
+		"setMainVersionNumber": "将 V{{number}} 设为主版本",
+		"switchToVersion": "切换到 V{{number}}",
+		"versionAudioLoadFailed": "{{name}} 加载失败",
+		"versionAudioLoading": "{{name}} 加载中",
+		"versionCount": "{{current}}/{{total}}",
+		"versionPanelTitle": "查看版本",
+		"versionStatusEmpty": "暂无内容",
+		"versionStatusGenerating": "生成中",
+		"versionStatusLoading": "加载中",
+		"versionStatusReplacing": "替换中",
+		"versionStatusTerminated": "已终止",
+		"versionStatusUploading": "上传中",
+		"viewVersions": "查看版本"
 	},
 	"elementConflict": {
 		"deleteElement": "删除这个元素",
@@ -600,7 +651,6 @@
 		"imageTitle": "图片标题（元素名称）",
 		"main": "主版本",
 		"nameUndetermined": "名称尚未确定",
-		"newFileName": "新文件名",
 		"notGenerated": "生成后可修改文件名",
 		"originalFileName": "原文件名",
 		"pendingEditableLater": "生成后可修改",
@@ -608,7 +658,6 @@
 		"renamed": "文件已改名",
 		"retry": "重试未完成项",
 		"save": "确认重命名",
-		"savedFileName": "现文件名",
 		"saving": "正在保存",
 		"sharedFile": "共用同一文件",
 		"sharedTitle": "各版本共用，文件名独立",
@@ -626,7 +675,6 @@
 		"unchanged": "名称尚未修改",
 		"uniform": "批量应用到下方",
 		"uniformHint": "点击「批量应用到下方」填写各版本名称，确认后才改文件。",
-		"version": "V{{number}}",
 		"versionFiles": "版本文件名"
 	},
 	"seedanceCompliance": {

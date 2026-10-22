@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps } from "react"
+import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react"
 import { useDebounce } from "ahooks"
 import { observer } from "mobx-react-lite"
 import { useTranslation } from "react-i18next"
@@ -43,6 +43,7 @@ import {
 import type { ProjectResourceSelection } from "../../types"
 import { MentionSelectionPanel, type MentionSelectionItem } from "./MentionSelectionPanel"
 import { MentionSourceSidebar } from "./MentionSourceSidebar"
+import { ProjectBrowserLayout } from "../../../WorkspacesMenu/components/ProjectBrowserLayout"
 import { useSelectionListViewport } from "./useSelectionListViewport"
 import { ProjectResourceItem } from "./ProjectResourceItem"
 import { getResourceProjectType, type ResourceProject } from "../../resourceProjectTypes"
@@ -59,6 +60,7 @@ interface Props {
 	workspace: Workspace | null
 	project: ProjectListItem | null
 	projects: ProjectListItem[]
+	resourceFilter?: ReactNode
 	attachments: AttachmentItem[]
 	loading: boolean
 	error: boolean
@@ -348,203 +350,217 @@ export const MentionDesktopPicker = observer(function MentionDesktopPicker(props
 			onClose={props.onClose}
 		>
 			<div className="flex min-h-0 flex-1 flex-col [container-type:inline-size]">
-				<div className="flex min-h-0 flex-1">
-					<MentionSourceSidebar
-						workspaces={regular}
-						specialWorkspaces={special}
-						current={props.workspace}
-						recentActive={recentMode && !props.project}
-						onSelectRecent={() => {
-							setRecentMode(true)
-							setQuery("")
-							setReveal(undefined)
-							props.onRecent()
-						}}
-						onSelect={(workspace) => {
-							setRecentMode(false)
-							setQuery("")
-							setReveal(undefined)
-							props.onWorkspace(workspace)
-						}}
-					/>
-					<div className="flex min-h-0 min-w-0 flex-1 flex-col">
-						{props.project && props.workspace ? (
-							<>
-								<div className="min-h-0 flex-1">
-									<FileManager
-										key={`${identity}:${props.project.id}:${rootVisit}`}
-										mode="select"
-										rootId=""
-										rootName={
-											props.project.project_name ||
-											t("project.unnamedProject")
+				<ProjectBrowserLayout
+					minContentWidth={520}
+					sidebar={
+						<MentionSourceSidebar
+							workspaces={regular}
+							specialWorkspaces={special}
+							current={props.workspace}
+							recentActive={recentMode && !props.project}
+							onSelectRecent={() => {
+								setRecentMode(true)
+								setQuery("")
+								setReveal(undefined)
+								props.onRecent()
+							}}
+							onSelect={(workspace) => {
+								setRecentMode(false)
+								setQuery("")
+								setReveal(undefined)
+								props.onWorkspace(workspace)
+							}}
+						/>
+					}
+				>
+					<div className="flex min-h-0 min-w-0 flex-1">
+						<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+							{props.project && props.workspace ? (
+								<>
+									<div className="min-h-0 flex-1">
+										<FileManager
+											key={`${identity}:${props.project.id}:${rootVisit}`}
+											mode="select"
+											rootId=""
+											rootName={
+												props.project.project_name ||
+												t("project.unnamedProject")
+											}
+											scopeKey={`file_picker:${identity}:${props.project.id}`}
+											identityKey={identity}
+											projectId={props.project.id}
+											selectedProject={props.project}
+											context={context}
+											attachments={props.attachments}
+											checkedIds={checkedIds}
+											onCheckChange={props.onCheck}
+											isActive
+											dataReady={!props.loading && !props.error}
+											loading={props.loading}
+											error={props.error}
+											onRefresh={props.onRefresh}
+											onOpen={() => undefined}
+											initialState={locations.current.get(props.project.id)}
+											onStateChange={(snapshot) => {
+												if (props.project)
+													locations.current.set(
+														props.project.id,
+														snapshot,
+													)
+											}}
+											revealRequest={reveal}
+											toolbarLeading={
+												<Button
+													variant="ghost"
+													size="sm"
+													className="h-7 shrink-0 gap-1 px-1.5 text-xs font-normal"
+													onClick={() => {
+														setReveal(undefined)
+														setRecentMode(false)
+														props.onBack()
+													}}
+												>
+													<ArrowLeft size={16} />
+													{props.workspace.name}
+												</Button>
+											}
+										/>
+									</div>
+								</>
+							) : recentMode ? (
+								<>
+									<ProjectsPanelToolbar
+										location={t("projectNavigation.recent")}
+										searchValue={query}
+										onSearchValueChange={(event) =>
+											setQuery(event.target.value)
 										}
-										scopeKey={`file_picker:${identity}:${props.project.id}`}
-										identityKey={identity}
-										projectId={props.project.id}
-										selectedProject={props.project}
-										context={context}
-										attachments={props.attachments}
-										checkedIds={checkedIds}
-										onCheckChange={props.onCheck}
-										isActive
-										dataReady={!props.loading && !props.error}
-										loading={props.loading}
-										error={props.error}
-										onRefresh={props.onRefresh}
-										onOpen={() => undefined}
-										initialState={locations.current.get(props.project.id)}
-										onStateChange={(snapshot) => {
-											if (props.project)
-												locations.current.set(props.project.id, snapshot)
-										}}
-										revealRequest={reveal}
-										toolbarLeading={
-											<Button
-												variant="ghost"
-												size="sm"
-												className="h-7 shrink-0 gap-1 px-1.5 text-xs font-normal"
-												onClick={() => {
-													setReveal(undefined)
-													setRecentMode(false)
-													props.onBack()
-												}}
-											>
-												<ArrowLeft size={16} />
-												{props.workspace.name}
-											</Button>
+										viewToggle={
+											<ViewToggle value={viewMode} onChange={setViewMode} />
 										}
 									/>
-								</div>
-							</>
-						) : recentMode ? (
-							<>
-								<ProjectsPanelToolbar
-									location={t("projectNavigation.recent")}
-									searchValue={query}
-									onSearchValueChange={(event) => setQuery(event.target.value)}
-									viewToggle={
-										<ViewToggle value={viewMode} onChange={setViewMode} />
-									}
-								/>
-								<ProjectsPanelList
-									projects={recentProjects}
-									loading={
-										query.trim()
-											? recentSearch.loading
-											: recentProjectsStore.loading
-									}
-									viewMode={viewMode}
-									renderItem={renderProjectItem}
-									itemProps={{
-										titleLayout: "recent",
-										sortType: SortType.MY_LAST_ACTIVE_TIME,
-										onClick: (project) => {
-											setRecentMode(false)
-											props.onProject(
-												project,
-												"enter",
-												recentWorkspaceForProject(project),
-											)
-										},
-									}}
-									listViewport={recentViewport}
-									error={
-										(
+									<ProjectsPanelList
+										projects={recentProjects}
+										loading={
 											query.trim()
-												? recentSearch.error
-												: recentProjectsStore.error
-										) ? (
-											<Button
-												variant="ghost"
-												onClick={() =>
-													void (query.trim()
-														? recentSearch.loadMore()
-														: recentProjectsStore.loadMore())
-												}
-											>
-												{t("common.retry")}
-											</Button>
-										) : undefined
-									}
-									footer={
-										(
-											query.trim()
-												? recentSearch.hasMore
-												: recentProjectsStore.hasMore
-										) ? (
-											<Button
-												variant="ghost"
-												disabled={
-													query.trim()
-														? recentSearch.loading
-														: recentProjectsStore.loading
-												}
-												onClick={() =>
-													void (query.trim()
-														? recentSearch.loadMore()
-														: recentProjectsStore.loadMore())
-												}
-											>
-												{t("selectPathModal.loadMore")}
-											</Button>
-										) : undefined
-									}
-								/>
-							</>
-						) : (
-							<>
-								<ProjectsPanelToolbar
-									location={
-										props.workspace?.name || t("selectPathModal.workspace")
-									}
-									searchValue={query}
-									onSearchValueChange={(event) => setQuery(event.target.value)}
-									viewToggle={
-										<ViewToggle value={viewMode} onChange={setViewMode} />
-									}
-								/>
-								<ProjectsPanelList
-									projects={projects}
-									listLayout={
-										props.workspace && isResourceWorkspace(props.workspace)
-											? "resource"
-											: "project"
-									}
-									loading={props.loading}
-									viewMode={viewMode}
-									renderItem={renderProjectItem}
-									itemProps={{
-										onClick: (project) => {
-											setReveal(undefined)
-											props.onProject(project, "enter")
-										},
-									}}
-									listViewport={viewport}
-									error={
-										props.error ? (
-											<Button variant="ghost" onClick={props.onRefresh}>
-												{t("common.retry")}
-											</Button>
-										) : undefined
-									}
-									footer={
-										props.hasMore ? (
-											<Button
-												variant="ghost"
-												disabled={props.loadingMore}
-												onClick={props.onLoadMore}
-											>
-												{t("selectPathModal.loadMore")}
-											</Button>
-										) : undefined
-									}
-								/>
-							</>
-						)}
+												? recentSearch.loading
+												: recentProjectsStore.loading
+										}
+										viewMode={viewMode}
+										renderItem={renderProjectItem}
+										itemProps={{
+											titleLayout: "recent",
+											sortType: SortType.MY_LAST_ACTIVE_TIME,
+											onClick: (project) => {
+												setRecentMode(false)
+												props.onProject(
+													project,
+													"enter",
+													recentWorkspaceForProject(project),
+												)
+											},
+										}}
+										listViewport={recentViewport}
+										error={
+											(
+												query.trim()
+													? recentSearch.error
+													: recentProjectsStore.error
+											) ? (
+												<Button
+													variant="ghost"
+													onClick={() =>
+														void (query.trim()
+															? recentSearch.loadMore()
+															: recentProjectsStore.loadMore())
+													}
+												>
+													{t("common.retry")}
+												</Button>
+											) : undefined
+										}
+										footer={
+											(
+												query.trim()
+													? recentSearch.hasMore
+													: recentProjectsStore.hasMore
+											) ? (
+												<Button
+													variant="ghost"
+													disabled={
+														query.trim()
+															? recentSearch.loading
+															: recentProjectsStore.loading
+													}
+													onClick={() =>
+														void (query.trim()
+															? recentSearch.loadMore()
+															: recentProjectsStore.loadMore())
+													}
+												>
+													{t("selectPathModal.loadMore")}
+												</Button>
+											) : undefined
+										}
+									/>
+								</>
+							) : (
+								<>
+									<ProjectsPanelToolbar
+										location={
+											props.workspace?.name || t("selectPathModal.workspace")
+										}
+										searchValue={query}
+										onSearchValueChange={(event) =>
+											setQuery(event.target.value)
+										}
+										viewToggle={
+											<ViewToggle value={viewMode} onChange={setViewMode} />
+										}
+									/>
+									{props.resourceFilter}
+									<ProjectsPanelList
+										projects={projects}
+										listLayout={
+											props.workspace && isResourceWorkspace(props.workspace)
+												? "resource"
+												: "project"
+										}
+										loading={props.loading}
+										viewMode={viewMode}
+										renderItem={renderProjectItem}
+										itemProps={{
+											onClick: (project) => {
+												setReveal(undefined)
+												props.onProject(project, "enter")
+											},
+										}}
+										listViewport={viewport}
+										error={
+											props.error ? (
+												<Button variant="ghost" onClick={props.onRefresh}>
+													{t("common.retry")}
+												</Button>
+											) : undefined
+										}
+										footer={
+											props.hasMore ? (
+												<Button
+													variant="ghost"
+													disabled={props.loadingMore}
+													onClick={props.onLoadMore}
+												>
+													{t("selectPathModal.loadMore")}
+												</Button>
+											) : undefined
+										}
+									/>
+								</>
+							)}
+						</div>
+						<div className="flex min-h-0 w-60 shrink-0">{panel}</div>
 					</div>
-					<div className="flex min-h-0 w-60 shrink-0">{panel}</div>
-				</div>
+				</ProjectBrowserLayout>
 				<div className="flex min-h-14 shrink-0 items-center justify-between gap-3 border-t px-4">
 					<span className="text-xs text-muted-foreground">
 						{t("fileManager.selectedCount", { count: props.selections.length })}

@@ -15,4 +15,13 @@ describe("resolveEmbeddedShellState", () => {
 			showMainHeader: false,
 		})
 	})
+
+	it("uses the mobile shell without the legacy header for the AI canvas home", () => {
+		expect(resolveEmbeddedShellState("/demo/super/ai-canvas")).toEqual({
+			enabled: true,
+			activeView: "aiCanvas",
+			testIdPrefix: "mobile-ai-canvas-page",
+			showMainHeader: false,
+		})
+	})
 })

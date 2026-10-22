@@ -83,6 +83,7 @@ export function CanvasDesignReferenceResourcePanel(props: ReferenceResourcePanel
 		return {
 			currentCounts: selectionSummary.currentCounts,
 			limits: selectionSummary.limits,
+			totalLimit: selectionSummary.totalLimit,
 			getItemAssetType: (item) => {
 				const panelItem = toReferenceResourcePanelItem(item)
 				return panelItem ? selectionSummary.getItemAssetType?.(panelItem) : undefined

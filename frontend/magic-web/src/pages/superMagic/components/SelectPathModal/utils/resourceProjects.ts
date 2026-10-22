@@ -10,6 +10,9 @@ import { ProjectStatus, type Workspace } from "../../../pages/Workspace/types"
 import { TopicMode } from "../../../pages/Workspace/TopicMode"
 import type { ResourceProject } from "../resourceProjectTypes"
 import { loadMicroAppProjectPage } from "./microAppProjects"
+import { canEditProject } from "../../../utils/permission"
+
+export type AgentResourceScope = "created" | "collaborated"
 
 export function isResourceWorkspace(workspace: Workspace): boolean {
 	return (
@@ -27,12 +30,14 @@ export async function loadResourceProjectPage({
 	pageSize,
 	keyword,
 	signal,
+	agentScope = "created",
 }: {
 	workspace: Workspace
 	page: number
 	pageSize: number
 	keyword?: string
 	signal?: AbortSignal
+	agentScope?: AgentResourceScope
 }): Promise<{ list: ResourceProject[]; total: number }> {
 	signal?.throwIfAborted()
 	if (workspace.workspace_type === "micro-app")
@@ -95,26 +100,32 @@ export async function loadResourceProjectPage({
 		}
 	}
 	if (workspace.id !== MY_AGENTS_WORKSPACE_ID) throw new Error("Unsupported resource workspace")
-	const result = await crewService.getCreatedAgents(params)
+	const result =
+		agentScope === "collaborated"
+			? await crewService.getCollaboratedAgents(params)
+			: await crewService.getCreatedAgents(params)
 	signal?.throwIfAborted()
 	return {
 		total: result.total,
-		list: result.list.map((item): ResourceProject => ({
-			...base,
-			id: item.projectId || item.id,
-			project_id: item.projectId || null,
-			project_mode: TopicMode.AgentCreator,
-			project_name: item.name,
-			resourceType: "agent",
-			resourceId: item.id,
-			resourceCode: item.agentCode,
-			resourceDescription: item.description,
-			resourceIcon: item.icon,
-			resourceRole: item.role,
-			resourceVersion: item.latestVersionCode,
-			user_role: item.userRole,
-			created_at: "",
-			updated_at: item.updatedAt,
-		})),
+		// 协作列表可能包含只读员工；沿用项目编辑权限，不扩大文件访问范围。
+		list: result.list
+			.filter((item) => agentScope === "created" || canEditProject(item.userRole))
+			.map((item): ResourceProject => ({
+				...base,
+				id: item.projectId || item.id,
+				project_id: item.projectId || null,
+				project_mode: TopicMode.AgentCreator,
+				project_name: item.name,
+				resourceType: "agent",
+				resourceId: item.id,
+				resourceCode: item.agentCode,
+				resourceDescription: item.description,
+				resourceIcon: item.icon,
+				resourceRole: item.role,
+				resourceVersion: item.latestVersionCode,
+				user_role: item.userRole,
+				created_at: "",
+				updated_at: item.updatedAt,
+			})),
 	}
 }

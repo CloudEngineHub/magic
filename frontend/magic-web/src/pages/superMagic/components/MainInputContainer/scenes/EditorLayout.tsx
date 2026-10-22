@@ -1,8 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import PluginTips from "../components/PluginTips"
-import { AgentCommonModal } from "@/components/Agent/AgentCommonModal"
+import { useEffect, useMemo, useRef } from "react"
 import { cn } from "@/utils/cn"
-import ConnectorLibrary from "@/pages/superMagic/pages/ConnectorMarket/components/ConnectorLibrary"
 import CurrentSceneBadge from "../components/SelectedSkillBadge"
 import { SCENE_INPUT_IDS, INPUT_CONTAINER_MIN_HEIGHT, SCENE_PANEL_MIN_HEIGHT } from "../constants"
 import { TopicMode } from "@/pages/superMagic/pages/Workspace/TopicMode"
@@ -49,8 +46,6 @@ function EditorLayout({
 	const resolvedMode = mode ?? roleStore.currentRole
 	const editorContainerRef = useRef<HTMLDivElement>(null)
 	const editorRef = useRef<MessageEditorRef>(null)
-	const [connectorMarketOpen, setConnectorMarketOpen] = useState(false)
-	const [connectorMarketNestedOpen, setConnectorMarketNestedOpen] = useState(false)
 
 	// Explicit null is an empty composer, not a request to reuse the global selection.
 	const selectedTopic =
@@ -126,7 +121,7 @@ function EditorLayout({
 	// Automatically scroll to scene panel when scene config loaded
 	useSkillPanelScroll(editorContainerRef, sceneStateStore)
 
-	// Defer MCP list load so first paint is not blocked; PluginTips still appears after init.
+	// Warm the MCP list after first paint, so the composer's MCP controls open with data ready.
 	useEffect(() => {
 		const run = () => {
 			defaultMCPStore.load().catch(console.error)
@@ -173,12 +168,6 @@ function EditorLayout({
 		variant: ScenePanelVariant.HomePage,
 	})
 
-	const shouldShowPluginTips =
-		!selectedScene &&
-		defaultMCPStore.initialized &&
-		!defaultMCPStore.hasMCP &&
-		!defaultMCPStore.hasEverAddedMcp
-
 	return (
 		<SceneStateProvider store={sceneStateStore} variant={ScenePanelVariant.HomePage}>
 			<div className={cn("flex size-full flex-col items-center")}>
@@ -194,19 +183,17 @@ function EditorLayout({
 						style={{ minHeight: INPUT_CONTAINER_MIN_HEIGHT.HomePage }}
 					></div>
 
-					{/* Plugin Tips or Selected Skill Badge */}
-					<div className="mt-2 [&:empty]:hidden">
-						{shouldShowCurrentSceneBadge && selectedScene ? (
+					{/* Selected Skill Badge */}
+					{shouldShowCurrentSceneBadge && selectedScene ? (
+						<div className="mt-2">
 							<CurrentSceneBadge
 								scene={selectedScene}
 								onClose={() => {
 									sceneStateStore.setCurrentScene(null)
 								}}
 							/>
-						) : shouldShowPluginTips ? (
-							<PluginTips onConnectClick={() => setConnectorMarketOpen(true)} />
-						) : null}
-					</div>
+						</div>
+					) : null}
 				</div>
 
 				{/* skill config container with smooth transition */}
@@ -229,21 +216,6 @@ function EditorLayout({
 					{shouldShowSelfMediaConfig ? <SelfMediaComposerConfigPanel /> : null}
 				</div>
 			</div>
-			<AgentCommonModal
-				open={connectorMarketOpen}
-				onOpenChange={setConnectorMarketOpen}
-				width={1120}
-				keyboard={!connectorMarketNestedOpen}
-				footer={null}
-				closable={false}
-			>
-				<ConnectorLibrary
-					embedded
-					activeStorageKey={selectedProject?.id}
-					onClose={() => setConnectorMarketOpen(false)}
-					onNestedPanelOpenChange={setConnectorMarketNestedOpen}
-				/>
-			</AgentCommonModal>
 		</SceneStateProvider>
 	)
 }

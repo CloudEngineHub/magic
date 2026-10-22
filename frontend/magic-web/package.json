@@ -450,7 +450,6 @@
 		"vite-plugin-externals": "^0.6.2",
 		"vite-plugin-imp": "^2.4.0",
 		"vite-plugin-inspect": "12.0.0-beta.1",
-		"vite-plugin-keep-console": "1.0.0",
 		"vite-plugin-mkcert": "^1.17.6",
 		"vitest": "^3.2.4"
 	},

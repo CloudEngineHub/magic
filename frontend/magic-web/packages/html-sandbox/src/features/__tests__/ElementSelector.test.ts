@@ -997,6 +997,38 @@ describe("ElementSelector", () => {
 			)
 		})
 
+		it("keeps shift-clicks from extending a browser text range and still adds to the selection", () => {
+			container.innerHTML = '<p id="one">One</p><p id="two">Two</p>'
+			const one = container.querySelector("#one") as HTMLElement
+			const two = container.querySelector("#two") as HTMLElement
+			markSourceNodes(document)
+			selector.enable()
+			selector.selectElement(one)
+			const range = document.createRange()
+			range.selectNodeContents(one)
+			window.getSelection()?.addRange(range)
+
+			const plain = new MouseEvent("mousedown", { bubbles: true, cancelable: true })
+			two.dispatchEvent(plain)
+			expect(plain.defaultPrevented).toBe(false)
+
+			const shifted = new MouseEvent("mousedown", {
+				bubbles: true,
+				cancelable: true,
+				shiftKey: true,
+			})
+			two.dispatchEvent(shifted)
+			expect(shifted.defaultPrevented).toBe(true)
+			expect(window.getSelection()?.isCollapsed).toBe(true)
+
+			sendEventSpy.mockClear()
+			two.dispatchEvent(
+				new MouseEvent("click", { bubbles: true, cancelable: true, shiftKey: true }),
+			)
+			expect(selector.isSelected(one)).toBe(true)
+			expect(selector.isSelected(two)).toBe(true)
+		})
+
 		it("should check if element is selected", () => {
 			container.innerHTML = '<div id="test">Content</div>'
 			const element = container.querySelector("#test") as HTMLElement

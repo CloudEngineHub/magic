@@ -40,8 +40,12 @@ export const RouteName = {
 	PlatformInvoiceList: "platform-invoice-list",
 	/** 平台模型列表。 */
 	PlatformModelList: "platform-model-list",
+	/** 平台模型标识映射。 */
+	PlatformModelIdentifierMapping: "platform-model-identifier-mapping",
 	/** 平台模型服务商列表。 */
 	PlatformProviderList: "platform-provider-list",
+	/** 模型参考倍率。 */
+	PlatformModelMultiplier: "platform-model-multiplier",
 	/** 系统能力管理。 */
 	PlatformSystemCapabilities: "platform-system-capabilities",
 	/** PPT 模板管理。 */
@@ -318,8 +322,12 @@ export const RoutePath = {
 	PlatformInvoiceList: "platform/packages/invoice-list",
 	/** 平台模型列表。 */
 	PlatformModelList: "platform/models/model-list",
+	/** 平台模型标识映射。 */
+	PlatformModelIdentifierMapping: "platform/models/model-identifier-mapping",
 	/** 平台模型服务商列表。 */
 	PlatformProviderList: "platform/models/provider-list",
+	/** 模型参考倍率。 */
+	PlatformModelMultiplier: "platform/models/model-multiplier",
 	/** 系统能力管理。 */
 	PlatformSystemCapabilities: "platform/agents/system-capabilities",
 	/** PPT 模板管理。 */

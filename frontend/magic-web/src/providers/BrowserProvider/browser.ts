@@ -12,10 +12,10 @@ interface BrowserInfo {
  * Minimum supported versions for different browsers
  */
 export const MIN_SUPPORTED_VERSIONS = {
-	Chrome: 89,
-	Edge: 89,
-	Firefox: 78,
-	Safari: 15,
+	Chrome: 111,
+	Edge: 111,
+	Firefox: 114,
+	Safari: 16.4,
 	Unknown: 0,
 }
 
@@ -62,10 +62,10 @@ export function getBrowserInfo(): BrowserInfo {
 	}
 	// Safari detection
 	else if (userAgent.indexOf("Safari") !== -1 && userAgent.indexOf("Chrome") === -1) {
-		const safariMatch = userAgent.match(/Version\/(\d+)/)
+		const safariMatch = userAgent.match(/Version\/(\d+(\.\d+)?)/)
 		if (safariMatch && safariMatch[1]) {
 			name = "Safari"
-			version = parseInt(safariMatch[1], 10)
+			version = parseFloat(safariMatch[1])
 		}
 	}
 
