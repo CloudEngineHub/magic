@@ -1,8 +1,9 @@
-import { ChevronLeft, ChevronRight, Crown, Trash2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, LayoutGrid } from "lucide-react"
 import { useCallback, useMemo } from "react"
 import { ElementToolTypeEnum } from "../../../../public/props"
 import type { ElementToolType } from "../../../../public/props"
 import { useCanvasDesignI18n } from "../../../../app/providers/I18nProvider"
+import { useCanvasPanelUI } from "../../../../app/providers/CanvasUIProvider"
 import type { AudioElement, ImageElement, VideoElement } from "../../../../runtime/document/types"
 import styles from "./ElementVersionControls.module.css"
 import type { ElementToolResolution } from "../../../../runtime/element-tools"
@@ -15,36 +16,35 @@ interface ElementVersionControlsProps {
 	tools: readonly ElementToolResolution[]
 }
 
-export default function ElementVersionControls({ tools }: ElementVersionControlsProps) {
+export default function ElementVersionControls({ element, tools }: ElementVersionControlsProps) {
 	const { t } = useCanvasDesignI18n()
+	const { versionPanelElementId, toggleVersionPanel } = useCanvasPanelUI()
 	const toolsById = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools])
 	const versionData = toolsById.get(ElementToolTypeEnum.VersionCount)?.data?.version
+	const elementId =
+		toolsById.get(ElementToolTypeEnum.VersionCount)?.target.elementId ?? element?.id
 	const activeIndex = Math.max(0, (versionData?.current ?? 1) - 1)
 	const total = versionData?.total ?? 0
-	const isMain = versionData?.isMain ?? false
 	const getTool = useCallback((toolId: ElementToolType) => toolsById.get(toolId), [toolsById])
-	const canDelete = getTool(ElementToolTypeEnum.VersionDelete)?.visibility === "visible"
-	const canSetMain = getTool(ElementToolTypeEnum.VersionSetMain)?.visibility === "visible"
+	const canSwitchVersions =
+		getTool(ElementToolTypeEnum.VersionPrevious)?.visibility === "visible" ||
+		getTool(ElementToolTypeEnum.VersionNext)?.visibility === "visible"
+	const isExpanded = Boolean(elementId && versionPanelElementId === elementId)
 
 	const switchActive = useCallback(
 		(
 			toolId:
-				| typeof ElementToolTypeEnum.VersionPrevious
-				| typeof ElementToolTypeEnum.VersionNext,
+				typeof ElementToolTypeEnum.VersionPrevious | typeof ElementToolTypeEnum.VersionNext,
 		) => {
 			void Promise.resolve(getTool(toolId)?.execute?.())
 		},
 		[getTool],
 	)
 
-	const handleSetMain = useCallback(() => {
-		void Promise.resolve(getTool(ElementToolTypeEnum.VersionSetMain)?.execute?.())
-	}, [getTool])
-
-	const handleDelete = useCallback(() => {
-		if (!canDelete) return
-		void Promise.resolve(getTool(ElementToolTypeEnum.VersionDelete)?.execute?.())
-	}, [canDelete, getTool])
+	const handleToggleExpansion = useCallback(() => {
+		if (!elementId) return
+		toggleVersionPanel(elementId)
+	}, [elementId, toggleVersionPanel])
 
 	const label = useMemo(
 		() =>
@@ -86,36 +86,25 @@ export default function ElementVersionControls({ tools }: ElementVersionControls
 			>
 				<ChevronRight size={14} />
 			</button>
-			{getTool(ElementToolTypeEnum.VersionSetMain) && (
+			{elementId && (
 				<button
 					type="button"
 					className={styles.actionButton}
-					disabled={!canSetMain || isMain}
+					disabled={!canSwitchVersions}
+					aria-pressed={isExpanded}
 					aria-label={
-						isMain
-							? t("elementBottomToolbar.mainVersion", "主版本")
-							: t("elementBottomToolbar.setMainVersion", "设为主版本")
+						isExpanded
+							? t("elementBottomToolbar.collapseVersions", "收起版本")
+							: t("elementBottomToolbar.viewVersions", "查看版本")
 					}
-					onClick={handleSetMain}
+					onClick={handleToggleExpansion}
 				>
-					<Crown size={14} />
+					<LayoutGrid size={14} />
 					<span>
-						{isMain
-							? t("elementBottomToolbar.mainVersion", "主版本")
-							: t("elementBottomToolbar.setMainVersion", "设为主版本")}
+						{isExpanded
+							? t("elementBottomToolbar.collapseVersions", "收起版本")
+							: t("elementBottomToolbar.viewVersions", "查看版本")}
 					</span>
-				</button>
-			)}
-			{getTool(ElementToolTypeEnum.VersionDelete) && (
-				<button
-					type="button"
-					className={styles.actionButton}
-					disabled={!canDelete}
-					aria-label={t("elementBottomToolbar.deleteVersion", "删除版本")}
-					onClick={handleDelete}
-				>
-					<Trash2 size={14} />
-					<span>{t("elementBottomToolbar.deleteVersion", "删除版本")}</span>
 				</button>
 			)}
 		</div>

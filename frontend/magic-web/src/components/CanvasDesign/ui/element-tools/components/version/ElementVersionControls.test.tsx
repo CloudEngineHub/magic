@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => ({
 	commandBus: {
 		execute: vi.fn(),
 	},
+	panelUI: {
+		versionPanelElementId: null as string | null,
+		toggleVersionPanel: vi.fn(),
+	},
 }))
 
 vi.mock("../../../../app/providers/CanvasProvider", () => ({
@@ -27,6 +31,10 @@ vi.mock("../../../../app/providers/CanvasProvider", () => ({
 			elementToolCommandBus: mocks.commandBus,
 		},
 	}),
+}))
+
+vi.mock("../../../../app/providers/CanvasUIProvider", () => ({
+	useCanvasPanelUI: () => mocks.panelUI,
 }))
 
 vi.mock("../../../../app/providers/I18nProvider", () => ({
@@ -81,32 +89,32 @@ describe("ElementVersionControls", () => {
 		vi.clearAllMocks()
 	})
 
-	it("delegates version actions to the element instance", () => {
+	it("delegates version navigation to the element instance", () => {
 		const element = createImageElement()
 		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
 
 		fireEvent.click(screen.getByRole("button", { name: "上一个版本" }))
-		fireEvent.click(screen.getByRole("button", { name: "设为主版本" }))
-		fireEvent.click(screen.getByRole("button", { name: "删除版本" }))
-
-		expect(mocks.commandBus.execute).toHaveBeenNthCalledWith(1, {
+		expect(mocks.commandBus.execute).toHaveBeenCalledOnce()
+		expect(mocks.commandBus.execute).toHaveBeenCalledWith({
 			toolId: ElementToolTypeEnum.VersionPrevious,
-			elementId: "image-1",
-			contentId: "version-2",
-		})
-		expect(mocks.commandBus.execute).toHaveBeenNthCalledWith(2, {
-			toolId: ElementToolTypeEnum.VersionSetMain,
-			elementId: "image-1",
-			contentId: "version-2",
-		})
-		expect(mocks.commandBus.execute).toHaveBeenNthCalledWith(3, {
-			toolId: ElementToolTypeEnum.VersionDelete,
 			elementId: "image-1",
 			contentId: "version-2",
 		})
 	})
 
-	it("allows deleting an active pending image version but keeps set-main hidden", () => {
+	it("toggles the expanded version grid from the version toolbar", () => {
+		const element = createImageElement()
+		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
+
+		const expandButton = screen.getByRole("button", { name: "查看版本" })
+		expect(expandButton).toHaveAttribute("aria-pressed", "false")
+		expect(expandButton).toHaveTextContent("查看版本")
+		fireEvent.click(expandButton)
+
+		expect(mocks.panelUI.toggleVersionPanel).toHaveBeenCalledWith("image-1")
+	})
+
+	it("keeps main-version and delete actions out of the bottom toolbar", () => {
 		const element = createImageElement({
 			contents: [
 				{ contentId: "version-1", src: "one.png", status: "completed" },
@@ -118,10 +126,10 @@ describe("ElementVersionControls", () => {
 		expect(screen.getByRole("button", { name: "上一个版本" })).not.toBeDisabled()
 		expect(screen.queryByRole("status")).toBeNull()
 		expect(screen.queryByRole("button", { name: "设为主版本" })).toBeNull()
-		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
+		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
 	})
 
-	it("shows deleting for an active failed image version", () => {
+	it("does not show delete for an active failed image version in the bottom toolbar", () => {
 		const element = createImageElement({
 			contents: [
 				{ contentId: "version-1", src: "one.png", status: "completed" },
@@ -130,7 +138,7 @@ describe("ElementVersionControls", () => {
 		})
 		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
 
-		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
+		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
 	})
 
 	it("keeps browsing available after switching away from a generating version", () => {
@@ -144,7 +152,7 @@ describe("ElementVersionControls", () => {
 		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
 
 		expect(screen.getByRole("button", { name: "下一个版本" })).not.toBeDisabled()
-		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
+		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
 		fireEvent.click(screen.getByRole("button", { name: "下一个版本" }))
 		expect(mocks.commandBus.execute).toHaveBeenCalledWith({
 			toolId: ElementToolTypeEnum.VersionNext,
@@ -153,7 +161,7 @@ describe("ElementVersionControls", () => {
 		})
 	})
 
-	it("keeps setting a completed version as main available with a sibling task", () => {
+	it("renders only navigation and view-version controls in the bottom toolbar", () => {
 		const element = createImageElement({
 			activeContentId: "version-1",
 			mainContentId: "version-2",
@@ -165,7 +173,8 @@ describe("ElementVersionControls", () => {
 		})
 		render(<ElementVersionControls element={element} tools={getVersionTools(element)} />)
 
-		expect(screen.getByRole("button", { name: "设为主版本" })).not.toBeDisabled()
-		expect(screen.getByRole("button", { name: "删除版本" })).not.toBeDisabled()
+		expect(screen.queryByRole("button", { name: "设为主版本" })).toBeNull()
+		expect(screen.queryByRole("button", { name: "删除版本" })).toBeNull()
+		expect(screen.getByRole("button", { name: "查看版本" })).toBeInTheDocument()
 	})
 })

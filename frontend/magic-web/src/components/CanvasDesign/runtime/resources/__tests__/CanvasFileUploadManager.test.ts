@@ -10,6 +10,7 @@ import {
 import type { CanvasElementClipboardFileMetadata } from "../clipboard/CanvasElementClipboard"
 import { createTestResourceReferenceResolver } from "../../../public/__tests__/testResourceReferenceResolver"
 import { ElementTypeEnum, type LayerElement, type VideoElement } from "../../document/types"
+import { validateElementData } from "../../document/validateElement"
 import { ImageElement } from "../../elements/image/ImageElement"
 
 const resolveDesignAResourceReference = createTestResourceReferenceResolver()
@@ -874,6 +875,56 @@ describe("CanvasFileUploadManager audio element uploads", () => {
 		expect(disable).toHaveBeenCalledTimes(1)
 		expect(enable).toHaveBeenCalledTimes(1)
 		expect(recordHistoryImmediate).toHaveBeenCalledTimes(1)
+	})
+
+	it("writes only v3-allowed audio content fields so element validation passes", async () => {
+		const update = vi.fn()
+		const manager = Object.create(CanvasFileUploadManager.prototype) as CanvasFileUploadManager
+		const current = {
+			id: "audio-empty",
+			type: ElementTypeEnum.Audio,
+			contents: [{ contentId: "content-1" }],
+			activeContentId: "content-1",
+			mainContentId: "content-1",
+		}
+		const uploadResult: UploadFileResponse = {
+			path: "./audios/voice.mp3",
+			src: "https://example.test/voice.mp3",
+			fileName: "voice.mp3",
+		}
+		Object.assign(manager as unknown as Record<string, unknown>, {
+			canvas: {
+				t: vi.fn((_key: string, fallback: string) => fallback),
+				elementManager: { getElementData: vi.fn(() => current), update },
+				historyManager: {
+					disable: vi.fn(),
+					enable: vi.fn(),
+					recordHistoryImmediate: vi.fn(),
+				},
+				audioResourceManager: { primeCache: vi.fn() },
+				audioPlaybackManager: { release: vi.fn() },
+				audioWaveformManager: { invalidatePath: vi.fn() },
+				visibilityManager: { invalidateAudioLoadRequest: vi.fn() },
+			},
+			uploadDirect: vi.fn(async () => [uploadResult]),
+		})
+
+		await expect(
+			manager.replaceAudioElement({
+				elementId: "audio-empty",
+				file: new File(["voice"], "voice.mp3", { type: "audio/mpeg" }),
+			}),
+		).resolves.toBe(true)
+
+		expect(update).toHaveBeenCalledTimes(1)
+		const contents = update.mock.calls[0]?.[1]?.contents as
+			Array<Record<string, unknown>> | undefined
+		expect(contents).toBeDefined()
+		if (!contents) throw new Error("expected replacement contents")
+		expect(Object.keys(contents[0]).sort()).toEqual(["assetId", "contentId", "src"])
+
+		const merged = { ...current, contents }
+		expect(() => validateElementData(merged)).not.toThrow()
 	})
 
 	it("keeps the previous audio unchanged when replacement upload fails", async () => {

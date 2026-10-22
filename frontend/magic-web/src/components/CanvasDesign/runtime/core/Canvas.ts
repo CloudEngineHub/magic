@@ -35,7 +35,6 @@ import { MagicConfigManager } from "./MagicConfigManager"
 import { ClipboardManager } from "../interaction/clipboard/ClipboardManager"
 import { DropOverlayManager } from "../interaction/drop-overlay/DropOverlayManager"
 import { CursorManager } from "../interaction/cursor/CursorManager"
-import { VideoSelectionPlaybackManager } from "../interaction/video-playback/VideoSelectionPlaybackManager"
 import { VideoPlaybackInteractionManager } from "../interaction/video-playback/VideoPlaybackInteractionManager"
 import { UserActionRegistry } from "../actions/UserActionRegistry"
 import { BackgroundManager } from "../interaction/background/BackgroundManager"
@@ -198,7 +197,6 @@ export class Canvas {
 	public transformManager: TransformManager
 	public hoverManager: HoverManager
 	public selectionHighlightManager: SelectionHighlightManager
-	public videoSelectionPlaybackManager: VideoSelectionPlaybackManager
 	public videoPlaybackInteractionManager: VideoPlaybackInteractionManager
 	public inputManager: CanvasInputManager
 	public connectionManager: ConnectionManager
@@ -515,11 +513,6 @@ export class Canvas {
 
 		// 初始化 SelectionHighlightManager（使用 Selection Layer）
 		this.selectionHighlightManager = new SelectionHighlightManager({
-			canvas: this,
-		})
-
-		// 初始化视频选中播放协调器
-		this.videoSelectionPlaybackManager = new VideoSelectionPlaybackManager({
 			canvas: this,
 		})
 
@@ -1844,7 +1837,6 @@ export class Canvas {
 		this.selectionManager.destroy()
 		this.transformManager.destroy()
 		this.hoverManager.destroy()
-		this.videoSelectionPlaybackManager.destroy()
 		this.videoPlaybackInteractionManager.destroy()
 		this.toolManager.destroy()
 		this.inputManager.destroy()

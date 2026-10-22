@@ -98,26 +98,26 @@ export const AttachmentSection = observer(function AttachmentSection({
 			},
 		]
 	})
-
 	const onFileClick = useMemoizedFn((item?: unknown) => {
 		openMessageFile(item)
 		onSelectDetail?.(item)
 	})
 
 	if (!canDisplayAttachments) return null
+	if (attachments.length > 0) {
+		return (
+			<Attachment
+				className={className}
+				attachments={attachments}
+				onSelectDetail={onFileClick}
+				onFileClick={handleFileClick}
+			/>
+		)
+	}
 	if (filePathAttachments.length > 0) {
 		return <FilePathAttachmentList attachments={filePathAttachments} className={className} />
 	}
-	if (attachments.length === 0) return null
-
-	return (
-		<Attachment
-			className={className}
-			attachments={attachments}
-			onSelectDetail={onFileClick}
-			onFileClick={handleFileClick}
-		/>
-	)
+	return null
 })
 
 interface FilePathAttachmentListProps {

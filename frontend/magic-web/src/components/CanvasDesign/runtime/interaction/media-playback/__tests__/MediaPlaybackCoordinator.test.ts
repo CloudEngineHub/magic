@@ -11,6 +11,7 @@ describe("MediaPlaybackCoordinator", () => {
 		const acquire = vi.fn().mockResolvedValue({ video: fullscreenVideo })
 		const element = Object.create(VideoElement.prototype) as unknown as {
 			canvas: {
+				permissionManager: { can: ReturnType<typeof vi.fn> }
 				mediaPlaybackCoordinator: { preparePlayback: typeof preparePlayback }
 				videoPlaybackManager: {
 					handoff: typeof handoff
@@ -54,12 +55,7 @@ describe("MediaPlaybackCoordinator", () => {
 	it("pauses other audio and video sessions before playback", () => {
 		const pauseAllAudio = vi.fn()
 		const pauseAllVideo = vi.fn()
-		const firstPause = vi.fn()
-		const secondPause = vi.fn()
-		const firstVideo = Object.create(VideoElement.prototype) as VideoElement
-		const secondVideo = Object.create(VideoElement.prototype) as VideoElement
-		firstVideo.pausePreview = firstPause
-		secondVideo.pausePreview = secondPause
+		const getAllElementIds = vi.fn(() => ["video-1", "video-2"])
 		const canvas = {
 			eventEmitter: { on: vi.fn(() => vi.fn()) },
 			audioPlaybackManager: {
@@ -68,9 +64,7 @@ describe("MediaPlaybackCoordinator", () => {
 			},
 			videoPlaybackManager: { pauseAll: pauseAllVideo },
 			elementManager: {
-				getAllElementIds: () => ["video-1", "video-2"],
-				getElementInstance: (elementId: string) =>
-					elementId === "video-1" ? firstVideo : secondVideo,
+				getAllElementIds,
 			},
 		} as unknown as Canvas
 		const coordinator = new MediaPlaybackCoordinator({ canvas })
@@ -79,8 +73,7 @@ describe("MediaPlaybackCoordinator", () => {
 
 		expect(pauseAllAudio).toHaveBeenCalledWith("video-1")
 		expect(pauseAllVideo).toHaveBeenCalledWith("video-1")
-		expect(firstPause).not.toHaveBeenCalled()
-		expect(secondPause).toHaveBeenCalledTimes(1)
+		expect(getAllElementIds).not.toHaveBeenCalled()
 	})
 
 	it("pauses and releases media when the selection is cleared", () => {
@@ -101,10 +94,6 @@ describe("MediaPlaybackCoordinator", () => {
 				releaseAll: releaseAllAudio,
 			},
 			videoPlaybackManager: { pauseAll: pauseAllVideo },
-			elementManager: {
-				getAllElementIds: () => [],
-				getElementInstance: vi.fn(),
-			},
 		} as unknown as Canvas
 		const coordinator = new MediaPlaybackCoordinator({ canvas })
 

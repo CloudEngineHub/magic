@@ -55,6 +55,7 @@ import {
 } from "../offline-cache/MediaResourceBodyCache"
 import { SharedAbortableRequest } from "../offline-cache/SharedAbortableRequest"
 import { ImageDisplayVariantPersistentCache } from "./ImageDisplayVariantPersistentCache"
+import { resolveCanvasImageDecodedCacheBudgets } from "./CanvasImageCachePolicy"
 import type { DecodedImageRetentionHint } from "../visibility/CanvasVisibilityManager"
 import {
 	buildSharedMediaStorageScope,
@@ -248,31 +249,8 @@ const DEFAULT_IMAGE_RESOURCE_VARIANT: ImageResourceVariant = "preview"
 const COMPRESSED_BODY_CACHE_TTL_MS = 2 * 60 * 1000
 const COMPRESSED_BODY_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const PREVIEW_LOAD_PIPELINE_CONCURRENCY = 8
-const DECODED_BITMAP_SOFT_BUDGET_BYTES = 160 * 1024 * 1024
-const DECODED_BITMAP_HARD_BUDGET_BYTES = 224 * 1024 * 1024
-const BYTES_PER_MIB = 1024 * 1024
-const FULL_DECODED_BITMAP_LOW_MEMORY_BUDGET_BYTES = 64 * BYTES_PER_MIB
-const FULL_DECODED_BITMAP_DEFAULT_BUDGET_BYTES = 128 * BYTES_PER_MIB
-const FULL_DECODED_BITMAP_HIGH_MEMORY_BUDGET_BYTES = 256 * BYTES_PER_MIB
-const FULL_DECODED_BITMAP_EVICTION_GRACE_MS = 5000
+const DECODED_BITMAP_EVICTION_GRACE_MS = 5000
 export type ImageResourceLoadPriority = MediaDecodePriority
-
-function getDefaultFullDecodedBitmapBudgetBytes(): number {
-	const deviceMemory =
-		typeof globalThis.navigator === "undefined"
-			? undefined
-			: (globalThis.navigator as Navigator & { deviceMemory?: number }).deviceMemory
-	if (typeof deviceMemory !== "number") {
-		return FULL_DECODED_BITMAP_DEFAULT_BUDGET_BYTES
-	}
-	if (deviceMemory <= 4) {
-		return FULL_DECODED_BITMAP_LOW_MEMORY_BUDGET_BYTES
-	}
-	if (deviceMemory >= 16) {
-		return FULL_DECODED_BITMAP_HIGH_MEMORY_BUDGET_BYTES
-	}
-	return FULL_DECODED_BITMAP_DEFAULT_BUDGET_BYTES
-}
 
 type DecodedBitmapCandidateVariant = ImageDisplayResourceVariant | "full"
 type DecodedBitmapRetentionLevel = "visible" | "near"
@@ -289,6 +267,8 @@ interface DecodedBitmapBudgetCandidate {
 interface DecodedBitmapBudgetOptions {
 	reason: string
 	exemptResource?: ImageResource
+	lowBudgetBytes?: number
+	previewBudgetBytes?: number
 	softBudgetBytes?: number
 	hardBudgetBytes?: number
 	fullBudgetBytes?: number
@@ -393,10 +373,16 @@ export class ImageResourceManager {
 	private decodedResourceRefCounts = new Map<ImageResource, number>()
 	// Keep only the latest identity per path/variant so re-decode diagnostics stay bounded.
 	private lastSuccessfulDecodeIdentityByPathVariant = new Map<string, string>()
+	private lowDecodedResourceRefCounts = new Map<ImageResource, number>()
+	private previewDecodedResourceRefCounts = new Map<ImageResource, number>()
 	private fullDecodedResourceRefCounts = new Map<ImageResource, number>()
 	private decodedBytesTotal = 0
+	private lowDecodedBytes = 0
+	private previewDecodedBytes = 0
 	private fullDecodedBytes = 0
 	private decodedByteTrackingReady = true
+	private readonly decodedCacheBudgets = resolveCanvasImageDecodedCacheBudgets()
+	private readonly decodePixelBudgetGate = new MediaDecodePixelBudgetGate()
 
 	private getResourceIdentity(path: string): string {
 		return this.urlLifecycle.getResourceIdentity(path)
@@ -621,8 +607,6 @@ export class ImageResourceManager {
 
 	private previewLoadQueueSequence = 0
 
-	private decodePixelBudgetGate = new MediaDecodePixelBudgetGate()
-
 	// 防抖定时器
 	private cleanupTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -694,7 +678,11 @@ export class ImageResourceManager {
 	 */
 	private sendToWorker(
 		request: ImageResourceWorkerRequest,
-		options?: { signal?: AbortSignal },
+		options?: {
+			signal?: AbortSignal
+			priority?: ImageResourceLoadPriority
+			pixelCost?: number
+		},
 	): Promise<ImageResourceWorkerResponse> {
 		if (this.destroyed || !this.workerClient) {
 			return Promise.reject(new Error("ImageResourceManager destroyed"))
@@ -708,11 +696,14 @@ export class ImageResourceManager {
 
 		const requestId = this.createWorkerRequestId("img-warmup")
 
-		const promise = this.sendToWorker({
-			type: "warmup",
-			requestId,
-			variant: DEFAULT_IMAGE_RESOURCE_VARIANT,
-		})
+		const promise = this.sendToWorker(
+			{
+				type: "warmup",
+				requestId,
+				variant: DEFAULT_IMAGE_RESOURCE_VARIANT,
+			},
+			{ priority: "background" },
+		)
 			.then(() => undefined)
 			.catch(() => undefined)
 			.finally(() => {
@@ -806,15 +797,6 @@ export class ImageResourceManager {
 			if (priorityDiff !== 0) return priorityDiff
 			return a.sequence - b.sequence
 		})
-	}
-
-	private acquireImageDecodePermit(
-		pixelCost: number,
-		priority: ImageResourceLoadPriority,
-		signal?: AbortSignal,
-	): Promise<() => void> {
-		if (this.destroyed) return Promise.resolve(() => undefined)
-		return this.decodePixelBudgetGate.acquire(pixelCost, priority, signal)
 	}
 
 	private upgradeQueuedPreviewLoad(
@@ -932,11 +914,23 @@ export class ImageResourceManager {
 		if (!(this.decodedResourceRefCounts instanceof Map)) {
 			this.decodedResourceRefCounts = new Map()
 		}
+		if (!(this.lowDecodedResourceRefCounts instanceof Map)) {
+			this.lowDecodedResourceRefCounts = new Map()
+		}
+		if (!(this.previewDecodedResourceRefCounts instanceof Map)) {
+			this.previewDecodedResourceRefCounts = new Map()
+		}
 		if (!(this.fullDecodedResourceRefCounts instanceof Map)) {
 			this.fullDecodedResourceRefCounts = new Map()
 		}
 		if (typeof this.decodedBytesTotal !== "number") {
 			this.decodedBytesTotal = 0
+		}
+		if (typeof this.lowDecodedBytes !== "number") {
+			this.lowDecodedBytes = 0
+		}
+		if (typeof this.previewDecodedBytes !== "number") {
+			this.previewDecodedBytes = 0
 		}
 		if (typeof this.fullDecodedBytes !== "number") {
 			this.fullDecodedBytes = 0
@@ -970,7 +964,7 @@ export class ImageResourceManager {
 
 	private retainDecodedResource(
 		resource: ImageResource | null,
-		options?: { full?: boolean },
+		options?: { variant?: ImageResourceVariant },
 	): void {
 		if (!resource) return
 		this.ensureDecodedByteTrackingState()
@@ -978,7 +972,17 @@ export class ImageResourceManager {
 		if (this.incrementDecodedResourceRef(this.decodedResourceRefCounts, resource)) {
 			this.decodedBytesTotal += bytes
 		}
-		if (options?.full) {
+		if (options?.variant === "low") {
+			if (this.incrementDecodedResourceRef(this.lowDecodedResourceRefCounts, resource)) {
+				this.lowDecodedBytes += bytes
+			}
+		}
+		if (options?.variant === "preview") {
+			if (this.incrementDecodedResourceRef(this.previewDecodedResourceRefCounts, resource)) {
+				this.previewDecodedBytes += bytes
+			}
+		}
+		if (options?.variant === "full") {
 			if (this.incrementDecodedResourceRef(this.fullDecodedResourceRefCounts, resource)) {
 				this.fullDecodedBytes += bytes
 			}
@@ -987,7 +991,7 @@ export class ImageResourceManager {
 
 	private releaseDecodedResource(
 		resource: ImageResource | null,
-		options?: { full?: boolean },
+		options?: { variant?: ImageResourceVariant },
 	): void {
 		if (!resource) return
 		this.ensureDecodedByteTrackingState()
@@ -995,7 +999,17 @@ export class ImageResourceManager {
 		if (this.decrementDecodedResourceRef(this.decodedResourceRefCounts, resource)) {
 			this.decodedBytesTotal = Math.max(0, this.decodedBytesTotal - bytes)
 		}
-		if (options?.full) {
+		if (options?.variant === "low") {
+			if (this.decrementDecodedResourceRef(this.lowDecodedResourceRefCounts, resource)) {
+				this.lowDecodedBytes = Math.max(0, this.lowDecodedBytes - bytes)
+			}
+		}
+		if (options?.variant === "preview") {
+			if (this.decrementDecodedResourceRef(this.previewDecodedResourceRefCounts, resource)) {
+				this.previewDecodedBytes = Math.max(0, this.previewDecodedBytes - bytes)
+			}
+		}
+		if (options?.variant === "full") {
 			if (this.decrementDecodedResourceRef(this.fullDecodedResourceRefCounts, resource)) {
 				this.fullDecodedBytes = Math.max(0, this.fullDecodedBytes - bytes)
 			}
@@ -1004,8 +1018,12 @@ export class ImageResourceManager {
 
 	private rebuildDecodedByteTrackingFromEntries(): void {
 		this.decodedResourceRefCounts = new Map()
+		this.lowDecodedResourceRefCounts = new Map()
+		this.previewDecodedResourceRefCounts = new Map()
 		this.fullDecodedResourceRefCounts = new Map()
 		this.decodedBytesTotal = 0
+		this.lowDecodedBytes = 0
+		this.previewDecodedBytes = 0
 		this.fullDecodedBytes = 0
 
 		this.entries?.forEach((entry) => {
@@ -1014,6 +1032,23 @@ export class ImageResourceManager {
 				if (!resource) continue
 				if (this.incrementDecodedResourceRef(this.decodedResourceRefCounts, resource)) {
 					this.decodedBytesTotal += this.getDecodedBytes(resource)
+				}
+				if (variant === "low") {
+					if (
+						this.incrementDecodedResourceRef(this.lowDecodedResourceRefCounts, resource)
+					) {
+						this.lowDecodedBytes += this.getDecodedBytes(resource)
+					}
+				}
+				if (variant === "preview") {
+					if (
+						this.incrementDecodedResourceRef(
+							this.previewDecodedResourceRefCounts,
+							resource,
+						)
+					) {
+						this.previewDecodedBytes += this.getDecodedBytes(resource)
+					}
 				}
 			}
 			if (!entry.fullResource) return
@@ -1040,12 +1075,24 @@ export class ImageResourceManager {
 		} else {
 			this.decodedResourceRefCounts = new Map()
 		}
+		if (this.lowDecodedResourceRefCounts instanceof Map) {
+			this.lowDecodedResourceRefCounts.clear()
+		} else {
+			this.lowDecodedResourceRefCounts = new Map()
+		}
+		if (this.previewDecodedResourceRefCounts instanceof Map) {
+			this.previewDecodedResourceRefCounts.clear()
+		} else {
+			this.previewDecodedResourceRefCounts = new Map()
+		}
 		if (this.fullDecodedResourceRefCounts instanceof Map) {
 			this.fullDecodedResourceRefCounts.clear()
 		} else {
 			this.fullDecodedResourceRefCounts = new Map()
 		}
 		this.decodedBytesTotal = 0
+		this.lowDecodedBytes = 0
+		this.previewDecodedBytes = 0
 		this.fullDecodedBytes = 0
 		this.decodedByteTrackingReady = true
 	}
@@ -1121,12 +1168,18 @@ export class ImageResourceManager {
 
 	private collectDecodedBitmapBudgetCandidates(): {
 		totalBytes: number
+		lowBytes: number
+		previewBytes: number
 		fullBytes: number
 		candidates: DecodedBitmapBudgetCandidate[]
 	} {
 		let totalBytes = 0
+		let lowBytes = 0
+		let previewBytes = 0
 		let fullBytes = 0
 		const countedResources = new Set<ImageResource>()
+		const countedLowResources = new Set<ImageResource>()
+		const countedPreviewResources = new Set<ImageResource>()
 		const countedFullResources = new Set<ImageResource>()
 		const candidates: DecodedBitmapBudgetCandidate[] = []
 		const addDecodedBytes = (resource: ImageResource): number => {
@@ -1143,6 +1196,14 @@ export class ImageResourceManager {
 				const slot = this.getDisplayResourceSlot(entry, variant)
 				if (!slot.resource) continue
 				const bytes = addDecodedBytes(slot.resource)
+				if (variant === "low" && !countedLowResources.has(slot.resource)) {
+					countedLowResources.add(slot.resource)
+					lowBytes += bytes
+				}
+				if (variant === "preview" && !countedPreviewResources.has(slot.resource)) {
+					countedPreviewResources.add(slot.resource)
+					previewBytes += bytes
+				}
 				candidates.push({
 					resourceIdentity,
 					entry,
@@ -1169,7 +1230,7 @@ export class ImageResourceManager {
 			})
 		})
 
-		return { totalBytes, fullBytes, candidates }
+		return { totalBytes, lowBytes, previewBytes, fullBytes, candidates }
 	}
 
 	private getDecodedBitmapCandidatePriority(variant: DecodedBitmapCandidateVariant): number {
@@ -1285,26 +1346,49 @@ export class ImageResourceManager {
 
 	private enforceDecodedBitmapBudget(options: DecodedBitmapBudgetOptions): void {
 		if (this.destroyed) return
+		const lowBudgetBytes = Math.max(
+			0,
+			options.lowBudgetBytes ?? this.decodedCacheBudgets.lowBytes,
+		)
+		const previewBudgetBytes = Math.max(
+			0,
+			options.previewBudgetBytes ?? this.decodedCacheBudgets.previewBytes,
+		)
 		const hardBudgetBytes = Math.max(
 			0,
-			options.hardBudgetBytes ?? DECODED_BITMAP_HARD_BUDGET_BYTES,
+			options.hardBudgetBytes ?? this.decodedCacheBudgets.totalHardBytes,
 		)
 		const softBudgetBytes = Math.max(
 			0,
-			Math.min(options.softBudgetBytes ?? DECODED_BITMAP_SOFT_BUDGET_BYTES, hardBudgetBytes),
+			Math.min(
+				options.softBudgetBytes ?? this.decodedCacheBudgets.totalSoftBytes,
+				hardBudgetBytes,
+			),
 		)
 		const fullBudgetBytes = Math.max(
 			0,
-			options.fullBudgetBytes ?? getDefaultFullDecodedBitmapBudgetBytes(),
+			options.fullBudgetBytes ?? this.decodedCacheBudgets.fullBytes,
 		)
 		this.ensureDecodedByteTrackingState()
-		if (this.decodedBytesTotal <= softBudgetBytes && this.fullDecodedBytes <= fullBudgetBytes) {
+		if (
+			this.decodedBytesTotal <= softBudgetBytes &&
+			this.lowDecodedBytes <= lowBudgetBytes &&
+			this.previewDecodedBytes <= previewBudgetBytes &&
+			this.fullDecodedBytes <= fullBudgetBytes
+		) {
 			return
 		}
 		const budgetState = this.collectDecodedBitmapBudgetCandidates()
 		const { candidates } = budgetState
-		let { totalBytes, fullBytes } = budgetState
-		if (totalBytes <= softBudgetBytes && fullBytes <= fullBudgetBytes) return
+		let { totalBytes, lowBytes, previewBytes, fullBytes } = budgetState
+		if (
+			totalBytes <= softBudgetBytes &&
+			lowBytes <= lowBudgetBytes &&
+			previewBytes <= previewBudgetBytes &&
+			fullBytes <= fullBudgetBytes
+		) {
+			return
+		}
 		const retentionIndex = this.getDecodedBitmapRetentionIndex()
 
 		const now = this.getNow()
@@ -1325,12 +1409,16 @@ export class ImageResourceManager {
 			candidate.variant === "low" && candidate.entry.lowDisplayLeaseCount > 0
 		const isRecentFullProtectedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
 			candidate.variant === "full" &&
-			now - candidate.lastAccessAt < FULL_DECODED_BITMAP_EVICTION_GRACE_MS
+			now - candidate.lastAccessAt < DECODED_BITMAP_EVICTION_GRACE_MS
+		const isRecentDisplayProtectedCandidate = (candidate: DecodedBitmapBudgetCandidate) =>
+			candidate.variant !== "full" &&
+			now - candidate.lastAccessAt < DECODED_BITMAP_EVICTION_GRACE_MS
 		const canEvictDuringFullOrSoftBudget = (candidate: DecodedBitmapBudgetCandidate) =>
 			!isExemptCandidate(candidate) &&
 			!isVisiblePinnedCandidate(candidate) &&
 			!isNearProtectedCandidate(candidate) &&
 			!isRecentFullProtectedCandidate(candidate) &&
+			!isRecentDisplayProtectedCandidate(candidate) &&
 			!isLowLeaseProtectedCandidate(candidate)
 		const canEvictDuringHardBudget = (candidate: DecodedBitmapBudgetCandidate) =>
 			!isExemptCandidate(candidate) &&
@@ -1351,9 +1439,35 @@ export class ImageResourceManager {
 			if (result.detachedBytes > 0 && candidate.variant === "full") {
 				fullBytes = Math.max(0, fullBytes - result.detachedBytes)
 			}
+			if (result.detachedBytes > 0 && candidate.variant === "low") {
+				lowBytes = Math.max(0, lowBytes - result.detachedBytes)
+			}
+			if (result.detachedBytes > 0 && candidate.variant === "preview") {
+				previewBytes = Math.max(0, previewBytes - result.detachedBytes)
+			}
 			if (result.freedBytes > 0) {
 				totalBytes = Math.max(0, totalBytes - result.freedBytes)
 			}
+		}
+
+		for (const candidate of this.sortDecodedBitmapCandidates(
+			candidates.filter(
+				(candidate) =>
+					candidate.variant === "low" && canEvictDuringFullOrSoftBudget(candidate),
+			),
+		)) {
+			if (lowBytes <= lowBudgetBytes && totalBytes <= softBudgetBytes) break
+			evictCandidate(candidate)
+		}
+
+		for (const candidate of this.sortDecodedBitmapCandidates(
+			candidates.filter(
+				(candidate) =>
+					candidate.variant === "preview" && canEvictDuringFullOrSoftBudget(candidate),
+			),
+		)) {
+			if (previewBytes <= previewBudgetBytes && totalBytes <= softBudgetBytes) break
+			evictCandidate(candidate)
 		}
 
 		for (const candidate of this.sortDecodedBitmapCandidates(
@@ -1366,12 +1480,9 @@ export class ImageResourceManager {
 			evictCandidate(candidate)
 		}
 
+		if (totalBytes <= softBudgetBytes) return
 		for (const candidate of this.sortDecodedBitmapCandidates(
-			candidates.filter(
-				(candidate) =>
-					(candidate.variant === "full" || candidate.variant === "preview") &&
-					canEvictDuringFullOrSoftBudget(candidate),
-			),
+			candidates.filter((candidate) => canEvictDuringFullOrSoftBudget(candidate)),
 		)) {
 			if (totalBytes <= softBudgetBytes) break
 			evictCandidate(candidate)
@@ -1513,8 +1624,8 @@ export class ImageResourceManager {
 		const slot = this.getDisplayResourceSlot(entry, variant)
 		const previousResource = slot.resource
 		if (previousResource !== resource) {
-			this.releaseDecodedResource(previousResource)
-			this.retainDecodedResource(resource)
+			this.releaseDecodedResource(previousResource, { variant })
+			this.retainDecodedResource(resource, { variant })
 		}
 		slot.resource = resource
 		slot.version = options?.version ?? null
@@ -1539,8 +1650,8 @@ export class ImageResourceManager {
 	): ImageResource | null {
 		const previousResource = entry.fullResource
 		if (previousResource !== resource) {
-			this.releaseDecodedResource(previousResource, { full: true })
-			this.retainDecodedResource(resource, { full: true })
+			this.releaseDecodedResource(previousResource, { variant: "full" })
+			this.retainDecodedResource(resource, { variant: "full" })
 		}
 		entry.fullResource = resource
 		entry.fullLastAccessAt = resource
@@ -1700,6 +1811,17 @@ export class ImageResourceManager {
 		const rendition = this.getPersistentImageProcessRendition()
 		const request = new SharedAbortableRequest<LoadedResource | null>(
 			async (sharedSignal) => {
+				let cacheOutcomeRecorded = false
+				const recordCacheMiss = () => {
+					if (cacheOutcomeRecorded) return
+					cacheOutcomeRecorded = true
+					this.diagnostics.increment("persistentLowMissCount")
+				}
+				const recordCacheHit = () => {
+					if (cacheOutcomeRecorded) return
+					cacheOutcomeRecorded = true
+					this.diagnostics.increment("persistentLowHitCount")
+				}
 				const record = await this.displayVariantPersistentCache.getLatest({
 					scope,
 					path: resourceIdentity,
@@ -1715,9 +1837,11 @@ export class ImageResourceManager {
 					this.getPersistentImageProcessRendition() !== rendition ||
 					!record
 				) {
+					recordCacheMiss()
 					return null
 				}
 				if (entry.resourceVersion && entry.resourceVersion !== record.resourceVersion) {
+					recordCacheMiss()
 					return null
 				}
 
@@ -1752,9 +1876,13 @@ export class ImageResourceManager {
 					(entry.resourceVersion && entry.resourceVersion !== record.resourceVersion)
 				) {
 					if (image) closeImageSource(image)
+					recordCacheMiss()
 					return null
 				}
-				if (!image) return null
+				if (!image) {
+					recordCacheMiss()
+					return null
+				}
 
 				entry.resourceVersion = record.resourceVersion
 				entry.sourceUpdatedAt = record.sourceUpdatedAt
@@ -1793,6 +1921,7 @@ export class ImageResourceManager {
 				this.persistentLowReadyKeys.add(
 					this.getPersistentLowIdentity(resourceIdentity, record.resourceVersion),
 				)
+				recordCacheHit()
 				this.enforceDecodedBitmapBudget({
 					reason: "persistent-display-cache-load",
 					exemptResource: resource,
@@ -1992,7 +2121,7 @@ export class ImageResourceManager {
 					imageSource: candidate,
 					imageInfo: resource.imageInfo,
 				},
-				{ signal },
+				{ signal, priority: "background" },
 			)
 		} catch {
 			candidate.close()
@@ -2050,7 +2179,7 @@ export class ImageResourceManager {
 							variant: "low",
 							maxEdge: this.getMaxEdgeForVariant("low"),
 						},
-						{ signal },
+						{ signal, priority: "background" },
 					)
 				},
 				{
@@ -2547,9 +2676,13 @@ export class ImageResourceManager {
 	 * @param path 路径（path）
 	 */
 	public loadResource(path: string, options?: ImageResourceLoadOptions): void {
+		const requestedVariant = options?.variant ?? DEFAULT_IMAGE_RESOURCE_VARIANT
 		this.loadImageInternal(path, {
 			...options,
-			restorePersistentLow: true,
+			// Full loads are requested for high-quality display/export targets. They should not
+			// start an unrelated IndexedDB low-cache lookup; preview/low display loads still use
+			// low as the fast bootstrap surface when available.
+			restorePersistentLow: requestedVariant !== "full",
 		})
 			.then((resource) => {
 				if (!resource) return
@@ -2622,6 +2755,27 @@ export class ImageResourceManager {
 	}
 
 	/**
+	 * Drop a superseded low decoded surface after the presentation scheduler has applied a
+	 * higher-quality surface. The compressed low representation remains recoverable from the
+	 * persistent cache, while low URL leases keep callers that still need the bitmap protected.
+	 */
+	public releaseSupersededLowIfUnused(path: string): void {
+		if (this.destroyed) return
+		const resourceIdentity = this.getResourceIdentity(path)
+		const entry = this.entries.get(resourceIdentity)
+		const lowResource = entry ? this.getDisplayResource(entry, "low") : null
+		if (!entry || !lowResource || entry.lowDisplayLeaseCount > 0) return
+
+		this.setDisplayResource(entry, "low", null, { closePrevious: false })
+		if (!this.isResourceStillReferenced(entry, lowResource)) {
+			this.closeResourceAfterConsumersSwap(lowResource, {
+				entry,
+				reason: "superseded-by-higher-quality-display",
+			})
+		}
+	}
+
+	/**
 	 * 读取指定 path 对应的资源条目（无缓存则 undefined）
 	 */
 	public getEntry(path: string): Readonly<ImageResourceEntry> | undefined {
@@ -2667,8 +2821,13 @@ export class ImageResourceManager {
 		return {
 			fullDecodedBytes: this.fullDecodedBytes,
 			fullLoadingCount,
-			fullBudgetBytes: getDefaultFullDecodedBitmapBudgetBytes(),
+			fullBudgetBytes: this.decodedCacheBudgets.fullBytes,
 		}
+	}
+
+	/** Visibility settles after movement or far-drain; only then should decoded LRU shrink. */
+	public enforceDecodedCacheBudget(reason = "manual"): void {
+		this.enforceDecodedBitmapBudget({ reason })
 	}
 
 	public getSnapshot(): ImageResourceSnapshot {
@@ -2748,6 +2907,7 @@ export class ImageResourceManager {
 			if (entry.fullLoadingPromise) fullLoadingCount += 1
 		})
 		const bodyCacheSnapshot = this.bodyCache.getSnapshot(this.entries.values())
+		const workerSnapshot = this.workerClient?.getSnapshot()
 		let decodedPinnedBytes = 0
 		pinnedDecodedResources.forEach((resource) => {
 			decodedPinnedBytes += this.getDecodedBytes(resource)
@@ -2764,8 +2924,11 @@ export class ImageResourceManager {
 			fullLoaded,
 			fullDecodedBytes,
 			decodedBytesTotal,
-			decodedBudgetSoftBytes: DECODED_BITMAP_SOFT_BUDGET_BYTES,
-			decodedBudgetHardBytes: DECODED_BITMAP_HARD_BUDGET_BYTES,
+			lowDecodedBudgetBytes: this.decodedCacheBudgets.lowBytes,
+			previewDecodedBudgetBytes: this.decodedCacheBudgets.previewBytes,
+			fullDecodedBudgetBytes: this.decodedCacheBudgets.fullBytes,
+			decodedBudgetSoftBytes: this.decodedCacheBudgets.totalSoftBytes,
+			decodedBudgetHardBytes: this.decodedCacheBudgets.totalHardBytes,
 			decodedLowLeaseCount,
 			decodedPinnedBytes,
 			decodedPinnedCount: pinnedDecodedResources.size,
@@ -2774,6 +2937,9 @@ export class ImageResourceManager {
 			...bodyCacheSnapshot,
 			activePreviewLoadPipelineCount: this.activePreviewLoadPipelineCount,
 			queuedPreviewLoadCount: this.previewLoadQueue.length,
+			workerActiveRequestCount: workerSnapshot?.activeRequestCount ?? 0,
+			workerActivePixelCost: workerSnapshot?.activePixelCost ?? 0,
+			workerQueuedRequestCount: workerSnapshot?.queuedRequestCount ?? 0,
 			activeDecodePixelCost: this.decodePixelBudgetGate.activePixelCost,
 			queuedDecodePermitCount: this.decodePixelBudgetGate.queuedCount,
 			loadingCount,
@@ -3461,7 +3627,7 @@ export class ImageResourceManager {
 		const decodePixelCost = await this.estimateImageDecodePixelCost(body, variant)
 		if (this.shouldDropAbortedLoad(options)) return null
 		const decodePriority = this.getDecodePriorityForVariant(variant, priority)
-		const releaseDecodePermit = await this.acquireImageDecodePermit(
+		const releaseDecodePermit = await this.decodePixelBudgetGate.acquire(
 			decodePixelCost,
 			decodePriority,
 			options?.signal,
@@ -3474,7 +3640,6 @@ export class ImageResourceManager {
 			releaseDecodePermit()
 			return null
 		}
-
 		const requestId = this.createWorkerRequestId("img")
 		const decodeIdentity = `${resourceIdentity}\u0000${
 			body.resourceGeneration ?? body.cacheKey
@@ -3502,7 +3667,7 @@ export class ImageResourceManager {
 							variant,
 							maxEdge: this.getMaxEdgeForVariant(variant),
 						},
-						{ signal },
+						{ signal, priority: decodePriority, pixelCost: decodePixelCost },
 					)
 				},
 				{
@@ -3887,7 +4052,6 @@ export class ImageResourceManager {
 			this.getDisplayLoadingPromise(entry, "preview")?.abort()
 			entry.fullLoadingPromise?.abort()
 		})
-		this.decodePixelBudgetGate.destroy()
 		if (this.cleanupTimer) {
 			clearTimeout(this.cleanupTimer)
 			this.cleanupTimer = null
@@ -3899,6 +4063,7 @@ export class ImageResourceManager {
 		this.persistentLowReadyKeys.clear()
 		this.persistentLowGenerationByPath.clear()
 		this.workerClient?.release(pendingError)
+		this.decodePixelBudgetGate.destroy()
 		this.workerClient = null
 		// 释放所有 ImageBitmap 资源
 		this.entries.forEach((entry) => {
