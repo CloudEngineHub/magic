@@ -78,6 +78,23 @@ function normalizeAskUserStatus(status: unknown) {
 	return ASK_USER_CARD_STATUS.pending
 }
 
+/** 保留标记 Other 由自由输入承接，不能成为候选、默认值或已选答案。 */
+function normalizeChoiceAnswer(
+	value: AskUserAnswerValue | undefined,
+	type: ParsedQuestion["type"],
+): AskUserAnswerValue | undefined {
+	if (type !== "select" && type !== "multi_select") return value
+	if (Array.isArray(value)) return value.filter((item) => item.trim().toLowerCase() !== "other")
+	if (typeof value !== "string") return value
+	if (type === "multi_select")
+		return value
+			.split(",")
+			.map((item) => item.trim())
+			.filter((item) => item.toLowerCase() !== "other")
+	return value.trim().toLowerCase() === "other" ? undefined : value
+}
+
+/** 复用主线正式题源及答案键，仅归一选择题的保留选项。 */
 function resolveDetailQuestions(
 	questions: readonly ParsedQuestion[],
 	detailQuestions: unknown,
@@ -92,11 +109,19 @@ function resolveDetailQuestions(
 			id: questions[index]?.id || question.sub_id,
 			type: question.interaction_type,
 			label: question.question,
-			options: question.options ?? [],
+			options: (question.options ?? []).filter(
+				(option) =>
+					(question.interaction_type !== "select" &&
+						question.interaction_type !== "multi_select") ||
+					option.trim().toLowerCase() !== "other",
+			),
 			placeholder: question.placeholder ?? undefined,
 			min: question.min_select ?? undefined,
 			max: question.max_select ?? undefined,
-			defaultValue: question.default_value ?? undefined,
+			defaultValue: normalizeChoiceAnswer(
+				question.default_value ?? undefined,
+				question.interaction_type,
+			),
 			isComplete: true,
 		}
 	})
@@ -122,7 +147,12 @@ function resolveSubmittedAnswers({
 	questions.forEach((question, index) => {
 		const detailQuestion = questionsFromDetail[index] as AskUserDetailQuestion | undefined
 		const subId = typeof detailQuestion?.sub_id === "string" ? detailQuestion.sub_id : ""
-		const answer = answerMap[question.id] ?? (subId ? answerMap[subId] : undefined)
+		const rawAnswer = answerMap[question.id] ?? (subId ? answerMap[subId] : undefined)
+		const answer =
+			typeof rawAnswer === "string" ||
+			(Array.isArray(rawAnswer) && rawAnswer.every((item) => typeof item === "string"))
+				? normalizeChoiceAnswer(rawAnswer, question.type)
+				: undefined
 		if (typeof answer === "string") {
 			mappedAnswers[question.id] = answer
 			hasAnswer = true
@@ -145,6 +175,11 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 
 	const tool = props.toolData
 	const detailData = tool?.detail?.data as Record<string, unknown> | undefined
+	// 错误文案由后端本地化，不能继续把原始参数渲染成可提交问卷。
+	const errorMessage =
+		tool?.detail?.type === "text" && typeof detailData?.message === "string"
+			? detailData.message
+			: ""
 
 	// 优先从 rawArguments 读取原始 arguments 字符串（流式阶段 detail 可能不存在），
 	// 兜底从 detail.data.arguments 读取（已完成的工具调用）。
@@ -480,7 +515,12 @@ function AskUserToolCall(props: AskUserToolCallProps) {
 						</Button>
 					</div>
 				</div>
-				{parsedQuestions.length > 0 && isOpen && (
+				{errorMessage && isOpen && (
+					<p className="p-2 text-sm text-muted-foreground" role="alert">
+						{errorMessage}
+					</p>
+				)}
+				{!errorMessage && parsedQuestions.length > 0 && isOpen && (
 					<div className="w-full duration-200 animate-in fade-in slide-in-from-top-1">
 						<AskUserForm
 							questions={parsedQuestions}

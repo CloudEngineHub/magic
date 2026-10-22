@@ -5,6 +5,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from agentlang.context.tool_context import ToolContext
+
 import pytest
 
 from app.core.context.execution_source import SuperMagicExecutionSource
@@ -218,15 +220,19 @@ async def test_canvas_compatibility(context):
 async def test_ask_user_uses_bound_snapshot_question_without_default_approval(context, monkeypatch):
     service = PreparedOperationConfirmation(context[0].agent)
     await service.prepare('prepare-call', 'skill_publish', {}, 'hash', 'Publish <Demo> to private?')
-    question_context = context[1]
-    question_context.tool_call_id = 'real-question'
+    question_context = ToolContext(tool_call_id='real-question', tool_name='ask_user')
+    monkeypatch.setattr(question_context, 'get_extension_typed', lambda *_: context[0].agent)
     question_context.arguments = {
         'prepared_tool_call_id': 'prepare-call',
         'questions': '<question type="confirm" default="是">Publish something else?</question>',
         'timeout': 60,
     }
     monkeypatch.setattr(AskUserTool, '_get_execution_source', staticmethod(lambda _: SuperMagicExecutionSource.HUMAN_CHAT))
-    await AskUserTool()._prepare(question_context)
+    ask_user = AskUserTool()
+    await ask_user._prepare(question_context)
+    first_id = question_context.arguments['parsed_questions'][0]['sub_id']
+    await ask_user._prepare(question_context)
+    assert question_context.arguments['parsed_questions'][0]['sub_id'] == first_id
     assert question_context.arguments['questions'] == '<question type="confirm">Publish &lt;Demo&gt; to private?</question>'
     assert question_context.arguments['expires_at'] == 0
     record = await service.read('prepare-call')
