@@ -22,16 +22,19 @@ export function getInboxResourceRoute(message: InboxMessage) {
 		message.type === "task_failed" ||
 		message.type.startsWith("task.") ||
 		(typeof payload.event_type === "string" && payload.event_type.startsWith("task."))
-	// Older project/task messages predate resource_type. Explicit types always take precedence.
-	const resourceType =
-		payload.resource_type ??
-		(isTask || message.type === "project_invitation" || message.type === "project_shared"
-			? "project"
-			: undefined)
+	const isShare =
+		message.type === "project_shared" ||
+		message.type === "file_shared" ||
+		[message.type, payload.event_type].some(
+			(value) =>
+				typeof value === "string" &&
+				(value.startsWith("share.project.") || value.startsWith("share.file.")),
+		)
+	const resourceType = payload.resource_type
+	const shareCode = routeValue(payload.share_code)
 	const id = routeValue(payload.resource_id)
 	const code = routeValue(payload.resource_code)
 	const projectId = routeValue(payload.project_id)
-	const projectResourceId = id ?? projectId
 	const topicId = routeValue(payload.topic_id)
 	const nameFields =
 		resourceType === "project" ? ["resource_name", "project_name"] : ["resource_name"]
@@ -43,36 +46,38 @@ export function getInboxResourceRoute(message: InboxMessage) {
 			),
 		})
 	let path: string | null | undefined
-	switch (resourceType) {
-		case "project":
-			// Claw codes are not project IDs; never fall back to a /super route for a Claw.
-			if (payload.project_mode === "magiclaw") {
-				if (code) path = route(RouteName.ClawPlayground, { code })
-			} else if (isTask) {
-				if (projectId && topicId)
-					path = route(RouteName.SuperWorkspaceProjectTopicState, { projectId, topicId })
-			} else if (projectResourceId) {
-				path = route(RouteName.SuperWorkspaceProjectState, { projectId: projectResourceId })
-			}
-			break
-		case "micro_app":
-			if (id) path = route(RouteName.MicroApp, { appId: id })
-			break
-		case "agent":
-			if (code) path = route(RouteName.CrewConversation, { code })
-			break
-		case "skill":
-			if (code) path = route(RouteName.SkillEdit, { code })
-			break
-		case "file":
-			// Public share routes have no cluster prefix and use the share resource ID.
-			if (id)
-				path = fillRoute(RoutePath.SuperMagicFilesShare, {
-					resourceId: encodeURIComponent(id),
-				})
-			break
-		default:
-			return undefined
+	// Share codes are access identifiers; database IDs and passwords must never replace them.
+	if (shareCode) {
+		path = fillRoute(RoutePath.SuperMagicFilesShare, {
+			resourceId: encodeURIComponent(shareCode),
+		})
+	} else if (!isShare) {
+		switch (resourceType) {
+			case "project":
+				// Claw codes are not project IDs; never fall back to a /super route for a Claw.
+				if (payload.project_mode === "magiclaw") {
+					if (code) path = route(RouteName.ClawPlayground, { code })
+				} else if (isTask) {
+					if (projectId && topicId)
+						path = route(RouteName.SuperWorkspaceProjectTopicState, {
+							projectId,
+							topicId,
+						})
+				} else if (id) {
+					path = route(RouteName.SuperWorkspaceProjectState, { projectId: id })
+				}
+				break
+			case "micro_app":
+				if (id) path = route(RouteName.MicroApp, { appId: id })
+				break
+			case "agent":
+				if (code) path = route(RouteName.CrewConversation, { code })
+				break
+			case "skill":
+				if (code) path = route(RouteName.SkillEdit, { code })
+				break
+			// Other file messages need their own routing contract, not a guessed share URL.
+		}
 	}
 	if (!path) {
 		logger.warn({

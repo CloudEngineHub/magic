@@ -114,9 +114,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 						if (
 							!resourceRoute ||
 							!part.field ||
-							!resourceRoute.nameFields.includes(part.field) ||
-							copy.payload[part.field] == null ||
-							copy.payload[part.field] === ""
+							!resourceRoute.nameFields.includes(part.field)
 						) {
 							return part.text
 						}
@@ -124,22 +122,14 @@ const InboxMessageCard = observer(function InboxMessageCard({
 							<Link
 								key={part.offset}
 								to={resourceRoute.path}
-								state={{ restoreSuperMagicState: true }}
+								target="_blank"
+								rel="noopener noreferrer"
 								className="rounded-sm text-blue-600 underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring dark:text-blue-400"
-								onClick={(event) => {
-									// Keep this panel open when the link opens in another tab/window.
-									if (
-										event.button === 0 &&
-										!event.metaKey &&
-										!event.ctrlKey &&
-										!event.shiftKey &&
-										!event.altKey
-									) {
-										inboxStore.close()
-									}
-								}}
 							>
-								{part.text}
+								{/* Resource identity controls navigation; a missing display name still needs a visible link. */}
+								{String(copy.payload[part.field] ?? "").trim()
+									? part.text
+									: t("inbox.openResource")}
 							</Link>
 						)
 					}) ?? copy.body}

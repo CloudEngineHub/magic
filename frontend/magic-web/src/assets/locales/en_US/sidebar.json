@@ -131,6 +131,7 @@
 			"task": "Task",
 			"team": "Whole team"
 		},
+		"openResource": "View resource",
 		"permission": {
 			"editor": "Can edit",
 			"manager": "Can manage",

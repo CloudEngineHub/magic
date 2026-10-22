@@ -131,6 +131,7 @@
 			"task": "任务",
 			"team": "全团队成员"
 		},
+		"openResource": "查看资源",
 		"permission": {
 			"editor": "可编辑",
 			"manager": "可管理",

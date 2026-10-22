@@ -15,7 +15,7 @@ const SkillMarketPage = lazy(() => import("@/pages/superMagic/pages/SkillMarket"
 /** Connector Market - 连接器市场 */
 const ConnectorMarketPage = lazy(() => import("@/pages/superMagic/pages/ConnectorMarket"))
 /** Crew Edit - 编辑 Crew */
-const CrewEditPage = lazy(() => import("@/pages/superMagic/pages/CrewEdit/index.desktop"))
+const CrewEditPage = lazy(() => import("@/pages/superMagic/pages/CrewEdit"))
 /** My Skills - 我的技能 */
 const MySkillsPage = lazy(() => import("@/pages/superMagic/pages/MySkillsPage"))
 /** Skill Edit - 编辑 Skill */
