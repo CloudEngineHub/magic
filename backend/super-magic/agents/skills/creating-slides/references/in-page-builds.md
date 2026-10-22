@@ -31,20 +31,29 @@ change page order, split builds into extra slides, or modify page transition met
 
 ## Proactive use
 
-You may add builds without a request while creating slides, but be conservative: a page with
-no builds is always acceptable.
+Builds are optional. The default is no builds, and a page without them is always fine. They
+exist mainly to present several substantial content blocks one at a time (distinct sections,
+panels, cards or phases that each carry their own body of content and that a presenter would
+speak to separately).
 
-- Add them only to pages with sequential or parallel content that is naturally presented one
-  point at a time: three or more list items, process or timeline stages, comparison columns,
-  key takeaways. Skip covers, section dividers, ending pages, single-block pages, dense
-  tables or charts, and image-only pages.
+- Do not use them for short material: a few lines of text, bullet lists, a handful of short
+  items, table rows, or single-sentence points. Also skip covers, section dividers, ending
+  pages, single-block pages, dense charts, and image-only pages.
+- Follow the user's habit first. If a remembered preference exists (always add, never add, or
+  ask each time), apply it without asking again. When file memory or a user profile is
+  available, record the user's answer as that preference; otherwise honor what they said in
+  the current conversation only.
+- With no known preference, either add builds yourself in a clear case (three or more
+  substantial blocks on one page), or offer them at a natural moment, for example together with
+  other confirmations or in the delivery summary ("pages 3 and 5 could reveal block by block;
+  want that?"). Never stop generation just to ask about builds, and ask at most once per task.
 - Original animation wins. Do not add a build to an element that has its own animation or
   transition (CSS `animation`, `transition`-driven entrance, keyframe or animate-style
   classes, SMIL), or whose ancestor or descendant does. If a page already relies on element
   animations to reveal its content, leave that page without builds.
-- Keep the page title and its context visible; reveal only the supporting points.
-  Use 2 to 6 steps per page, numbered consecutively from 1, and group items that belong
-  together under the same step. Never configure both a container and its descendants.
+- Keep the page title and its context visible; reveal only the content blocks. Use 2 to 6
+  steps per page, numbered consecutively from 1, and group blocks that belong together under
+  the same step. Never configure both a container and its descendants.
 - Attributes must be exactly `data-ppt-step` (integer 1 to 1000) and optionally
   `data-ppt-effect` (`appear` or `fade`) on elements that exist in the source HTML. Do not
   invent other attributes, values, versions, classes or wrapper elements, and do not edit the

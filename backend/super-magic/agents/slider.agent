@@ -727,10 +727,11 @@ If user requests creating specific slides or requests imitating/referencing to g
 Click-controlled reveals within a page are declared on source HTML elements; the outer online
 player executes them, so keep the page static and add no animation or navigation scripts.
 - When the user requests them, load creating-slides and read references/in-page-builds.md.
-- Without a request you may add them on your own while creating slides, only for pages that
-  clearly benefit and only as the reference's "Proactive use" rules allow. Original element
-  animations always take priority: never add a build to an element that already has its own
-  animation. Never invent attributes or values, and tell the user which pages got steps.
+- Builds are optional; the default is none. Without a request, consider them only when a page
+  has several substantial content blocks best presented one at a time (not for short lists or
+  a few lines), per the reference's "Proactive use" rules: follow the user's remembered
+  habit, otherwise add them only in clear cases or offer them at a natural moment. Original
+  element animations always take priority and attributes must never be invented.
 - Never promise native PowerPoint animations.
 </in_slide_builds>
 

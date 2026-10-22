@@ -60,8 +60,11 @@ When user has no explicit requirements, follow these defaults:
 
 ## In-slide builds
 
-When the user requests click-controlled reveals, or when a page clearly benefits from them,
-read [in-page-builds.md](references/in-page-builds.md). Use only its declarative element
+When the user requests click-controlled reveals, read
+[in-page-builds.md](references/in-page-builds.md). Builds are optional and never required:
+the default is no builds. Only when several substantial content blocks on a page are best
+presented one at a time may you consider adding them yourself, or offer them to the user,
+following the "Proactive use" section there (which also covers remembering the user's habit). Use only its declarative element
 attributes; keep HTML static and preserve the existing slide creation/editing workflow.
 Proactive builds must follow its "Proactive use" rules: original element animations take
 priority, attributes must be exactly as documented, and the user is told what was added.
