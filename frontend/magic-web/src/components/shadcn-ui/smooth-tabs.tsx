@@ -70,8 +70,14 @@ function SmoothTabsComponent<T = string>({
 		if (activeTab && containerRef.current) {
 			const containerRect = containerRef.current.getBoundingClientRect()
 			const tabRect = activeTab.getBoundingClientRect()
-			const left = tabRect.left - containerRect.left
-			const width = tabRect.width
+			// Rects include ancestor transforms: inside an opening dialog (zoom animation) they are
+			// scaled down, and the ResizeObserver never fires again once the transform settles, so
+			// the indicator stayed short. Divide by the container's current scale to get layout px.
+			const layoutWidth = containerRef.current.offsetWidth
+			const scale =
+				layoutWidth > 0 && containerRect.width > 0 ? containerRect.width / layoutWidth : 1
+			const left = (tabRect.left - containerRect.left) / scale
+			const width = tabRect.width / scale
 
 			setIndicatorStyle((prev) => {
 				const shouldAnimate = prev.initialized
@@ -206,12 +212,12 @@ function SmoothTabsComponent<T = string>({
 				</button>
 			)
 		},
-			[
-				value,
-				hoveredIndex,
-				variant,
-				buttonClassName,
-				enableHoverBackground,
+		[
+			value,
+			hoveredIndex,
+			variant,
+			buttonClassName,
+			enableHoverBackground,
 			handleTabClick,
 			handleMouseEnter,
 			handleMouseLeave,

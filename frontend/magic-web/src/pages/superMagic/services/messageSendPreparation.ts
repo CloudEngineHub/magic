@@ -12,6 +12,7 @@ import type {
 	SendRuntimeContext,
 } from "@/pages/superMagic/services/messageSendFlowService"
 import type { TopicStore } from "@/pages/superMagic/stores/core/topic"
+import type { MentionListItem } from "@/components/business/MentionPanel/tiptap-plugin/types"
 import { projectStore, topicStore, workspaceStore } from "@/pages/superMagic/stores/core"
 import {
 	DEFAULT_TOPIC_ID,
@@ -57,6 +58,14 @@ export interface MessageSendPreparationContext {
 	) => void | Promise<void>
 	createProject?: (params: CreateProjectParams) => Promise<CreatedProject | null>
 	createTopic?: (params: CreateTopicParams) => Promise<Topic | null>
+	/**
+	 * Mentions the host page binds to every message once the project exists.
+	 * Example: the AI canvas page returns its canvas folder so the design agent always
+	 * receives the exact canvas path instead of initializing another canvas.
+	 */
+	getImplicitMentionItems?: (
+		project: ProjectListItem,
+	) => MentionListItem[] | Promise<MentionListItem[]>
 }
 
 interface ResolvedPreparationContext extends SendRuntimeContext {
@@ -85,6 +94,57 @@ export interface PreparedPanelSendResult {
 export interface EnsuredMessageProjectResult {
 	currentProject: ProjectListItem
 	currentTopic: Topic | null
+}
+
+function getMentionIdentity(item: MentionListItem): string {
+	const data = (item.attrs.data ?? {}) as Record<string, unknown>
+	const path = data.directory_path ?? data.file_path ?? data.file_id ?? data.directory_id ?? ""
+	// Compare paths without edge slashes: "/Canvas/" and "Canvas" are the same folder.
+	return `${item.attrs.type}:${String(path).replace(/^\/+|\/+$/g, "")}`
+}
+
+/**
+ * Prepends host-required mentions that the user has not referenced yet.
+ *
+ * | Message already contains        | Result                                   |
+ * | nothing                         | `@canvas` + " " + original first line    |
+ * | the same mention (same path)    | unchanged                                |
+ *
+ * The mention node is inserted at the start of the first paragraph (or a new one) so history
+ * renders it like a user-inserted reference and the model sees it before the prompt text.
+ */
+export function prependImplicitMentions(
+	content: JSONContent,
+	mentionItems: MentionListItem[],
+	implicitMentionItems: MentionListItem[],
+): { content: JSONContent; mentionItems: MentionListItem[] } {
+	const existing = new Set(mentionItems.map(getMentionIdentity))
+	const missing = implicitMentionItems.filter((item) => {
+		const identity = getMentionIdentity(item)
+		if (existing.has(identity)) return false
+		existing.add(identity)
+		return true
+	})
+	if (missing.length === 0) return { content, mentionItems }
+
+	const mentionNodes: JSONContent[] = missing.flatMap((item) => [
+		{ type: "mention", attrs: item.attrs },
+		{ type: "text", text: " " },
+	])
+	const blocks = content.content ?? []
+	const [firstBlock, ...restBlocks] = blocks
+	const nextBlocks =
+		firstBlock?.type === "paragraph"
+			? [
+					{ ...firstBlock, content: [...mentionNodes, ...(firstBlock.content ?? [])] },
+					...restBlocks,
+				]
+			: [{ type: "paragraph", content: mentionNodes }, ...blocks]
+
+	return {
+		content: { ...content, content: nextBlocks },
+		mentionItems: [...missing, ...mentionItems],
+	}
 }
 
 export async function processMessageMentions(
@@ -275,6 +335,17 @@ export async function preparePanelSend({
 	}
 
 	resolvedContext.setSelectedTopic(currentTopic)
+
+	if (context?.getImplicitMentionItems) {
+		const implicitMentionItems = await context.getImplicitMentionItems(currentProject)
+		const withImplicit = prependImplicitMentions(
+			nextContent,
+			nextMentionItems,
+			implicitMentionItems,
+		)
+		nextContent = withImplicit.content
+		nextMentionItems = withImplicit.mentionItems
+	}
 
 	const result = await mentionItemsProcessor.processMentionItems(
 		nextContent,

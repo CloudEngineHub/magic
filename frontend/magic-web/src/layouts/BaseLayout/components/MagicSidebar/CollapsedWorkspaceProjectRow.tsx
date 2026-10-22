@@ -14,9 +14,14 @@ import { canManageProject } from "@/pages/superMagic/utils/permission"
 import type { HandleRenameProjectParams } from "@/pages/superMagic/hooks/useProjects"
 import { getWorkspaceProjectRouteUrl } from "@/pages/superMagic/utils/route"
 import NavigationStatusIcon from "@/pages/superMagic/components/NavigationStatusIcon"
-import ProjectTypeTag from "@/pages/superMagic/components/ProjectTypeTag"
+import ProjectTypeTag, {
+	RECENT_PROJECT_LINE_MARK_CLASS_NAME,
+	RECENT_PROJECT_MARK_CLASS_NAME,
+	RECENT_PROJECT_MARK_SIZE,
+} from "@/pages/superMagic/components/ProjectTypeTag"
 import { canDragSidebarProject } from "./projectDndUtils"
 import { Button } from "@/components/shadcn-ui/button"
+import { isAiCanvasProject } from "@/pages/superMagic/utils/isAiCanvasProject"
 
 type ProjectRowActionHandler = (project: ProjectListItem) => void | Promise<void>
 
@@ -113,6 +118,14 @@ function CollapsedWorkspaceProjectRow({
 	const showCollaborationTag =
 		isWorkspaceShortcutProject(project) || isCollaborationProject(project)
 	const hideNameTooltip = tooltipDisabled || isMenuOpen || isEditing || isRenamePending
+	// Recent rows (the only ones with type marks) use one 14px size for every mark; the collapsed
+	// workspace menu keeps its 12px marks.
+	const markClassName = showProjectTypeTag
+		? RECENT_PROJECT_MARK_CLASS_NAME
+		: "h-3 w-3 border-0 bg-transparent p-0"
+	const lineMarkClassName = showProjectTypeTag
+		? RECENT_PROJECT_LINE_MARK_CLASS_NAME
+		: "h-3 w-3 border-0 bg-transparent p-0"
 	const projectName = project.project_name || t("project.unnamedProject")
 
 	function shouldHandleAnchorClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -140,7 +153,8 @@ function CollapsedWorkspaceProjectRow({
 		},
 		onCopyCollaborationLink,
 		onTransferProject,
-		onMoveProject,
+		// AI canvas projects must stay in their dedicated workspace, so they offer no move action.
+		onMoveProject: isAiCanvasProject(project) ? undefined : onMoveProject,
 		onAddCollaborators,
 		onCancelWorkspaceShortcut: (projectId: string, workspaceId?: string) => {
 			void onCancelWorkspaceShortcut?.({
@@ -273,17 +287,17 @@ function CollapsedWorkspaceProjectRow({
 							<ProjectTypeTag
 								projectMode={project.project_mode}
 								tooltipDisabled={hideNameTooltip}
+								size={RECENT_PROJECT_MARK_SIZE}
+								uniformStroke
 							/>
 						)}
-						{project.is_pinned && (
-							<PinnedTag className="h-3 w-3 border-0 bg-transparent p-0" />
-						)}
+						{project.is_pinned && <PinnedTag className={markClassName} />}
 						{showCollaborationTag && (
 							<CollaborationProjectTag
 								visible={showCollaborationTag}
 								project={project}
 								showText={false}
-								className="h-3 w-3 border-0 bg-transparent p-0"
+								className={lineMarkClassName}
 							/>
 						)}
 					</div>

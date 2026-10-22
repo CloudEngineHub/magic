@@ -23,6 +23,17 @@ describe("getProjectDetailTabs", () => {
 		])
 	})
 
+	it("shows only topics and canvas for AI canvas projects", () => {
+		expect(getProjectDetailTabs(translate, false, true).map((tab) => tab.value)).toEqual([
+			"topics",
+			"canvas",
+		])
+		expect(getProjectDetailTabs(translate, true, true).map((tab) => tab.value)).toEqual([
+			"topics",
+			"canvas",
+		])
+	})
+
 	it("keeps the scheduled-tasks panel mounted after the tab has been opened", () => {
 		expect(shouldKeepScheduledTasksPanelMounted("topics", false)).toBe(false)
 		expect(shouldKeepScheduledTasksPanelMounted("scheduledTasks", false)).toBe(true)

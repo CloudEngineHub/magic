@@ -38,6 +38,7 @@ import { resolveComposerMinInputHeight } from "@/pages/superMagic/components/Con
 import { isSelfMediaComposerContext } from "@/pages/superMagic/components/MainInputContainer/utils/selfMediaComposerConfig"
 import { isVideoProductionContext } from "@/pages/superMagic/components/MainInputContainer/utils/videoProductionConfig"
 import { resolveDefaultAgentSelection } from "@/services/superMagic/DefaultAgentSelectionService"
+import type { ProjectPageInputContainerProps } from "@/pages/superMagic/components/ProjectPageInputContainer/types"
 
 const ProjectPageInputContainer = lazy(
 	() => import("../../../components/ProjectPageInputContainer"),
@@ -138,6 +139,15 @@ interface TopicMessagePanelProps {
 	allowRecordingMode?: boolean
 	/** Chat detail composers use the featured default employee and hide employee switching. */
 	isChatDetail?: boolean
+	/**
+	 * Locks the composer to one built-in topic mode and hides mode switching.
+	 * AI canvas projects pass Design so every topic talks to the design digital employee.
+	 */
+	lockedTopicMode?: TopicMode
+	/** Mentions bound to every sent message, e.g. the AI canvas folder. */
+	getImplicitMentionItems?: ProjectPageInputContainerProps["getImplicitMentionItems"]
+	/** Overrides the mode placeholder, e.g. the AI canvas home's prompt hint. */
+	placeholder?: string
 }
 
 function TopicMessagePanel({
@@ -174,6 +184,9 @@ function TopicMessagePanel({
 	mentionPanelStore,
 	allowRecordingMode,
 	isChatDetail = false,
+	lockedTopicMode,
+	getImplicitMentionItems,
+	placeholder,
 }: TopicMessagePanelProps) {
 	const scopedTopicStore = topicStoreProp ?? topicStore
 	const scopedProjectFilesStore = projectFilesStoreProp ?? projectFilesStore
@@ -193,9 +206,13 @@ function TopicMessagePanel({
 	const defaultAgentSelection = isChatDetail ? resolveDefaultAgentSelection() : undefined
 	// Chat details intentionally ignore the historical topic employee: their composer is locked to
 	// the currently featured default employee, while task details retain their topic configuration.
-	const composerTopicMode = defaultAgentSelection?.topicPattern ?? topicMode
-	const composerAgentCode =
-		defaultAgentSelection?.agentCode ?? (!isChatDetail ? selectedTopic?.agent_code : undefined)
+	const composerTopicMode = lockedTopicMode ?? defaultAgentSelection?.topicPattern ?? topicMode
+	// A locked built-in mode needs no employee code; stale topic agent codes must not override it.
+	const isComposerModeLocked = isChatDetail || Boolean(lockedTopicMode)
+	const composerAgentCode = lockedTopicMode
+		? undefined
+		: (defaultAgentSelection?.agentCode ??
+			(!isChatDetail ? selectedTopic?.agent_code : undefined))
 
 	const sharedTopicModelStore = useMemo(() => createSuperMagicTopicModelStore(), [])
 
@@ -395,14 +412,16 @@ function TopicMessagePanel({
 			mentionPanelStore={mentionPanelStore}
 			topicStore={scopedTopicStore}
 			allowRecordingMode={allowRecordingMode}
-			agentCode={isChatDetail ? (composerAgentCode ?? null) : composerAgentCode}
+			agentCode={isComposerModeLocked ? (composerAgentCode ?? null) : composerAgentCode}
 			isShowLoadingInit={isShowLoadingInit}
 			topicModeLogic={{
 				topicMode: composerTopicMode,
-				setTopicMode: isChatDetail ? noopTopicModeChange : setTopicMode,
-				recoverTopicMode: isChatDetail ? noopTopicModeChange : recoverTopicMode,
+				setTopicMode: isComposerModeLocked ? noopTopicModeChange : setTopicMode,
+				recoverTopicMode: isComposerModeLocked ? noopTopicModeChange : recoverTopicMode,
 			}}
-			showModeToggle={isChatDetail ? false : undefined}
+			showModeToggle={isComposerModeLocked ? false : undefined}
+			getImplicitMentionItems={getImplicitMentionItems}
+			placeholder={placeholder}
 			size={detailPanelVisible ? "small" : "default"}
 		/>
 	)

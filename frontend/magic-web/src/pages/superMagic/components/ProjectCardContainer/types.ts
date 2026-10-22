@@ -13,4 +13,6 @@ export interface ProjectCardContainerProps {
 	isPanelVisible?: boolean
 	/** Custom className */
 	className?: string
+	/** Card layout; see ProjectCard `variant`. */
+	variant?: "default" | "compact"
 }

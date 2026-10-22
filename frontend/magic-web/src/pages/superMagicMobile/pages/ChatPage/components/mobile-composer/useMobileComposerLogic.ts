@@ -511,6 +511,8 @@ export default function useMobileComposerLogic({
 					createTopic: editorContext.createTopic,
 					createProject: editorContext.createProject,
 					refreshProjectAfterTopicRename: editorContext.refreshProjectAfterTopicRename,
+					// Mentions sent without being typed, e.g. the AI canvas a send draws on.
+					getImplicitMentionItems: editorContext.getImplicitMentionItems,
 				},
 				tabPattern: effectiveTopicMode,
 				editorRef: tiptapEditorRef.current,

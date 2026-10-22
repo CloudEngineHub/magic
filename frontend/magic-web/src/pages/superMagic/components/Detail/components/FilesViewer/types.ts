@@ -259,6 +259,15 @@ export interface FilesViewerProps extends BaseComponentProps {
 	showFileHeader?: boolean
 	/** When true, hides the file tab bar for single-file immersive read-only views */
 	hideTabBar?: boolean
+	/**
+	 * Frame of the floating layer that keeps cached previews (e.g. the canvas) mounted. The layer
+	 * lives in a body portal positioned over the panel, so the panel's own rounded clip and outline
+	 * cannot reach it; hosts that frame their panel pass the same radius and outline color here so
+	 * the layer draws the frame itself. Defaults to a square, unframed layer.
+	 */
+	previewSurfaceFrame?: { radius: string; outlineColor?: string; className?: string }
+	/** Host UI floated over the preview's top-left corner; hidden in fullscreen. */
+	previewSurfaceOverlay?: ReactNode
 
 	// Playback tab related props
 	currentTopicStatus?: TaskStatus

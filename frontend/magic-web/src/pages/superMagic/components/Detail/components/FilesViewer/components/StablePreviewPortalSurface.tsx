@@ -3,6 +3,9 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { APP_MODAL_Z_INDEX, HTML_EDITOR_Z_INDEX } from "../../../contents/HTML/constants/z-index"
 import { OverlayZIndexProvider, useCurrentOverlayZIndex } from "@/utils/overlayZIndex"
+import { cn } from "@/utils/cn"
+
+const HOST_BASE_CLASS_NAME = "fixed overflow-hidden bg-background"
 
 const PPT_VIEWPORT_SELECTOR =
 	'[data-presenter-console="true"], [data-mobile-fullscreen="landscape"]'
@@ -14,6 +17,22 @@ interface StablePreviewPortalSurfaceProps {
 	enabled: boolean
 	isFullscreen: boolean
 	isPpt?: boolean
+	/**
+	 * CSS color of a 1px frame drawn by the surface itself, as the host's own border. The surface
+	 * floats above its anchor, so an outline on the anchor's container sits underneath the
+	 * preview. As a border it is painted by the host below everything inside it: content stays
+	 * within it, while tooltips and menus that escape the host (fixed-positioned) pass over it.
+	 * Omitted in viewport mode.
+	 */
+	outlineColor?: string
+	/** Extra host classes, e.g. scoped overrides for the hosted preview's own UI. */
+	className?: string
+	/**
+	 * Host UI floated over the preview (e.g. the AI canvas project card and playback panel). It
+	 * has to live in this surface: anything in the panel underneath is covered by the floating
+	 * layer. Each overlay child positions itself inside the surface.
+	 */
+	overlay?: ReactNode
 	visible: boolean
 }
 
@@ -46,6 +65,9 @@ export default function StablePreviewPortalSurface({
 	enabled,
 	isFullscreen,
 	isPpt = false,
+	outlineColor,
+	className,
+	overlay,
 	visible,
 }: StablePreviewPortalSurfaceProps) {
 	const parentOverlayZIndex = useCurrentOverlayZIndex()
@@ -53,7 +75,7 @@ export default function StablePreviewPortalSurface({
 	const hostRef = useRef<HTMLDivElement | null>(null)
 	if (!hostRef.current && typeof document !== "undefined") {
 		const host = document.createElement("div")
-		host.className = "fixed overflow-hidden bg-background"
+		host.className = HOST_BASE_CLASS_NAME
 		host.dataset.filesViewerPreviewPortal = "true"
 		if (isPpt) host.dataset.filesViewerPptPortal = "true"
 		host.style.display = "none"
@@ -62,6 +84,11 @@ export default function StablePreviewPortalSurface({
 		hostRef.current = host
 	}
 	const host = hostRef.current
+
+	useLayoutEffect(() => {
+		if (!host) return
+		host.className = cn(HOST_BASE_CLASS_NAME, className)
+	}, [className, host])
 	const lifecycleRef = useRef({ generation: 0 })
 	const layoutSignatureRef = useRef("")
 	const pptViewportRef = useRef(false)
@@ -101,8 +128,8 @@ export default function StablePreviewPortalSurface({
 		)
 		const layoutSignature =
 			isVisible && rect
-				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${isPpt}|${usesViewport}|${window.innerWidth}|${window.innerHeight}`
-				: `hidden|${isFullscreen}|${borderRadius}|${isPpt}`
+				? `${rect.top}|${rect.left}|${rect.width}|${rect.height}|${isFullscreen}|${borderRadius}|${outlineColor}|${isPpt}|${usesViewport}|${window.innerWidth}|${window.innerHeight}`
+				: `hidden|${isFullscreen}|${borderRadius}|${outlineColor}|${isPpt}`
 		if (layoutSignatureRef.current === layoutSignature) return
 		layoutSignatureRef.current = layoutSignature
 
@@ -110,6 +137,8 @@ export default function StablePreviewPortalSurface({
 		host.style.display = isVisible ? "block" : "none"
 		host.style.visibility = isVisible ? "visible" : "hidden"
 		host.style.borderRadius = usesViewport ? "0px" : borderRadius
+		host.style.boxSizing = "border-box"
+		host.style.border = !usesViewport && outlineColor ? `1px solid ${outlineColor}` : ""
 		if (isPpt) host.dataset.filesViewerPptPortal = "true"
 		else delete host.dataset.filesViewerPptPortal
 		// The fullscreen viewer shell has the base fullscreen z-index and a white background.
@@ -139,7 +168,7 @@ export default function StablePreviewPortalSurface({
 		host.style.left = usesViewport ? "0px" : `${rect.left}px`
 		host.style.width = `${usesViewport ? window.innerWidth : rect.width}px`
 		host.style.height = `${usesViewport ? window.innerHeight : rect.height}px`
-	}, [anchor, borderRadius, host, isFullscreen, isPpt, visible])
+	}, [anchor, borderRadius, host, isFullscreen, isPpt, outlineColor, visible])
 
 	useLayoutEffect(() => {
 		if (!host || !enabled) return
@@ -227,6 +256,12 @@ export default function StablePreviewPortalSurface({
 					}
 				>
 					{children}
+					{overlay ? (
+						// Click-through wrapper; only the overlay's own content takes the pointer.
+						<div className="pointer-events-none absolute inset-0 z-10 [&>*]:pointer-events-auto">
+							{overlay}
+						</div>
+					) : null}
 				</OverlayZIndexProvider>,
 				host,
 				"files-viewer-stable-preview",

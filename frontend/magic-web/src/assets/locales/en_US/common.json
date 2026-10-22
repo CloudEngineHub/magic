@@ -84,6 +84,7 @@
 		"adminAIDrawing": "Admin Console/AI Drawing Management",
 		"adminAIModel": "Admin Console/Large Model Management",
 		"agentList": "AI Assistant Management",
+		"aiCanvas": "AI Canvas",
 		"application": "Applications",
 		"audioRecordingDetail": "Recording detail",
 		"audioRecordings": "Recordings & summaries",

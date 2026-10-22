@@ -1,6 +1,6 @@
 import type { FileHelpContext } from "@/pages/superMagic/components/TopicFilesButton/utils/magic-system-folder"
 import type { AttachmentLoadState } from "@/stores/projectFiles/types"
-import { memo, useRef, useImperativeHandle, forwardRef } from "react"
+import { memo, useRef, useImperativeHandle, forwardRef, type ReactNode } from "react"
 import FilesViewer, { type FilesViewerRef } from "./components/FilesViewer"
 import type { ActiveDetailTabType, FileSidebarControl } from "./components/FilesViewer/types"
 import { useDetailActions } from "./hooks/useDetailActions"
@@ -72,6 +72,10 @@ interface DetailProps {
 	showFileHeader?: boolean
 	/** When true, hides FilesViewer tab bar for immersive read-only preview */
 	hideTabBar?: boolean
+	/** Frame (radius, outline) of the floating preview layer; see FilesViewer `previewSurfaceFrame`. */
+	previewSurfaceFrame?: { radius: string; outlineColor?: string; className?: string }
+	/** Host UI floated over the preview's top-left corner; see FilesViewer `previewSurfaceOverlay`. */
+	previewSurfaceOverlay?: ReactNode
 	/** When true, treats the file viewer as fullscreen without requiring URL params */
 	forceFullscreenMode?: boolean
 	/** Keeps pure share fullscreen content in document flow for whole-page screenshots. */
@@ -145,6 +149,8 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 		nonClosableFileIds,
 		showFileHeader,
 		hideTabBar,
+		previewSurfaceFrame,
+		previewSurfaceOverlay,
 		forceFullscreenMode,
 		documentFlowFullscreen,
 		isFullscreen = false,
@@ -268,6 +274,8 @@ const Detail = forwardRef<DetailRef, DetailProps>((props, ref) => {
 				showFileFooter={showFileFooterProp ?? (!isShareRoute && isMobile)}
 				showFileHeader={showFileHeader}
 				hideTabBar={hideTabBar}
+				previewSurfaceFrame={previewSurfaceFrame}
+				previewSurfaceOverlay={previewSurfaceOverlay}
 				forceFullscreenMode={forceFullscreenMode}
 				documentFlowFullscreen={documentFlowFullscreen}
 				currentTopicStatus={currentTopicStatus}

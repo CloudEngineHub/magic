@@ -1,6 +1,6 @@
 import type { Tab } from "@/components/shadcn-ui/smooth-tabs"
 
-export type ProjectDetailTab = "topics" | "topicFiles" | "scheduledTasks"
+export type ProjectDetailTab = "topics" | "topicFiles" | "scheduledTasks" | "canvas"
 
 /**
  * Keeps the scheduled-tasks panel mounted after the first visit so tab switches
@@ -13,11 +13,29 @@ export function shouldKeepScheduledTasksPanelMounted(
 	return activeTab === "scheduledTasks" || hasOpenedScheduledTasks
 }
 
-/** Builds the project-detail tabs while applying the PC read-only visibility rule. */
+/**
+ * Builds the project-detail tabs while applying the PC read-only visibility rule. AI canvas
+ * projects show only their topics and their single canvas.
+ */
 export function getProjectDetailTabs(
 	t: (key: string) => string,
 	isReadonly: boolean,
+	isAiCanvas = false,
 ): Tab<ProjectDetailTab>[] {
+	if (isAiCanvas) {
+		return [
+			{
+				value: "topics",
+				label: t("projectDetail.tabTopics"),
+				testId: "project-detail-topics-tab",
+			},
+			{
+				value: "canvas",
+				label: t("projectDetail.tabCanvas"),
+				testId: "project-detail-canvas-tab",
+			},
+		]
+	}
 	return [
 		{
 			value: "topics",

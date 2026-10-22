@@ -59,7 +59,8 @@ function TopicSidebarSkeleton({ compactHeader }: { compactHeader: boolean }) {
 	)
 }
 
-function TopicConversationSkeleton() {
+/** Conversation column placeholder; the AI canvas project skeleton reuses it beside its canvas. */
+export function TopicConversationSkeleton() {
 	return (
 		<div
 			className="relative flex h-full min-w-0 flex-col justify-center overflow-hidden rounded-lg"

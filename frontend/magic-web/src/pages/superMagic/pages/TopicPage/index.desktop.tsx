@@ -8,6 +8,8 @@ import { useDeepCompareEffect, useDebounceFn, useUpdateEffect, useMemoizedFn } f
 import { isEmpty } from "lodash-es"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Detail, { type DetailRef } from "../../components/Detail"
+import AiCanvasProjectHeader from "./components/AiCanvasProjectHeader"
+import AiCanvasPlaybackPanel from "./components/AiCanvasPlaybackPanel"
 import { SendMessageOptions } from "../../components/MessagePanel/types"
 import { shouldCheckAttachmentsOnTaskStatus } from "../../services/topicStatusSyncService"
 import useStyles from "../Workspace/style"
@@ -60,6 +62,10 @@ import {
 } from "./hooks/useTopicHistoryLayoutState"
 import { useMessageHeaderTopicActions } from "./hooks/useMessageHeaderTopicActions"
 import { useAICardDeepLinkOpen } from "./hooks/useAICardDeepLinkOpen"
+import { useAiCanvasDocument } from "./hooks/useAiCanvasDocument"
+import { isAiCanvasProject } from "../../utils/isAiCanvasProject"
+import AiCanvasDocumentStatus from "./components/AiCanvasDocumentStatus"
+import { TopicMode } from "../Workspace/TopicMode"
 import type { AttachmentItem } from "../../components/TopicFilesButton/hooks"
 import { TaskStatus } from "../Workspace/types"
 import { resolveMessageSendContext } from "../../services/messageSendPreparation"
@@ -164,6 +170,8 @@ interface TopicPageDesktopProps {
 function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	const isSingleTopicChat = pageVariant === "singleTopicChat"
 	const { t } = useTranslation("super")
+	// AI canvas composers share the AI canvas home's prompt hint.
+	const { t: tAiCanvas } = useTranslation("aiCanvas")
 	// Get workspace and project state from stores
 	const selectedWorkspace = workspaceStore.selectedWorkspace
 	const selectedProject = projectStore.selectedProject
@@ -195,6 +203,12 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	/** ======================== States ======================== */
 	const [autoDetail, setAutoDetail] = useState<any>()
 	const [userSelectDetail, setUserSelectDetail] = useState<any>()
+	// Floating tool playback of an AI canvas project; one at a time, the latest replaces it.
+	const [canvasPlaybackDetail, setCanvasPlaybackDetail] = useState<unknown>(null)
+	const closeCanvasPlayback = useMemoizedFn(() => setCanvasPlaybackDetail(null))
+	useEffect(() => {
+		setCanvasPlaybackDetail(null)
+	}, [selectedTopic?.id])
 	const [isShowLoadingInit, setIsShowLoadingInit] = useState(false)
 	const [isDetailPanelFullscreen, setIsDetailPanelFullscreen] = useState(false)
 	const clearUserSelectDetail = useMemoizedFn(() => {
@@ -202,9 +216,13 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 	})
 	// Calculate read-only status based on user role
 	const isReadOnly = isReadOnlyProject(selectedProject?.user_role)
-	const hideProjectCard = isSingleTopicChat || isAudioProjectMode(selectedProject?.project_mode)
+	// AI canvas projects show only their canvas and the conversation: no project card or file tree.
+	const isAiCanvas = !isSingleTopicChat && isAiCanvasProject(selectedProject)
+	const hideProjectCard =
+		isSingleTopicChat || isAiCanvas || isAudioProjectMode(selectedProject?.project_mode)
 	// The chat page has no project card, but still collapses its file sidebar from the files panel header.
-	const canCollapseFileSidebar = !isReadOnly && (isSingleTopicChat || !hideProjectCard)
+	const canCollapseFileSidebar =
+		!isReadOnly && !isAiCanvas && (isSingleTopicChat || !hideProjectCard)
 	const topicActions = useMessageHeaderTopicActions({
 		selectedProject,
 		selectedTopic,
@@ -244,6 +262,13 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		handleFileClick,
 		topicFilesProps,
 		attachmentList,
+		// AI canvas: tool playbacks float over the canvas instead of replacing it in the panel.
+		onOpenPlayback: isAiCanvas
+			? (toolData) => {
+					setCanvasPlaybackDetail(toolData)
+					return true
+				}
+			: undefined,
 	})
 
 	const { onFileTabsCacheLoaded, scheduleWhenTabsCacheReady } = useDeferUntilFileTabsCacheLoaded(
@@ -301,6 +326,20 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 		setUserSelectDetail(null)
 		clearActiveDetailTabType()
 	}, [selectedProject?.id])
+
+	const aiCanvasDocument = useAiCanvasDocument({
+		enabled: isAiCanvas,
+		projectId: selectedProject?.id,
+		projectName: selectedProject?.project_name,
+		isReadOnly,
+		attachments,
+		attachmentLoadState: projectFilesStore.attachmentLoadState,
+		projectFilesStore,
+		// Wait for restored file tabs so the cache restore cannot replace the freshly opened canvas.
+		openCanvas: (folder) => scheduleWhenTabsCacheReady(() => handleFileClickWithPanel(folder)),
+	})
+	// Read through a stable callback so the send flow always binds the canvas currently shown.
+	const getAiCanvasMentionItems = useMemoizedFn(() => aiCanvasDocument.canvasMentionItems)
 
 	useSlidesTemplateNavigation({
 		selectedProjectId: selectedProject?.id,
@@ -847,6 +886,9 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 				onToggleHistoryPanel={onToggleHistoryPanel}
 				trailingActions={isSingleTopicChat ? <ChatConversationActionsSlot /> : undefined}
 				isChatDetail={isSingleTopicChat}
+				lockedTopicMode={isAiCanvas ? TopicMode.Design : undefined}
+				placeholder={isAiCanvas ? tAiCanvas("home.placeholder") : undefined}
+				getImplicitMentionItems={isAiCanvas ? getAiCanvasMentionItems : undefined}
 			/>
 		),
 	)
@@ -856,8 +898,20 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 			<TopicDesktopPanels
 				containerClassName={styles.container}
 				detailPanelClassName={styles.detailPanel}
+				// The AI canvas frames its canvas as a card: larger radius and a light grey outline,
+				// dropped in fullscreen so the canvas fills the screen edge to edge. The outline is
+				// drawn inside the box (no border), so the canvas layer above covers exactly this box
+				// and draws the same frame (see previewSurfaceFrame on Detail).
+				detailPanelSurfaceClassName={
+					isAiCanvas && !isDetailPanelFullscreen
+						? "rounded-xl outline outline-1 -outline-offset-1 outline-border"
+						: undefined
+				}
 				isDetailPanelFullscreen={isDetailPanelFullscreen}
-				enableProjectCollapse={canCollapseFileSidebar}
+				// The flag also arms drag-to-collapse of the conversation column. AI canvas has no
+				// file sidebar to collapse, but keeps that gesture so it resizes like other projects.
+				enableProjectCollapse={canCollapseFileSidebar || (isAiCanvas && !isReadOnly)}
+				showProjectSidebar={!isAiCanvas}
 				projectSiderPanelPersistence={
 					isSingleTopicChat ? CHAT_PROJECT_SIDER_PANEL_PERSISTENCE : undefined
 				}
@@ -874,36 +928,98 @@ function TopicPage({ pageVariant = "default" }: TopicPageDesktopProps) {
 						siderVariant={isSingleTopicChat ? "chat" : "default"}
 					/>
 				)}
-				detailPanel={(fileSidebarControl) => (
-					<Detail
-						fileSidebarControl={fileSidebarControl}
-						attachmentLoadState={projectFilesStore.attachmentLoadState}
-						projectFilesStore={projectFilesStore}
-						ref={detailRef}
-						disPlayDetail={disPlayDetail}
-						userSelectDetail={userSelectDetail}
-						setUserSelectDetail={setUserSelectDetail}
-						attachments={attachments}
-						attachmentList={attachmentList}
-						topicId={selectedTopic?.id}
-						baseShareUrl={`${window.location.origin}/share`}
-						currentTopicStatus={currentTopicStatus}
-						messages={messages}
-						autoDetail={autoDetail}
-						allowEdit={!isReadOnly}
-						selectedTopic={selectedTopic}
-						selectedProject={selectedProject}
-						activeFileId={activeFileId}
-						onActiveFileChange={setActiveFileId}
-						onActiveTabChange={handleActiveDetailTabChange}
-						onPreviewCollapse={isReadOnly ? undefined : collapseDetailPanel}
-						onPreviewOpen={expandDetailPanel}
-						isPreviewCollapsed={isDetailPanelCollapsed}
-						canLocateFile={!isReadOnly}
-						onFullscreenChange={setIsDetailPanelFullscreen}
-						onFileTabsCacheLoaded={onFileTabsCacheLoaded}
-					/>
-				)}
+				detailPanel={(fileSidebarControl) =>
+					isAiCanvas &&
+					!aiCanvasDocument.canvasFolder &&
+					(aiCanvasDocument.isCreating || aiCanvasDocument.creationError) ? (
+						<AiCanvasDocumentStatus
+							isCreating={aiCanvasDocument.isCreating}
+							onRetry={aiCanvasDocument.retry}
+						/>
+					) : (
+						<Detail
+							fileSidebarControl={fileSidebarControl}
+							attachmentLoadState={projectFilesStore.attachmentLoadState}
+							projectFilesStore={projectFilesStore}
+							ref={detailRef}
+							disPlayDetail={disPlayDetail}
+							userSelectDetail={userSelectDetail}
+							setUserSelectDetail={setUserSelectDetail}
+							attachments={attachments}
+							attachmentList={attachmentList}
+							topicId={selectedTopic?.id}
+							baseShareUrl={`${window.location.origin}/share`}
+							currentTopicStatus={currentTopicStatus}
+							messages={messages}
+							autoDetail={autoDetail}
+							allowEdit={!isReadOnly}
+							selectedTopic={selectedTopic}
+							selectedProject={selectedProject}
+							activeFileId={activeFileId}
+							onActiveFileChange={setActiveFileId}
+							onActiveTabChange={handleActiveDetailTabChange}
+							// AI canvas keeps its canvas visible and has no file tree to locate files in.
+							onPreviewCollapse={
+								isReadOnly || isAiCanvas ? undefined : collapseDetailPanel
+							}
+							onPreviewOpen={expandDetailPanel}
+							isPreviewCollapsed={isDetailPanelCollapsed}
+							canLocateFile={!isReadOnly && !isAiCanvas}
+							// The canvas is the project's only document, so its tab strip (tab, add,
+							// menu, close) adds nothing; the canvas fills the panel instead.
+							hideTabBar={isAiCanvas}
+							// The canvas lives in a floating layer above the panel, out of reach of the
+							// panel's clip, so the layer draws the same rounded-xl frame itself.
+							// The canvas page has no project sidebar, so the project card (name, share,
+							// more) floats over the canvas's top-left corner instead.
+							previewSurfaceOverlay={
+								isAiCanvas ? (
+									<>
+										<AiCanvasProjectHeader
+											selectedProject={selectedProject}
+											selectedWorkspace={selectedWorkspace}
+										/>
+										{canvasPlaybackDetail ? (
+											<AiCanvasPlaybackPanel
+												detail={canvasPlaybackDetail}
+												onDetailChange={setCanvasPlaybackDetail}
+												onClose={closeCanvasPlayback}
+												attachments={attachments}
+												attachmentList={attachmentList}
+												topicId={selectedTopic?.id}
+												baseShareUrl={`${window.location.origin}/share`}
+												currentTopicStatus={currentTopicStatus}
+												messages={messages}
+												autoDetail={autoDetail}
+												allowEdit={!isReadOnly}
+												selectedTopic={selectedTopic}
+												selectedProject={selectedProject}
+												projectId={selectedProject?.id}
+											/>
+										) : null}
+									</>
+								) : undefined
+							}
+							previewSurfaceFrame={
+								isAiCanvas
+									? {
+											radius: "0.75rem",
+											outlineColor:
+												"rgb(var(--border-rgb) / var(--border-alpha))",
+											// The layers drawer starts below the floating project card (12px
+											// inset + ~42px card + 8px gap) instead of under it. Its CSS-module
+											// class is generated as `layers-drawer_<hash>`. In arbitrary variants
+											// "_" means a space, so the underscore is escaped; String.raw keeps
+											// the source text identical to the class, which Tailwind scans.
+											className: String.raw`[&_[class*='layers-drawer\_']]:!top-[62px]`,
+										}
+									: undefined
+							}
+							onFullscreenChange={setIsDetailPanelFullscreen}
+							onFileTabsCacheLoaded={onFileTabsCacheLoaded}
+						/>
+					)
+				}
 				isReadOnly={isReadOnly}
 				// Closing the chat preview should free its width entirely, matching the project page,
 				// rather than leave an empty strip. Sidebar collapse already implies this; kept explicit.

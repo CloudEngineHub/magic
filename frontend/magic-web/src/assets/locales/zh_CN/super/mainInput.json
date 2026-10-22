@@ -55,9 +55,6 @@
 		"searchWorkspaces": "搜索工作区",
 		"workspaceUnavailable": "工作区不可用，请重新选择"
 	},
-	"pluginTips": {
-		"connectTools": "连接你的工具"
-	},
 	"promotionalBanner": {
 		"upgradeMessage": "升级享受一整年无限制的高级 AI 服务。"
 	},

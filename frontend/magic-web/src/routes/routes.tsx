@@ -16,6 +16,7 @@ import {
 	microAppPublicRoutes,
 	superMagicMicroAppRoutes,
 } from "@/routes/modules/superMagicMicroAppRoutes"
+import { superMagicAiCanvasRoutes } from "@/routes/modules/superMagicAiCanvasRoutes"
 import { superMagicSlidesTemplateRoutes } from "@/routes/modules/superMagicSlidesTemplateRoutes"
 import ProjectOrganizationAccessGuard from "@/pages/superMagic/components/ProjectOrganizationAccessGuard"
 
@@ -479,6 +480,7 @@ export function registerRoutes(config: RouteConfig = {}): Array<RouteObject> {
 						element: <WorkspacePage />,
 					},
 					...superMagicMicroAppRoutes,
+					...superMagicAiCanvasRoutes,
 					{
 						name: RouteName.SuperChatHome,
 						path: `/:clusterCode${RoutePath.SuperChatHome}`,

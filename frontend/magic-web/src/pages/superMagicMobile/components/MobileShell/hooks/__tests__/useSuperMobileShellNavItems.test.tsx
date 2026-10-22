@@ -128,6 +128,12 @@ describe("useSuperMobileShellNavItems", () => {
 				nativeRecordingTab: undefined,
 			},
 			{
+				key: "aiCanvas",
+				label: "label:mobile.shell.navAiCanvas",
+				routeName: RouteName.AiCanvas,
+				nativeRecordingTab: undefined,
+			},
+			{
 				key: "microApps",
 				label: "label:mobile.shell.navMicroApps",
 				routeName: RouteName.MicroApps,

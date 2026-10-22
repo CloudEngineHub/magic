@@ -38,6 +38,7 @@ import {
 	type Topic,
 } from "../pages/Workspace/types"
 import { TopicMode } from "../pages/Workspace/TopicMode"
+import { hasAiCanvasDefaultName } from "../utils/isAiCanvasProject"
 import { superMagicStore } from "../stores"
 import type { TopicStore } from "../stores/core/topic"
 import { optimisticMessageStore } from "../stores/optimisticMessageStore"
@@ -606,7 +607,9 @@ class MessageSendService {
 			return
 		}
 
-		if (!project.project_name) {
+		// AI canvas projects are created as "Untitled canvas" rather than unnamed; they are renamed
+		// the same way, and their canvas folder follows the new project name (useAiCanvasDocument).
+		if (!project.project_name || hasAiCanvasDefaultName(project)) {
 			const workspaceId =
 				(context?.workspaceId ?? context?.selectedWorkspace?.id ?? project.workspace_id) ||
 				""

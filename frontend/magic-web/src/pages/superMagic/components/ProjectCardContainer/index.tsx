@@ -39,6 +39,7 @@ function ProjectCardContainer({
 	onCollapse,
 	isPanelVisible = true,
 	className,
+	variant,
 }: ProjectCardContainerProps) {
 	const { t } = useTranslation("super")
 	const isMobile = useIsMobile()
@@ -105,6 +106,7 @@ function ProjectCardContainer({
 				onShareClick={shareProject.openShareModal}
 				actionWorkspace={workspaceForProjectActions}
 				className={className}
+				variant={variant}
 			/>
 
 			{projectsOpen && (

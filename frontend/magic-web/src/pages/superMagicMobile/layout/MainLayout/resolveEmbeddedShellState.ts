@@ -21,6 +21,17 @@ export function resolveEmbeddedShellState(pathname: string): EmbeddedMobileShell
 		}
 	}
 
+	// The AI canvas home draws its own shell header (sidebar toggle, title, new canvas button);
+	// the generic header would flash before the lazily loaded page covers it.
+	if (matchPath(`/:clusterCode${RoutePath.AiCanvas}`, pathname)) {
+		return {
+			enabled: true,
+			activeView: "aiCanvas",
+			testIdPrefix: "mobile-ai-canvas-page",
+			showMainHeader: false,
+		}
+	}
+
 	if (matchPath(`/:clusterCode${RoutePath.MicroApps}`, pathname)) {
 		return {
 			enabled: true,

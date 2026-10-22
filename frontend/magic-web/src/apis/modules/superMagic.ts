@@ -40,6 +40,7 @@ import { generateRecordingSummaryApi } from "./superMagic/recordSummary"
 import { generateAudioProjectsApi } from "./superMagic/audioProjects"
 import { generateCollaborationApi } from "./superMagic/collaboration"
 import { generateMicroAppApi } from "./superMagic/microApps"
+import { generateAiCanvasApi } from "./superMagic/aiCanvas"
 import type { MicroAppShareExtra } from "./superMagic/microApps"
 import { buildImageProcessQuery, type ImageProcessOptions } from "@/utils/image-processing"
 import type {
@@ -3424,4 +3425,5 @@ export const generateSuperMagicApi = (fetch: ServiceHttpClient) => ({
 	},
 
 	...generateMicroAppApi(fetch),
+	...generateAiCanvasApi(fetch),
 })

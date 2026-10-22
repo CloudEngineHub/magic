@@ -4,6 +4,7 @@ import type { ViewTransitionConfig } from "@/types/viewTransition"
 import { getWorkspaceStateSessionStorageKey } from "../utils/sessionStorage"
 import { ProjectListItem } from "../pages/Workspace/types"
 import { isOtherCollaborationProject, SHARE_WORKSPACE_ID } from "../constants"
+import { isAiCanvasProject } from "../utils/isAiCanvasProject"
 import { userStore } from "@/models/user"
 import { routesMatch, routesPathMatch } from "@/routes/history/helpers"
 import { baseHistory, history } from "@/routes/history"
@@ -119,6 +120,50 @@ class RouteManageService {
 			default:
 				return baseRoute
 		}
+	}
+
+	/**
+	 * Whether the project opens at the AI canvas address (desktop only). The mode comes from the
+	 * given project or the loaded project lists; an unknown project keeps the generic route, and
+	 * the project pages redirect it once its details load.
+	 */
+	private isAiCanvasRouteProject(projectId?: string | null, project?: ProjectListItem | null) {
+		if (interfaceStore.isMobile || !projectId) return false
+
+		const target =
+			(project?.id === projectId ? project : null) ??
+			(projectStore.selectedProject?.id === projectId
+				? projectStore.selectedProject
+				: null) ??
+			projectStore.projects.find((item) => item.id === projectId) ??
+			Array.from(projectStore.projectsByWorkspace.values())
+				.flat()
+				.find((item) => item.id === projectId)
+
+		return isAiCanvasProject(target)
+	}
+
+	/**
+	 * AI canvas addresses carry no topic, so switching topics inside the same canvas keeps the
+	 * URL: navigating to the address already shown would only stack a duplicate history entry.
+	 */
+	private navigateToAiCanvasProject(
+		projectId: string,
+		options: Pick<MagicNavigateParams, "state" | "replace" | "viewTransition"> = {},
+	) {
+		const match = routesMatch(baseHistory.location.pathname)
+		if (
+			match?.route.name === RouteName.AiCanvasProjectState &&
+			match.params?.projectId === projectId
+		) {
+			return
+		}
+
+		this.safeNavigate({
+			name: RouteName.AiCanvasProjectState,
+			params: { projectId },
+			...options,
+		})
 	}
 
 	/**
@@ -326,7 +371,17 @@ class RouteManageService {
 			)
 
 			// 移动端，话题通过 popup 显示，不需要跳转，更新 store 即可
-			if (!interfaceStore.isMobile) {
+			if (
+				!interfaceStore.isMobile &&
+				!this.shouldPreserveChatRoute(superMagicWorkspaceState.projectId) &&
+				this.isAiCanvasRouteProject(superMagicWorkspaceState.projectId)
+			) {
+				this.navigateToAiCanvasProject(superMagicWorkspaceState.projectId, {
+					state,
+					viewTransition: param_topicId ? false : viewTransition,
+					replace: !!param_topicId,
+				})
+			} else if (!interfaceStore.isMobile) {
 				// Keep chat URL only while updating the same chat project, not when switching contexts.
 				const chatRouteName = this.shouldPreserveChatRoute(
 					superMagicWorkspaceState.projectId,
@@ -347,6 +402,16 @@ class RouteManageService {
 			}
 
 			// 5.2 工作区存在，项目存在，话题不存在
+		} else if (
+			superMagicWorkspaceState.workspaceId &&
+			superMagicWorkspaceState.projectId &&
+			!this.shouldPreserveChatRoute(superMagicWorkspaceState.projectId) &&
+			this.isAiCanvasRouteProject(superMagicWorkspaceState.projectId)
+		) {
+			this.navigateToAiCanvasProject(superMagicWorkspaceState.projectId, {
+				state,
+				viewTransition,
+			})
 		} else if (superMagicWorkspaceState.workspaceId && superMagicWorkspaceState.projectId) {
 			const projectRouteName = this.shouldPreserveChatRoute(
 				superMagicWorkspaceState.projectId,
@@ -586,6 +651,11 @@ class RouteManageService {
 				projectId: project.id,
 			})
 			baseHistory.replace(targetPath)
+		} else if (this.isAiCanvasRouteProject(project.id, project)) {
+			this.navigateToAiCanvasProject(project.id, {
+				viewTransition: { direction: "right" },
+				replace: true,
+			})
 		} else {
 			this.safeNavigate({
 				name: this.getRouteName(RouteName.SuperWorkspaceProjectState),
@@ -652,6 +722,11 @@ class RouteManageService {
 		// 		replace,
 		// 	})
 		// }
+		if (this.isAiCanvasRouteProject(project.id, project)) {
+			this.navigateToAiCanvasProject(project.id, { viewTransition, state, replace })
+			return
+		}
+
 		this.safeNavigate({
 			name: this.getRouteName(RouteName.SuperWorkspaceProjectState),
 			params: {
@@ -910,6 +985,8 @@ class RouteManageService {
 				state,
 				replace,
 			})
+		} else if (this.isAiCanvasRouteProject(projectId)) {
+			this.navigateToAiCanvasProject(projectId, { state, replace })
 		} else {
 			this.safeNavigate({
 				name: this.getRouteName(RouteName.SuperWorkspaceProjectTopicState),
@@ -990,7 +1067,8 @@ class RouteManageService {
 			match?.route.name === RouteName.SuperWorkspaceState ||
 			match?.route.name === RouteName.SuperChatProjectState ||
 			match?.route.name === RouteName.SuperWorkspaceProjectState ||
-			match?.route.name === RouteName.SuperWorkspaceProjectTopicState
+			match?.route.name === RouteName.SuperWorkspaceProjectTopicState ||
+			match?.route.name === RouteName.AiCanvasProjectState
 		)
 	}
 }
