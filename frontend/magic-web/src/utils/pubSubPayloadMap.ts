@@ -1,4 +1,5 @@
 import { PubSubEvents } from "./pubsub"
+import type { NotificationUpdate } from "@/apis/modules/notifications"
 import type {
 	SuperMagicChangePreviewFileVersionArgs,
 	SuperMagicEnterEditModeArgs,
@@ -91,6 +92,7 @@ import type { PersonalPreferencesValue } from "@/utils/personalPreferencesCache"
  * 4. 映射值既可以是单 payload，也可以是参数元组
  */
 export interface PubSubTypedPayloadMap {
+	[PubSubEvents.Notification_Updated]: NotificationUpdate
 	/** 展示快捷键列表：无参数，只约束为零参事件。 */
 	[PubSubEvents.Show_Shortcut_Keys]: []
 	/** 打开 MCP 配置弹窗：无参数。 */
