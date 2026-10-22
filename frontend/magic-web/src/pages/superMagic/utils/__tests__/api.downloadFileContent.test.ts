@@ -28,6 +28,51 @@ describe("downloadFileContent", () => {
 		})
 	})
 
+	it("streams the body and reports progress when asked", async () => {
+		const chunks = [new TextEncoder().encode("<html>"), new TextEncoder().encode("</html>")]
+		const body = new ReadableStream<Uint8Array>({
+			start(controller) {
+				chunks.forEach((chunk) => controller.enqueue(chunk))
+				controller.close()
+			},
+		})
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				headers: new Headers({ "content-length": "13" }),
+				body,
+			}),
+		)
+		const onProgress = vi.fn()
+
+		const result = await downloadFileContent("https://example.com/a.html", { onProgress })
+
+		expect(result).toBe("<html></html>")
+		expect(onProgress).toHaveBeenLastCalledWith({ loaded: 13, total: 13 })
+	})
+
+	it("hides the total when the length is encoded or unknown", async () => {
+		const makeBody = () =>
+			new ReadableStream<Uint8Array>({
+				start(controller) {
+					controller.enqueue(new TextEncoder().encode("abc"))
+					controller.close()
+				},
+			})
+		const onProgress = vi.fn()
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue({
+				ok: true,
+				headers: new Headers({ "content-length": "2", "content-encoding": "gzip" }),
+				body: makeBody(),
+			}),
+		)
+		await downloadFileContent("https://example.com/a.html", { onProgress })
+		expect(onProgress).toHaveBeenLastCalledWith({ loaded: 3, total: undefined })
+	})
+
 	it("gets URLs once and downloads each requested file independently", async () => {
 		vi.mocked(magicClient.post).mockResolvedValue([
 			{ file_id: "file-a", url: "https://cdn.test/a" },

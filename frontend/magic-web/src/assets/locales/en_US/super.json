@@ -3472,6 +3472,8 @@
 		"previewRefreshFailed": "The preview could not update. The displayed content may be out of date.",
 		"previewRefreshTooltip": "Load the latest content and restart the page.",
 		"previewRetry": "Retry",
+		"previewSlowLoading": "Large file, still loading…",
+		"previewSlowRendering": "Large page, still rendering…",
 		"previewUpdating": "Updating preview…",
 		"projectContextUnavailable": "This feature is not supported in share mode. Try sharing through collaboration instead.",
 		"projectFileOperationConfirm": {

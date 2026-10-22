@@ -1,7 +1,11 @@
 import { useFileAccess } from "@/pages/superMagic/fileAccess/FileAccessProvider"
 import { useFileApi } from "@/pages/superMagic/fileAccess/fileApi"
 import { isShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessContext"
-import { downloadFileContent, type GetTemporaryDownloadUrlItem } from "@/pages/superMagic/utils/api"
+import {
+	downloadFileContent,
+	type DownloadProgress,
+	type GetTemporaryDownloadUrlItem,
+} from "@/pages/superMagic/utils/api"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useDebounceEffect, useMemoizedFn } from "ahooks"
 import { FileHistoryVersion } from "@/pages/superMagic/pages/Workspace/types"
@@ -102,6 +106,7 @@ export const useFileData = ({
 	const loadedContentFileIdRef = useRef<string | null>(null)
 	const [loadRevision, setLoadRevision] = useState(0)
 	const [loadStatus, setLoadStatus] = useState<"idle" | "loading" | "ready" | "error">("idle")
+	const [loadProgress, setLoadProgress] = useState<DownloadProgress | null>(null)
 	const [loadError, setLoadError] = useState<unknown>(null)
 	const requestSequence = useRef(0)
 	const historySequence = useRef(0)
@@ -150,20 +155,41 @@ export const useFileData = ({
 		},
 		[requestScope],
 	)
+	const progressFlushRef = useRef<{ at: number; timer?: ReturnType<typeof setTimeout> }>({
+		at: 0,
+	})
 	const beginLoad = useMemoizedFn(() => {
 		const sequence = ++requestSequence.current
 		setLoadStatus("loading")
 		setLoadError(null)
+		clearTimeout(progressFlushRef.current.timer)
+		setLoadProgress(null)
 		return { sequence, scope: requestScope }
 	})
 	const isCurrentLoad = useMemoizedFn(
 		(request: ReturnType<typeof beginLoad>) =>
 			request.sequence === requestSequence.current && request.scope === currentScope.current,
 	)
+	// Chunks arrive faster than the UI needs; keep only the latest and flush at most every 100ms.
+	const reportProgress = useMemoizedFn(
+		(request: ReturnType<typeof beginLoad>, progress: DownloadProgress) => {
+			const flush = progressFlushRef.current
+			clearTimeout(flush.timer)
+			const publish = () => {
+				flush.at = Date.now()
+				if (isCurrentLoad(request)) setLoadProgress(progress)
+			}
+			const wait = flush.at + 100 - Date.now()
+			if (wait <= 0) publish()
+			else flush.timer = setTimeout(publish, wait)
+		},
+	)
 	const finishLoad = useMemoizedFn(() => {
 		successfulLoadScope.current = requestScope
 		setLoadStatus("ready")
 		setLoadError(null)
+		clearTimeout(progressFlushRef.current.timer)
+		setLoadProgress(null)
 		setLoadRevision((revision) => revision + 1)
 		setLoading(false)
 	})
@@ -171,6 +197,8 @@ export const useFileData = ({
 		delete fileUrlCacheRef.current[currentScope.current.file_id]
 		setLoadStatus("error")
 		setLoadError(error)
+		clearTimeout(progressFlushRef.current.timer)
+		setLoadProgress(null)
 		setLoading(false)
 	})
 	const applyLoadedFileData = useMemoizedFn((data: unknown) => {
@@ -281,22 +309,23 @@ export const useFileData = ({
 						)
 						// 只有 URL 更新时才重新下载文件内容
 						if ((urlUpdated || forceReload) && !skipContentDownload) {
-							return downloadFileContent(resource.url, { responseType }).then(
-								(data: any) => {
-									if (!isCurrentLoad(request)) return
-									// Only successful bytes may satisfy a later cache hit.
-									loadedContentFileIdRef.current = file_id
-									fileUrlCacheRef.current[file_id] = {
-										resource,
-										updatedAt: updatedAt || "",
-										version: file_version,
-									}
-									finishLoad()
-									if (fileData === data) return
-									applyLoadedFileData(data)
-									setLoading(false)
-								},
-							)
+							return downloadFileContent(resource.url, {
+								responseType,
+								onProgress: (progress) => reportProgress(request, progress),
+							}).then((data: any) => {
+								if (!isCurrentLoad(request)) return
+								// Only successful bytes may satisfy a later cache hit.
+								loadedContentFileIdRef.current = file_id
+								fileUrlCacheRef.current[file_id] = {
+									resource,
+									updatedAt: updatedAt || "",
+									version: file_version,
+								}
+								finishLoad()
+								if (fileData === data) return
+								applyLoadedFileData(data)
+								setLoading(false)
+							})
 						} else {
 							if (urlUpdated && skipContentDownload) {
 								loadedContentFileIdRef.current = file_id
@@ -556,19 +585,20 @@ export const useFileData = ({
 					setIsDeleted(false)
 					// 只有 URL 更新时才重新下载文件内容
 					if (urlUpdated && !skipContentDownload) {
-						return downloadFileContent(resource.url, { responseType }).then(
-							(data: any) => {
-								if (cancelled || !isCurrentLoad(request)) return
-								loadedContentFileIdRef.current = file_id
-								fileUrlCacheRef.current[file_id] = {
-									resource,
-									updatedAt: updatedAt || "",
-									version,
-								}
-								finishLoad()
-								applyLoadedFileData(data)
-							},
-						)
+						return downloadFileContent(resource.url, {
+							responseType,
+							onProgress: (progress) => reportProgress(request, progress),
+						}).then((data: any) => {
+							if (cancelled || !isCurrentLoad(request)) return
+							loadedContentFileIdRef.current = file_id
+							fileUrlCacheRef.current[file_id] = {
+								resource,
+								updatedAt: updatedAt || "",
+								version,
+							}
+							finishLoad()
+							applyLoadedFileData(data)
+						})
 					}
 					loadedContentFileIdRef.current = file_id
 					fileUrlCacheRef.current[file_id] = {
@@ -668,6 +698,7 @@ export const useFileData = ({
 		refreshFile,
 		refreshFileUrl,
 		loadStatus,
+		loadProgress,
 		loadRevision,
 		loadError,
 		loading,

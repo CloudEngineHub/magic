@@ -109,6 +109,7 @@ import {
 	type HtmlPermissionManagerHandle,
 	useHtmlPermissionManagerBridge,
 } from "./hooks/useHtmlPermissionManagerBridge"
+import { collectClientEnvironmentContext } from "./telemetry/clientEnvironmentContext"
 import {
 	readCachedHtmlEditButton,
 	writeCachedHtmlEditButton,
@@ -390,6 +391,7 @@ export default memo(function HTML(props: HTMLProps) {
 		fileData: htmlFileData,
 		refreshFile,
 		loadStatus,
+		loadProgress,
 		loadRevision,
 		loadError,
 		fileVersion: htmlFileVersion,
@@ -1004,6 +1006,10 @@ export default memo(function HTML(props: HTMLProps) {
 				attachmentCount: attachmentList?.length ?? 0,
 				isSharePreview: Boolean(isSharePreview),
 				renderMode: env("MAGIC_HTML_SANDBOX_URL") ? "cross-origin" : "same-origin",
+				// Download progress at the moment of failure: 0 bytes = never started, partial = slow link.
+				receivedBytes: loadProgress?.loaded,
+				totalBytes: loadProgress?.total,
+				...collectClientEnvironmentContext(),
 			},
 		})
 	})
@@ -2030,6 +2036,10 @@ export default memo(function HTML(props: HTMLProps) {
 								saveStage={saveStage}
 								previewStatusEnabled={!isEditMode}
 								hasRendered={previewFreshness.hasRendered}
+								slow={previewFreshness.slow}
+								progress={
+									previewFreshness.phase === "updating" ? loadProgress : null
+								}
 								onRetry={() => void refreshHtmlPreview()}
 							/>
 						)}
