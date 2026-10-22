@@ -20,10 +20,11 @@ import {
 	isProjectPinGroupBoundaryInsertion,
 	getSuccessorId,
 	insertAtPosition,
-	INSERT_LINE_COLOR,
 	isNoOpInsertion,
 } from "./dndUtils"
 import type { ProjectPinBoundaryAction } from "./ProjectPinBoundaryConfirmDialog"
+
+import { clearSidebarDragAppearance, setSidebarDragAppearance } from "./dragAppearance"
 
 const SIDEBAR_DRAG_DATA_TYPE = "application/x-magic-sidebar-dnd"
 const AUTO_EXPAND_DELAY = 1000
@@ -136,20 +137,16 @@ export function useWorkspaceListDnd({
 
 	const hideDropIndicator = useCallback(() => {
 		const indicator = dropIndicatorRef.current
-		if (indicator) indicator.style.display = "none"
+		if (indicator) indicator.classList.add("hidden")
 	}, [])
 
 	const clearWorkspaceHighlight = useCallback(() => {
 		const target = visualRef.current.workspaceTarget
 		if (!target) return
-		target.style.backgroundColor = ""
-		target.style.boxShadow = ""
-		target.style.borderRadius = ""
-		visualRef.current.workspaceHeader?.style.removeProperty("background-color")
-		visualRef.current.workspaceHeader?.style.removeProperty("box-shadow")
-		visualRef.current.workspaceHeader?.style.removeProperty("border-radius")
-		visualRef.current.workspaceHeaderButton?.style.removeProperty("background-color")
-		visualRef.current.workspaceDisabled?.style.removeProperty("opacity")
+		clearSidebarDragAppearance(target)
+		clearSidebarDragAppearance(visualRef.current.workspaceHeader)
+		clearSidebarDragAppearance(visualRef.current.workspaceHeaderButton)
+		clearSidebarDragAppearance(visualRef.current.workspaceDisabled)
 		visualRef.current.workspaceHeader = null
 		visualRef.current.workspaceHeaderButton = null
 		visualRef.current.workspaceTarget = null
@@ -158,7 +155,7 @@ export function useWorkspaceListDnd({
 
 	const clearDragVisuals = useCallback(() => {
 		const source = visualRef.current.source
-		if (source) source.style.opacity = ""
+		clearSidebarDragAppearance(source)
 		visualRef.current.source = null
 		clearWorkspaceHighlight()
 		hideDropIndicator()
@@ -169,32 +166,26 @@ export function useWorkspaceListDnd({
 		(target: HTMLElement | null, refresh = false) => {
 			if (!target || (!refresh && visualRef.current.workspaceTarget === target)) return
 			clearWorkspaceHighlight()
-			target.style.backgroundColor = "#eef3fd"
-			// Inset shadow avoids the layout shift caused by a real border.
-			target.style.boxShadow = "inset 0 0 0 2px #81bfff"
-			target.style.borderRadius = "12px"
+			setSidebarDragAppearance(target, "workspace")
 			const header = target.querySelector<HTMLElement>("[data-sidebar-workspace-header]")
 			if (header) {
 				const targetRect = target.getBoundingClientRect()
 				const headerRect = header.getBoundingClientRect()
 				const isCollapsed = !target.querySelector('[data-sidebar-drop-type="project-list"]')
 				const isStickyOffset = headerRect.top > targetRect.top + 1
-				const headerShadow = isCollapsed
-					? "inset 0 0 0 2px #81bfff"
-					: isStickyOffset
-						? "inset 2px 0 0 0 #81bfff, inset -2px 0 0 0 #81bfff"
-						: "inset 0 2px 0 0 #81bfff, inset 2px 0 0 0 #81bfff, inset -2px 0 0 0 #81bfff"
-				header.style.setProperty("background-color", "#eef3fd", "important")
-				header.style.setProperty("box-shadow", headerShadow)
-				if (isCollapsed) header.style.setProperty("border-radius", "12px")
-				else if (!isStickyOffset) {
-					header.style.setProperty("border-radius", "12px 12px 0 0")
-				}
+				setSidebarDragAppearance(
+					header,
+					isCollapsed
+						? "headerCollapsed"
+						: isStickyOffset
+							? "headerSticky"
+							: "headerExpanded",
+				)
 			}
 			const activeButton = header?.querySelector<HTMLElement>(
 				'[data-sidebar="menu-button"][data-active="true"]',
 			)
-			activeButton?.style.setProperty("background-color", "transparent", "important")
+			setSidebarDragAppearance(activeButton, "transparent")
 			visualRef.current.workspaceHeader = header || null
 			visualRef.current.workspaceHeaderButton = activeButton || null
 			visualRef.current.workspaceTarget = target
@@ -207,7 +198,7 @@ export function useWorkspaceListDnd({
 		(target: HTMLElement | null) => {
 			if (!target) return
 			clearWorkspaceHighlight()
-			target.style.opacity = "0.45"
+			setSidebarDragAppearance(target, "disabled")
 			visualRef.current.workspaceTarget = target
 			visualRef.current.workspaceDisabled = target
 		},
@@ -236,18 +227,14 @@ export function useWorkspaceListDnd({
 			(viewport?.bottom ?? Infinity) - 4,
 		)
 		const width = Math.max(8, targetRect.width)
-		indicator.style.display = "block"
-		indicator.style.position = "absolute"
-		indicator.style.pointerEvents = "none"
-		indicator.style.overflow = "visible"
-		indicator.style.zIndex = "50"
+		indicator.classList.remove("hidden")
+
 		indicator.style.left = `${targetRect.left - rootRect.left}px`
 		indicator.style.top = `${lineY - rootRect.top - 4}px`
 		indicator.style.width = `${width}px`
 		indicator.setAttribute("width", String(width))
 		indicator.setAttribute("height", "8")
 		indicator.setAttribute("viewBox", `0 0 ${width} 8`)
-		indicator.style.color = INSERT_LINE_COLOR
 
 		const line = indicator.querySelector("line")
 		const circle = indicator.querySelector("circle")
@@ -587,7 +574,7 @@ export function useWorkspaceListDnd({
 				data.type === "workspace"
 					? source.closest<HTMLElement>("[data-sidebar-workspace-root]") || source
 					: source
-			visualSource.style.opacity = "0.4"
+			setSidebarDragAppearance(visualSource, "source")
 			visualRef.current.source = visualSource
 		},
 		[disabled],

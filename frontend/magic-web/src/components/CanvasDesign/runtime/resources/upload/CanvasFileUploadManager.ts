@@ -64,6 +64,8 @@ export interface UploadRequest {
 	onUploadComplete: (result: UploadFileResponse) => void
 	/** 上传失败回调 */
 	onUploadFailed: (error: Error) => void
+	/** 文件字节上传完成回调（早于保存与元素后处理） */
+	onUploadSettled?: () => void
 }
 
 /**
@@ -98,6 +100,8 @@ export interface UploadFileElementOptions {
 	onUploadComplete?: (elementId: string, result: UploadFileResponse) => void
 	/** 上传失败回调（用于外部同步真实上传进度） */
 	onUploadFailed?: (elementId: string, error: Error) => void
+	/** 文件字节上传完成回调（早于保存与元素后处理） */
+	onUploadSettled?: () => void
 }
 
 export interface ReplaceAudioElementOptions {
@@ -793,6 +797,7 @@ export class CanvasFileUploadManager {
 			const requests = [...this.uploadQueue]
 			this.uploadQueue = []
 			const settledRequests = new Set<UploadRequest>()
+			const progressedRequests = new Set<UploadRequest>()
 			const settleUploadComplete = (
 				request: UploadRequest,
 				result: UploadFileResponse,
@@ -805,6 +810,11 @@ export class CanvasFileUploadManager {
 				if (settledRequests.has(request)) return
 				settledRequests.add(request)
 				request.onUploadFailed(error)
+			}
+			const settleUploadProgress = (request: UploadRequest, progress: number): void => {
+				if (progress < 100 || progressedRequests.has(request)) return
+				progressedRequests.add(request)
+				request.onUploadSettled?.()
 			}
 
 			// 检查是否有 uploadFiles 方法
@@ -830,6 +840,9 @@ export class CanvasFileUploadManager {
 				},
 				onUploadFailed: (error) => {
 					settleUploadFailed(req, error)
+				},
+				onUploadProgress: (progress) => {
+					settleUploadProgress(req, progress)
 				},
 			}))
 
@@ -920,6 +933,7 @@ export class CanvasFileUploadManager {
 			manageHistory = true,
 			onUploadComplete,
 			onUploadFailed,
+			onUploadSettled,
 		} = options
 
 		if (!this.canvas.magicConfigManager.config?.methods?.uploadFiles) {
@@ -996,6 +1010,7 @@ export class CanvasFileUploadManager {
 							historyManager.recordHistoryImmediate()
 						}
 					},
+					onUploadSettled,
 				})
 				this.registerPendingUploadElement(batchId, elementId)
 			} finally {
@@ -1503,6 +1518,7 @@ export class CanvasFileUploadManager {
 			manageHistory = true,
 			onUploadComplete,
 			onUploadFailed,
+			onUploadSettled,
 		} = options
 		const elementId = generateElementId()
 		const width = Math.max(
@@ -1592,6 +1608,7 @@ export class CanvasFileUploadManager {
 				uploadFiles: [file],
 				onUploadComplete: handleUploadComplete,
 				onUploadFailed: handleUploadFailed,
+				onUploadSettled,
 			})
 			this.registerPendingUploadElement(batchId, elementId)
 		} catch (error) {

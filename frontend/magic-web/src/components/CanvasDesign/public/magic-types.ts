@@ -1570,6 +1570,10 @@ export interface StoredVideoEditorDraft {
 	version: 1
 	request: Partial<GenerateVideoRequest>
 	modeDrafts: Partial<Record<VideoInputMode, StoredVideoModeInputDraft>>
+	/** 快捷编辑源视频。跨输入模式保留，避免切换模式时丢失当前视频。 */
+	quickEditSource?: UploadFileResponse & { assetType: "video" }
+	/** 用户已明确移除快捷编辑源视频；避免重新打开或切换模式时自动复活。 */
+	quickEditSourceRemoved?: boolean
 	/** 按 prompt mention 出现顺序保存的结构化身份，关闭重开后直接重建节点。 */
 	mentionBindings?: StoredMentionPathBinding[]
 	updatedAt: number
@@ -1831,6 +1835,8 @@ export interface CanvasDesignMethods {
 	) => Promise<CanvasAssetResourceInfo[]>
 	/** 获取单个素材的异步合规状态，用于 Canvas 级轮询管理器。 */
 	getAssetComplianceStatus?: (assetId: string) => Promise<CanvasAssetComplianceState>
+	/** 批量获取素材的异步合规状态，用于多个素材共享一次轮询请求。 */
+	getAssetComplianceStatuses?: (assetIds: string[]) => Promise<CanvasAssetComplianceState[]>
 	/** 请求宿主打开素材信息编辑弹窗；该入口本身不得直接发起保存。 */
 	openSaveAssetToLibraryDialog?: (params: CanvasOpenSaveAssetDialogParams) => void
 	/** 素材库本地上传：打开保存弹窗，不在选文件时直接入库。 */

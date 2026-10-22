@@ -18,13 +18,13 @@ import { toast } from "sonner"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { EmptyState } from "@magic-admin-v2/components/empty-state"
 import { ListShell } from "@magic-admin-v2/components/list-shell"
+import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import {
 	SectionNavigation,
 	SectionNavigationSkeleton,
 	type SectionNavigationItem,
 } from "@magic-admin-v2/components/section-navigation"
 import { Badge } from "@magic-admin-v2/components/ui/badge"
-import { PageHeaderActionButton } from "@magic-admin-v2/components/page-header-action-button"
 import { Skeleton } from "@magic-admin-v2/components/ui/skeleton"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import {
@@ -183,7 +183,8 @@ export default function PlatformInfoPage() {
 					icon={AlertCircle}
 					testId="platform-info-error"
 					title={t("platformInfo.error.loadTitle")}
-					description={queryError.message}/>
+					description={queryError.message}
+				/>
 			</ListShell>
 		)
 	}
@@ -276,7 +277,7 @@ export default function PlatformInfoPage() {
 					onValueChange={setActiveSection}
 				/>
 			</div>
-			<div className="flex min-h-0 gap-12">
+			<div className="flex min-h-0 gap-12" data-testid="platform-info-loading">
 				<aside className="hidden shrink-0 lg:block lg:w-52">
 					<SectionNavigation
 						mode="nav"
@@ -320,7 +321,11 @@ function PlatformInfoSkeleton({ hasEditRight }: { hasEditRight: boolean }) {
 		<ListShell
 			actions={
 				<>
-					<PageHeaderActionButton data-testid="platform-info-refresh-button" disabled variant="outline">
+					<PageHeaderActionButton
+						data-testid="platform-info-refresh-button"
+						disabled
+						variant="outline"
+					>
 						<RefreshCw className="size-4" aria-hidden="true" />
 						{t("common.refresh")}
 					</PageHeaderActionButton>

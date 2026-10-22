@@ -11,6 +11,7 @@ use App\Application\SuperMagic\Common\Share\Service\ResourceShareAppService;
 use App\Application\SuperMagic\Project\DTO\Request\MicroAppListRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\PublishedMicroAppListRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\PublishMicroAppRequestDTO;
+use App\Application\SuperMagic\Project\DTO\Request\UpdateMicroAppRequestDTO;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectAppService;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectResponseFormatter;
 use App\Application\SuperMagic\Project\Service\MicroAppShareConfig;
@@ -33,6 +34,7 @@ use App\Domain\SuperMagic\Project\Entity\ValueObject\ProjectMode;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\MicroAppVisitRepositoryInterface;
 use App\Domain\SuperMagic\Project\Repository\Facade\ProjectRepositoryInterface;
+use App\Domain\SuperMagic\Project\Repository\Persistence\MicroAppTransferRepository;
 use App\Domain\SuperMagic\Project\Service\ProjectDomainService;
 use App\Domain\SuperMagic\Project\Service\ProjectMemberDomainService;
 use App\Domain\SuperMagic\Workspace\Repository\Facade\WorkspaceRepositoryInterface;
@@ -58,6 +60,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Qbhy\HyperfAuth\Authenticatable;
 use ReflectionProperty;
 use RuntimeException;
+use Throwable;
 
 /**
  * @internal
@@ -129,7 +132,7 @@ class MicroAppProjectAppServiceTest extends TestCase
         $resourceShareAppService->expects(self::once())
             ->method('createShare')
             ->with(
-                $authorization,
+                self::callback(static fn ($auth) => $auth->getId() === 'user-1' && $auth->getOrganizationCode() === 'org-1'),
                 self::callback(static function (CreateShareRequestDTO $dto): bool {
                     self::assertTrue($dto->hasField('extra'));
                     self::assertSame([
@@ -151,6 +154,9 @@ class MicroAppProjectAppServiceTest extends TestCase
             ->with($record, 'Demo App', $shareItem->extra)
             ->willReturn(['extra' => ['pure_mode' => true]]);
 
+        $locks = $this->createMock(MicroAppTransferRepository::class);
+        $locks->method('lockProject')->with($projectId)->willReturn($project);
+        $locks->method('lockAppByProject')->with($projectId, 'org-1')->willReturn($record);
         $service = $this->createService(
             $microAppRepository,
             $projectRepository,
@@ -158,6 +164,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             $shareDomainService,
             $shareUrlBuilder,
             $responseFormatter,
+            mutationLocks: $locks,
         );
         $requestDTO = new PublishMicroAppRequestDTO([
             'app_name' => 'Demo App',
@@ -169,6 +176,151 @@ class MicroAppProjectAppServiceTest extends TestCase
             ['extra' => ['pure_mode' => true]],
             $service->publish($requestContext, $appId, $requestDTO),
         );
+    }
+
+    /** @dataProvider mutationMethods */
+    public function testMutationsRecheckPermissionAfterConcurrentTransfer(string $method): void
+    {
+        $this->setDatabaseContainer(false);
+        $authorization = (new MagicUserAuthorization())->setId('old-owner')->setOrganizationCode('org-1');
+        $context = $this->createMock(RequestContext::class);
+        $context->method('getUserAuthorization')->willReturn($authorization);
+        $oldProject = (new ProjectEntity())->setId(2001)->setUserId('old-owner')->setUserOrganizationCode('org-1')
+            ->setProjectMode(ProjectMode::MICRO_APP->value);
+        $newProject = clone $oldProject;
+        $newProject->setUserId('new-owner');
+        $record = (new MicroAppEntity())->setId(1001)->setProjectId(2001)->setOrganizationCode('org-1');
+        $apps = $this->createMock(MicroAppRepositoryInterface::class);
+        $apps->method('findById')->willReturn($record);
+        $apps->expects(self::never())->method('save');
+        $projects = $this->createMock(ProjectRepositoryInterface::class);
+        $projects->method('findById')->willReturn($oldProject);
+        $locks = $this->createMock(MicroAppTransferRepository::class);
+        $locks->expects(self::once())->method('lockProject')->with(2001)->willReturn($newProject);
+        $locks->expects(self::once())->method('lockAppByProject')->with(2001, 'org-1')->willReturn($record);
+        $shares = $this->createMock(ResourceShareAppService::class);
+        $shares->expects(self::never())->method('createShare');
+        $shares->expects(self::never())->method('cancelShareByResourceId');
+        $service = $this->createService(
+            $apps,
+            $projects,
+            $shares,
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $this->createMock(MicroAppProjectResponseFormatter::class),
+            denyCollaboration: true,
+            mutationLocks: $locks
+        );
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('project access denied');
+        match ($method) {
+            'publish' => $service->publish($context, 1001, new PublishMicroAppRequestDTO(['app_name' => 'Changed', 'share_type' => 1])),
+            'update' => $service->update($context, 1001, new UpdateMicroAppRequestDTO(['app_name' => 'Changed'])),
+            'unpublish' => $service->unpublish($context, 1001),
+            'delete' => $service->delete($context, 1001),
+        };
+    }
+
+    public static function mutationMethods(): array
+    {
+        return [['publish'], ['update'], ['unpublish'], ['delete']];
+    }
+
+    /** @dataProvider publishingRoles */
+    public function testPublishingRolesUseStableOwnerAndRealOperator(MemberRole $role, string $method): void
+    {
+        $allowed = $role->isHigherOrEqualThan(MemberRole::MANAGE);
+        $this->setDatabaseContainer($allowed);
+        $operator = $role === MemberRole::OWNER ? 'receiver' : 'sender';
+        $authorization = (new MagicUserAuthorization())->setId($operator)->setOrganizationCode('org-1');
+        $context = $this->createMock(RequestContext::class);
+        $context->method('getUserAuthorization')->willReturn($authorization);
+        $project = new ProjectEntity(['id' => 2001, 'project_mode' => ProjectMode::MICRO_APP->value,
+            'project_name' => 'App', 'user_id' => 'receiver', 'user_organization_code' => 'org-1']);
+        $record = new MicroAppEntity(['id' => 1001, 'project_id' => 2001, 'resource_id' => 'resource-1',
+            'organization_code' => 'org-1', 'user_id' => 'receiver', 'creator_id' => 'historical-author', 'publish_status' => 'published']);
+        $apps = $this->createMock(MicroAppRepositoryInterface::class);
+        $apps->method('findById')->willReturn($record);
+        $apps->expects($allowed ? self::once() : self::never())->method('save')->willReturnArgument(0);
+        $projects = $this->createMock(ProjectRepositoryInterface::class);
+        $projects->method('findById')->willReturn($project);
+        $locks = $this->createMock(MicroAppTransferRepository::class);
+        $locks->method('lockProject')->willReturn($project);
+        $locks->method('lockAppByProject')->willReturn($record);
+        $locks->expects($allowed ? self::once() : self::never())->method('recordShareOperator')->with($record, $operator);
+        $shares = $this->createMock(ResourceShareAppService::class);
+        $ownerAuthorization = self::callback(static fn ($auth) => $auth->getId() === 'receiver' && $auth->getOrganizationCode() === 'org-1');
+        if ($method === 'publish') {
+            $shares->expects($allowed ? self::once() : self::never())->method('assertMicroAppShareAllowed')->with($authorization, 1);
+            $shares->expects($allowed ? self::once() : self::never())->method('createShare')->with($ownerAuthorization, self::anything(), 'micro_app')
+                ->willReturn(ShareItemDTO::fromArray(['id' => '100', 'share_code' => 'stable-code']));
+        } else {
+            $shares->expects($allowed ? self::once() : self::never())->method('cancelShareByResourceId')->with($ownerAuthorization, 'resource-1');
+        }
+        $formatter = $this->createMock(MicroAppProjectResponseFormatter::class);
+        $formatter->method('formatPublishRecord')->willReturn(['app_id' => '1001']);
+        $service = $this->createService(
+            $apps,
+            $projects,
+            $shares,
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $formatter,
+            mutationLocks: $locks
+        );
+        $service->testRole = $role;
+        if (! $allowed) {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('project access denied');
+        }
+        $response = $method === 'publish'
+            ? $service->publish($context, 1001, new PublishMicroAppRequestDTO(['app_name' => 'App', 'share_type' => 1]))
+            : $service->unpublish($context, 1001);
+        self::assertSame(['app_id' => '1001'], $response);
+        self::assertSame('receiver', $record->getUserId());
+        self::assertSame('historical-author', $record->getCreatorId());
+    }
+
+    public static function publishingRoles(): array
+    {
+        return [[MemberRole::OWNER, 'publish'], [MemberRole::MANAGE, 'publish'], [MemberRole::EDITOR, 'publish'], [MemberRole::VIEWER, 'publish'],
+            [MemberRole::OWNER, 'unpublish'], [MemberRole::MANAGE, 'unpublish'], [MemberRole::EDITOR, 'unpublish'], [MemberRole::VIEWER, 'unpublish']];
+    }
+
+    public function testManagerDeniedByPublishMethodPolicyCannotDelegateShareWrite(): void
+    {
+        $this->setDatabaseContainer(false);
+        $authorization = (new MagicUserAuthorization())->setId('manager')->setOrganizationCode('org-1');
+        $context = $this->createMock(RequestContext::class);
+        $context->method('getUserAuthorization')->willReturn($authorization);
+        $project = new ProjectEntity(['id' => 2001, 'user_id' => 'receiver', 'user_organization_code' => 'org-1',
+            'project_mode' => ProjectMode::MICRO_APP->value, 'project_name' => 'App']);
+        $record = new MicroAppEntity(['id' => 1001, 'project_id' => 2001, 'organization_code' => 'org-1']);
+        $apps = $this->createMock(MicroAppRepositoryInterface::class);
+        $apps->method('findById')->willReturn($record);
+        $apps->expects(self::never())->method('save');
+        $projects = $this->createMock(ProjectRepositoryInterface::class);
+        $projects->method('findById')->willReturn($project);
+        $locks = $this->createMock(MicroAppTransferRepository::class);
+        $locks->method('lockProject')->willReturn($project);
+        $locks->method('lockAppByProject')->willReturn($record);
+        $shares = $this->createMock(ResourceShareAppService::class);
+        $shares->expects(self::once())->method('assertMicroAppShareAllowed')->with($authorization, 1)
+            ->willThrowException(new RuntimeException('share method disabled'));
+        $shares->expects(self::never())->method('createShare');
+        $service = $this->createService(
+            $apps,
+            $projects,
+            $shares,
+            $this->createMock(ResourceShareDomainService::class),
+            $this->createMock(ShareUrlBuilder::class),
+            $this->createMock(MicroAppProjectResponseFormatter::class),
+            mutationLocks: $locks
+        );
+        $service->testRole = MemberRole::MANAGE;
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('share method disabled');
+        $service->publish($context, 1001, new PublishMicroAppRequestDTO(['app_name' => 'App', 'share_type' => 1]));
     }
 
     public function testResolvePublishedReturnsDisplayConfigFromShareRecord(): void
@@ -1050,11 +1202,23 @@ class MicroAppProjectAppServiceTest extends TestCase
         self::assertFalse($result['list'][0]['can_delete']);
     }
 
-    private function setDatabaseContainer(): void
+    private function setDatabaseContainer(bool $success = true): void
     {
         $connection = $this->createMock(ConnectionInterface::class);
         $connection->expects(self::once())->method('beginTransaction');
-        $connection->expects(self::once())->method('commit');
+        $connection->expects($success ? self::once() : self::never())->method('commit');
+        $connection->expects($success ? self::never() : self::once())->method('rollBack');
+        $connection->method('transaction')->willReturnCallback(static function ($callback) use ($connection) {
+            $connection->beginTransaction();
+            try {
+                $result = $callback();
+                $connection->commit();
+                return $result;
+            } catch (Throwable $error) {
+                $connection->rollBack();
+                throw $error;
+            }
+        });
         $resolver = $this->createMock(ConnectionResolverInterface::class);
         $resolver->method('connection')->willReturn($connection);
         $validator = $this->createMock(ValidatorInterface::class);
@@ -1218,6 +1382,7 @@ class MicroAppProjectAppServiceTest extends TestCase
         bool $denyCollaboration = false,
         ?PublishedMicroAppFileAccessService $publishedFileAccess = null,
         ?ProjectAppService $projectAppService = null,
+        ?MicroAppTransferRepository $mutationLocks = null,
     ): MicroAppProjectAppService {
         $class = $denyCollaboration
             ? TestableDeniedCollaborationMicroAppProjectAppService::class
@@ -1244,6 +1409,7 @@ class MicroAppProjectAppServiceTest extends TestCase
             new MicroAppShareConfig(),
             $this->createMock(MicroAppVisitRepositoryInterface::class),
             $this->createMock(TaskFileRepositoryInterface::class),
+            $mutationLocks ?? $this->createMock(MicroAppTransferRepository::class),
         );
         if ($service instanceof TestableMicroAppProjectAppService) {
             $identity = $this->createMock(DataIsolation::class);
@@ -1259,12 +1425,17 @@ final class TestableMicroAppProjectAppService extends MicroAppProjectAppService
 {
     public DataIsolation $testDataIsolation;
 
+    public MemberRole $testRole = MemberRole::OWNER;
+
     public function getAccessibleProject(
         int $projectId,
         string $userId,
         string $organizationCode,
         MemberRole $requiredRole = MemberRole::VIEWER,
     ): ProjectEntity {
+        if (! $this->testRole->isHigherOrEqualThan($requiredRole)) {
+            throw new RuntimeException('project access denied');
+        }
         return new ProjectEntity();
     }
 

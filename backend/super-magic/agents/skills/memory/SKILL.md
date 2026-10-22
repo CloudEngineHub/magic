@@ -171,7 +171,7 @@ Use content already available in this conversation. Read a target before changin
 
 Before shortening or deleting the only source of retained information, save its destination and read back the relevant destination content. This preservation check is required even when counts look right; it does not require rereading the whole library or every ordinary successful write. Re-read current files for a precise merge when concurrent changes or tool results leave their content uncertain.
 
-Use the runtime's per-file target and maximum. The target is a working preference, not a minimum or a trigger. A file exactly at its maximum is allowed. Do not fill a short useful core or reorganize the whole library merely because the preferred target was crossed. When the main file is too large, remove repeated wording first, then move less frequently needed detail to notes while retaining the facts and conditions needed for routine work. Do not remove useful content that fits just to make the file shorter.
+Use the runtime's per-file target and maximum, measured from the original source text without line numbers or read notices. This budget also applies to Claw's workspace MEMORY.md; preserve its inherited directory layout when archiving details. The target is a working preference, not a minimum or a trigger. A file exactly at its maximum is allowed. Do not fill a short useful core or reorganize the whole library merely because the preferred target was crossed. When the main file is too large, remove repeated wording first, then move less frequently needed detail to notes while retaining the facts and conditions needed for routine work. Do not remove useful content that fits just to make the file shorter.
 
 ## Optional measurement
 
@@ -186,7 +186,7 @@ result = tool.call("inspect_memory", {
 print(result.content)
 ```
 
-Replace placeholders with explicit files in the current permitted memory scope. The tool deduplicates paths and does not scan directories. Symlinks must remain within the same allowed scope. Counts use the project estimator, not an exact model tokenizer. A user-global or ordinary project MEMORY.md reports its runtime target and maximum; ordinary notes do not inherit that budget or a program-issued reorganization decision.
+Replace placeholders with explicit files in the current permitted memory scope. The tool deduplicates paths and does not scan directories. Symlinks must remain within the same allowed scope. Counts use the project estimator, not an exact model tokenizer. A user-global, ordinary project, or Claw workspace MEMORY.md reports its runtime target and maximum; ordinary notes do not inherit that budget or a program-issued reorganization decision.
 
 All requested files measured means ok=True. Missing, unreadable, non-UTF-8, non-file, out-of-scope, or changing targets produce ok=False while retaining successful measurements. Read content to understand which files succeeded and why others failed. data.files provides path, status, estimated_tokens, and size_bytes only for programmatic use; unavailable numeric values are null. Do not print the whole data object when content is sufficient.
 

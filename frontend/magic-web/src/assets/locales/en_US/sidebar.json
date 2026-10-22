@@ -20,6 +20,12 @@
 		"refresh": "Refresh conversations",
 		"title": "Chats"
 	},
+	"clawRuntime": {
+		"accessRevoked": "You do not have Magic Claw access. Related claws will be stopped. Saved data is retained; you must start your claw manually after access is restored. Earlier usage may appear on your bill later.",
+		"accessUnavailable": "Magic Claw is unavailable",
+		"refreshFailed": "Unable to check your access. Please try again.",
+		"refreshPermission": "Refresh access"
+	},
 	"crewMarket": {
 		"title": "Digital Crew"
 	},

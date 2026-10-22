@@ -17,6 +17,8 @@ print(result.content)
 
 The profile identifies the authenticated account served by this session. It does not establish who wrote an external channel message. Agent identity and the name displayed to users are separate from this account.
 
+The third-party user ID belongs to the source system connected to the current organization. It differs from the Magic user ID and Magic ID and is not an authentication credential. Do not assume it is valid for a different platform. An empty or unavailable value means no ID could be determined for this query; it does not prove the account was never linked.
+
 ## Freshness and account status
 
 Horizon provides a safe snapshot initially and refreshes once after each normally completed main Agent Loop. Internal model requests and tool batches do not automatically query the account. Context compaction restores the saved snapshot without another query.

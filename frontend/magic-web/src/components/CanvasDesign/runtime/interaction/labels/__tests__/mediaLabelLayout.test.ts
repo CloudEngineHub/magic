@@ -51,6 +51,103 @@ describe("media label spatial layout cache", () => {
 		expect(queryElementIdsByExpandedRect).toHaveBeenCalledTimes(3)
 	})
 
+	it("keeps the same screen label size for different media heights", () => {
+		let geometryRevision = 1
+		const queryElementIdsByExpandedRect = vi.fn(() => [] as string[])
+		const smallBounds = { x: 0, y: 100, width: 120, height: 40 }
+		const largeBounds = { x: 200, y: 100, width: 120, height: 600 }
+		const elements = new Map([
+			[
+				"small-image",
+				{
+					getBoundingRect: () => smallBounds,
+					getData: () => ({ id: "small-image", type: ElementTypeEnum.Image }),
+					getNode: () => ({ isVisible: () => true, getAbsoluteOpacity: () => 1 }),
+				},
+			],
+			[
+				"large-image",
+				{
+					getBoundingRect: () => largeBounds,
+					getData: () => ({ id: "large-image", type: ElementTypeEnum.Image }),
+					getNode: () => ({ isVisible: () => true, getAbsoluteOpacity: () => 1 }),
+				},
+			],
+		])
+		const canvas = {
+			elementManager: {
+				findParentIdForElement: () => undefined,
+				getElementInstance: (elementId: string) => elements.get(elementId),
+			},
+			geometryCacheManager: {
+				getElementBounds: (elementId: string) => elements.get(elementId)?.getBoundingRect(),
+				getRevision: () => geometryRevision,
+				queryElementIdsByExpandedRect,
+			},
+			stage: { scaleX: () => 1 },
+		} as never
+		const options = {
+			fontSize: 12,
+			gap: 4,
+			name: { width: 80, height: 12 },
+			offsetTop: 5,
+			operationScreenWidth: 0,
+			size: { width: 60, height: 12 },
+		}
+
+		const smallLayout = getMediaLabelLayout(canvas, "small-image", options)
+		geometryRevision += 1
+		const largeLayout = getMediaLabelLayout(canvas, "large-image", options)
+
+		expect(smallLayout?.inverseScale).toBe(1)
+		expect(largeLayout?.inverseScale).toBe(1)
+	})
+
+	it("hides the row instead of shrinking it when another media element blocks the label space", () => {
+		const targetBounds = { x: 0, y: 100, width: 120, height: 80 }
+		const blockingBounds = { x: 0, y: 80, width: 120, height: 19 }
+		const target = {
+			getBoundingRect: () => targetBounds,
+			getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+			getNode: () => ({ isVisible: () => true, getAbsoluteOpacity: () => 1 }),
+		}
+		const blocker = {
+			getBoundingRect: () => blockingBounds,
+			getData: () => ({ id: "image-2", type: ElementTypeEnum.Image }),
+			getNode: () => ({ isVisible: () => true, getAbsoluteOpacity: () => 1 }),
+		}
+		const canvas = {
+			elementManager: {
+				findParentIdForElement: () => undefined,
+				getElementInstance: (elementId: string) =>
+					elementId === "image-1"
+						? target
+						: elementId === "image-2"
+							? blocker
+							: undefined,
+			},
+			geometryCacheManager: {
+				getElementBounds: (elementId: string) =>
+					elementId === "image-1" ? targetBounds : blockingBounds,
+				getRevision: () => 1,
+				queryElementIdsByExpandedRect: () => ["image-1", "image-2"],
+			},
+			stage: { scaleX: () => 1 },
+		} as never
+
+		const layout = getMediaLabelLayout(canvas, "image-1", {
+			fontSize: 12,
+			gap: 4,
+			name: { width: 80, height: 12 },
+			offsetTop: 5,
+			operationScreenWidth: 0,
+			size: { width: 40, height: 12 },
+		})
+
+		expect(layout?.hasSpace).toBe(false)
+		expect(layout?.inverseScale).toBe(1)
+	})
+
 	it("uses live bounds for a moving element even when the geometry cache is stale", () => {
 		const cachedBounds = { x: 0, y: 100, width: 120, height: 80 }
 		const liveBounds = { x: 240, y: 320, width: 160, height: 96 }
@@ -194,5 +291,40 @@ describe("media label spatial layout cache", () => {
 		})
 		expect(tooNarrow?.showSize).toBe(false)
 		expect(tooNarrow?.nameWidth).toBe(10)
+	})
+
+	it("keeps the rename operation when the media row is narrower than the hit area", () => {
+		const bounds = { x: 0, y: 100, width: 10, height: 80 }
+		const element = {
+			getBoundingRect: () => bounds,
+			getData: () => ({ id: "image-1", type: ElementTypeEnum.Image }),
+			getNode: () => ({ isVisible: () => true, getAbsoluteOpacity: () => 1 }),
+		}
+		const canvas = {
+			elementManager: {
+				findParentIdForElement: () => undefined,
+				getElementInstance: (elementId: string) =>
+					elementId === "image-1" ? element : undefined,
+			},
+			geometryCacheManager: {
+				getElementBounds: () => bounds,
+				getRevision: () => 1,
+				queryElementIdsByExpandedRect: () => [],
+			},
+			stage: { scaleX: () => 1 },
+		} as never
+
+		const layout = getMediaLabelLayout(canvas, "image-1", {
+			fontSize: 12,
+			gap: 4,
+			name: { width: 80, height: 12 },
+			offsetTop: 5,
+			operationScreenWidth: 24,
+			size: { width: 40, height: 12 },
+		})
+
+		expect(layout?.showOperation).toBe(true)
+		expect(layout?.showSize).toBe(false)
+		expect(layout?.nameWidth).toBeGreaterThanOrEqual(12)
 	})
 })

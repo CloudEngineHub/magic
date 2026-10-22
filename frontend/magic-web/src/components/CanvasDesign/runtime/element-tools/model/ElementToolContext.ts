@@ -100,6 +100,13 @@ export function createElementToolContext(
 		}
 	}
 	const activeContentId = contentIndex.activeContentId
+	const activeSubmission = options.canvas?.generationRuntimeManager?.getSubmissionState?.(
+		element.id,
+		activeContentId,
+	)
+	if (activeContentId && activeSubmission && !generatingContentIds.includes(activeContentId)) {
+		generatingContentIds.push(activeContentId)
+	}
 	const activeContentState = activeContentId ? contentIndex.states.get(activeContentId) : "empty"
 	const activeContent = contentIndex.active as
 		| (typeof contentIndex.active & {
@@ -111,9 +118,11 @@ export function createElementToolContext(
 		(contentId) => contentId !== activeContentId,
 	)
 	const activeContentIsGenerating = activeContent
-		? isContentGenerationPending(activeContent) ||
+		? Boolean(activeSubmission) ||
+			isContentGenerationPending(activeContent) ||
 			(activeContentId ? generatingContentIds.includes(activeContentId) : false)
-		: generationState.activeContentIsGenerating && !activeContentId
+		: Boolean(activeSubmission) ||
+			(generationState.activeContentIsGenerating && !activeContentId)
 	const attemptsByContentId = new Map<string, GenerationAttemptState>()
 	for (const targetState of runtimeTargetStates) {
 		if (!targetState.contentId) continue

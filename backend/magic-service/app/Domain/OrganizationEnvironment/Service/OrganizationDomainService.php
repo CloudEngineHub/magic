@@ -83,14 +83,34 @@ readonly class OrganizationDomainService
             ExceptionBuilder::throw(PermissionErrorCode::ORGANIZATION_NOT_EXISTS);
         }
 
+        $existingOrganization = $this->organizationRepository->getByCode($organizationEntity->getMagicOrganizationCode());
+
         // 检查编码是否已存在（排除当前组织）
         if ($this->organizationRepository->existsByCode($organizationEntity->getMagicOrganizationCode(), $organizationEntity->getId())) {
             ExceptionBuilder::throw(PermissionErrorCode::ORGANIZATION_CODE_EXISTS);
         }
 
+        $previousCreatorId = $existingOrganization?->getCreatorId();
+        $creatorChanged = $previousCreatorId !== $organizationEntity->getCreatorId();
+        if ($creatorChanged && $organizationEntity->getCreatorId() !== null) {
+            $this->assertCreatorBelongsToOrganization(
+                $organizationEntity->getMagicOrganizationCode(),
+                $organizationEntity->getCreatorId()
+            );
+        }
+
         $organizationEntity->prepareForModification();
 
-        return $this->organizationRepository->save($organizationEntity);
+        $savedOrganization = $this->organizationRepository->save($organizationEntity);
+        if ($creatorChanged) {
+            $this->organizationAdminDomainService->synchronizeOrganizationCreator(
+                DataIsolation::simpleMake($savedOrganization->getMagicOrganizationCode(), $savedOrganization->getCreatorId() ?? ''),
+                $previousCreatorId,
+                $savedOrganization->getCreatorId()
+            );
+        }
+
+        return $savedOrganization;
     }
 
     /**
@@ -218,5 +238,19 @@ readonly class OrganizationDomainService
     {
         $organizationEntity = $this->organizationRepository->getByCode($code);
         return $organizationEntity?->isPersonal() ?? false;
+    }
+
+    /**
+     * 校验创建人是当前组织成员，避免把其他组织的用户写入 creator_id。
+     */
+    private function assertCreatorBelongsToOrganization(string $organizationCode, string $creatorId): void
+    {
+        $users = $this->userDomainService->getUserByIds(
+            [$creatorId],
+            DataIsolation::simpleMake($organizationCode)
+        );
+        if ($users === []) {
+            ExceptionBuilder::throw(UserErrorCode::USER_NOT_EXIST, 'user.not_exist', ['userId' => $creatorId]);
+        }
     }
 }

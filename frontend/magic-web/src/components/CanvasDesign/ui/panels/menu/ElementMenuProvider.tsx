@@ -66,8 +66,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 
 	const { canvas } = useCanvas()
 	const { imageModelList, methods, permissions, videoModelList } = useMagic()
-	const { selectedElementIds, setLayerRenamingElementId, setCanvasRenamingElementId } =
-		useCanvasUI()
+	const { selectedElementIds, setLayerRenamingElementId, closeCanvasRename } = useCanvasUI()
 
 	const MENU_WIDTH = 220
 
@@ -329,13 +328,7 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			if (!canvas) return
 
 			if (source === "layers") {
-				if (canvas.elementManager.getElementData(elementId)?.type === "image") {
-					setLayerRenamingElementId(null)
-					canvas.elementRenameManager.startRename(elementId, true)
-					return
-				}
-				canvas.elementRenameManager.cancelRename()
-				setCanvasRenamingElementId(null)
+				closeCanvasRename()
 				setLayerRenamingElementId(elementId)
 				return
 			}
@@ -343,18 +336,12 @@ export function ElementMenuProvider(props: PropsWithChildren<unknown>) {
 			setLayerRenamingElementId(null)
 			canvas.elementRenameManager.startRename(elementId)
 		},
-		[canvas, setCanvasRenamingElementId, setLayerRenamingElementId],
+		[canvas, closeCanvasRename, setLayerRenamingElementId],
 	)
 
 	const canRenameElement = useCallback(
-		(elementId: string, source: MenuSource | null) => {
+		(elementId: string) => {
 			if (!canvas) return false
-
-			if (source === "layers") {
-				return canvas.permissionManager.canRename(
-					canvas.elementManager.getElementData(elementId),
-				)
-			}
 
 			return canvas.elementRenameManager.canRename(elementId)
 		},

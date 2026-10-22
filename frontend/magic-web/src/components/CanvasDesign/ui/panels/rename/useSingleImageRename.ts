@@ -7,6 +7,8 @@ import { useMagic } from "../../../app/providers/MagicProvider"
 import { useCanvasDesignI18n } from "../../../app/providers/I18nProvider"
 import { useGenerationRuntime } from "../../../app/hooks/canvas/useGenerationRuntime"
 import { splitRenameFileName } from "./useImageRename"
+import { getEditableElementName } from "../../../runtime/interaction/rename/renameUtils"
+import { useRenameOperationState } from "./useRenameOperationState"
 
 /** 草稿只存在于面板中；文件先完成后再提交标题，失败仍可继续修改。 */
 export function useSingleImageRename(element: ImageElement) {
@@ -30,16 +32,13 @@ export function useSingleImageRename(element: ImageElement) {
 		boundContentId.current = content.contentId
 	}
 	const originalTitle = useRef(
-		element.name ||
-			canvas?.elementManager.getElementInstance(element.id)?.getRenderName() ||
-			"",
+		getEditableElementName(element, canvas?.elementManager.getElementInstance(element.id)),
 	)
 	const [title, setTitle] = useState(originalTitle.current)
 	const [fileDraft, setFileDraft] = useState<string>()
 	const [linked, setLinked] = useState(true)
-	const [saving, setSaving] = useState(false)
-	const savingRef = useRef(false)
-	const [error, setError] = useState("")
+	const { saving, error, isSaving, begin, finish, setError, clearError } =
+		useRenameOperationState()
 	const expectedName =
 		runtime?.generateImageRequest?.name || content.generateImageRequest?.name || ""
 	const source = splitRenameFileName(boundFile.current?.fileName || expectedName)
@@ -48,12 +47,11 @@ export function useSingleImageRename(element: ImageElement) {
 	const targetFileName = `${fileValue.trim()}${source.extension}`
 	const changedFile = Boolean(boundFile.current && targetFileName !== boundFile.current.fileName)
 	const dirty = title.trim() !== originalTitle.current || (Boolean(file) && changedFile)
-	const clearError = () => setError("")
 	const close = useCallback(() => {
-		if (!savingRef.current) canvas?.elementRenameManager.cancelRename()
-	}, [canvas])
+		if (!isSaving()) canvas?.elementRenameManager.cancelRename()
+	}, [canvas, isSaving])
 	const save = async () => {
-		if (!canvas || savingRef.current || !dirty || !title.trim()) return
+		if (!canvas || isSaving() || !dirty || !title.trim()) return
 		const bound = boundFile.current
 		if (
 			changedFile &&
@@ -66,9 +64,7 @@ export function useSingleImageRename(element: ImageElement) {
 			return
 		}
 		if (changedFile && !fileValue.trim()) return
-		savingRef.current = true
-		setSaving(true)
-		clearError()
+		if (!begin()) return
 		try {
 			// 即使标题不变也允许只改文件；显式空选项阻止旧入口自动联动文件。
 			await canvas.elementRenameManager.commitRename(title, {
@@ -86,8 +82,7 @@ export function useSingleImageRename(element: ImageElement) {
 		} catch (failure) {
 			setError(failure instanceof Error ? failure.message : t("rename.failed", "重命名失败"))
 		} finally {
-			savingRef.current = false
-			setSaving(false)
+			finish()
 		}
 	}
 	return {

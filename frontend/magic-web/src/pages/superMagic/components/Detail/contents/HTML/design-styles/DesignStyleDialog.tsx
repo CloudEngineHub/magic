@@ -351,23 +351,26 @@ export default function DesignStyleDialog({
 				)}
 
 				{selectedStyle && (
-					<div className="shrink-0 rounded-b-xl border-t border-border/70 bg-background px-6 py-2.5">
-						<p className="mr-auto self-center text-xs text-muted-foreground">
+					<div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 rounded-b-xl border-t border-border/70 bg-background px-6 py-2.5">
+						{/* Wrap based on the resizable dialog width, keeping both actions together. */}
+						<p className="min-w-0 flex-[1_1_20rem] text-xs leading-5 text-muted-foreground">
 							{t("htmlEditor.designStyle.gallery.applyHint")}
 						</p>
-						<Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
-							{t("htmlEditor.designStyle.cancel")}
-						</Button>
-						<Button
-							size="sm"
-							disabled={
-								!selectedStyle || !canApply || isLoading || Boolean(loadError)
-							}
-							onClick={() => selectedStyle && onApply(selectedStyle)}
-							data-testid="design-style-apply-button"
-						>
-							{t("htmlEditor.designStyle.apply")}
-						</Button>
+						<div className="ml-auto flex shrink-0 items-center gap-2">
+							<Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+								{t("htmlEditor.designStyle.cancel")}
+							</Button>
+							<Button
+								size="sm"
+								disabled={
+									!selectedStyle || !canApply || isLoading || Boolean(loadError)
+								}
+								onClick={() => selectedStyle && onApply(selectedStyle)}
+								data-testid="design-style-apply-button"
+							>
+								{t("htmlEditor.designStyle.apply")}
+							</Button>
+						</div>
 					</div>
 				)}
 

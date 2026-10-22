@@ -57,15 +57,7 @@ const OrganizationSwitch = observer(function OrganizationSwitch({
 
 	return (
 		<Popover
-			styles={{
-				root: {
-					marginBottom: 12,
-					marginLeft: 4,
-				},
-				body: {
-					padding: 0,
-				},
-			}}
+			classNames={{ root: "mb-3 ml-1", body: "!p-0" }}
 			placement="rightBottom"
 			open={open}
 			onOpenChange={setOpen}

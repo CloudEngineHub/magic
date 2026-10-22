@@ -13,8 +13,7 @@ import {
 } from "@magic-admin-v2/features/platform-publish-review/types"
 
 export type ReviewDraftUpdater =
-	| PublishReviewFilterDraft
-	| ((previous: PublishReviewFilterDraft) => PublishReviewFilterDraft)
+	PublishReviewFilterDraft | ((previous: PublishReviewFilterDraft) => PublishReviewFilterDraft)
 
 export function createDefaultFilterDraft(
 	kind: PublishReviewKind,
@@ -42,6 +41,31 @@ export function createDefaultFilterDraft(
 		time_range: null,
 		version: "",
 	}
+}
+
+export function countActiveReviewFilters(
+	draft: PublishReviewFilterDraft,
+	kind: PublishReviewKind,
+): number {
+	const kindSpecificValues =
+		kind === "employee"
+			? [draft.name_i18n, draft.organization_code]
+			: [
+					draft.package_name,
+					draft.skill_name,
+					draft.source_type === publishReviewSelectAllValue ? "" : draft.source_type,
+				]
+
+	return [
+		...kindSpecificValues,
+		draft.version,
+		draft.review_status === publishReviewSelectAllValue ? "" : draft.review_status,
+		draft.publish_status === publishReviewSelectAllValue ? "" : draft.publish_status,
+		draft.publish_target_type === publishReviewSelectAllValue
+			? ""
+			: draft.publish_target_type,
+		draft.start_time || draft.end_time || draft.time_range ? "active" : "",
+	].filter((value) => typeof value === "string" && value.trim().length > 0).length
 }
 
 export function toAgentReviewParams(
@@ -155,9 +179,9 @@ export function getSearchFieldOptions(
 	kind: PublishReviewKind,
 	t: ReturnType<typeof import("react-i18next").useTranslation>["t"],
 	variant: PublishReviewVariant,
-) {
+): Array<{ value: PublishReviewSearchField; label: string }> {
 	if (kind === "employee") {
-		const options = [
+		const options: Array<{ value: PublishReviewSearchField; label: string }> = [
 			{ value: "name_i18n", label: t("publishReview.filter.employeeName") },
 			{ value: "version", label: t("publishReview.filter.version") },
 		]

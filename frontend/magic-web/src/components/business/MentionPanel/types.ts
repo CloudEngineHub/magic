@@ -645,7 +645,7 @@ export interface MentionPanelProps<TCatalogId extends string = string> extends B
 	multiSelectNavigationPolicy?: MentionPanelMultiSelectNavigationPolicy
 	/** 多选会话的资源作用域；作用域变化时会丢弃旧会话，避免跨资源提交。 */
 	selectionScopeId?: string
-	/** 多选时显示在路径面包屑右侧的资源数量摘要。 */
+	/** 多选时显示在文件列表下方的资源数量摘要。 */
 	selectionSummary?: MentionPanelSelectionSummary
 	/**
 	 * 为 true 时禁止 Radix 因「外部」交互自动关闭（画布内嵌套 Portal 易出现误判）。

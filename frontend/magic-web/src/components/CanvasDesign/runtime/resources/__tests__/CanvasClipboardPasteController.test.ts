@@ -784,6 +784,120 @@ describe("CanvasClipboardPasteController", () => {
 		expect(result.failed).toEqual([])
 	})
 
+	it("prefers a hidden private bundle over native files for MessageEditor", async () => {
+		const element = {
+			id: "image-hidden-mime",
+			type: "image",
+			contents: [{ contentId: "active", src: "./images/source.png", status: "completed" }],
+			activeContentId: "active",
+			mainContentId: "active",
+		} as unknown as CanvasFileElement
+		const file = new File(["image"], "source.png", { type: "image/png" })
+		const metadata = CanvasElementClipboard.createFileMetadata({
+			element,
+			fileId: "source-file",
+			filename: file.name,
+			mimeType: file.type,
+			fileSize: file.size,
+			sourceProjectId: "project-a",
+			sourceFileId: "source-file",
+			projectPath: "/images/source.png",
+			resourceIdentity: "workspace:/project-a/images/source.png",
+		})
+		const payload = CanvasElementClipboard.createPayload({
+			elements: [element],
+			files: [metadata],
+			operation: "copy-elements",
+			canvasId: "canvas-a",
+			projectId: "project-a",
+		})
+		const bundle = CanvasDesignClipboard.createBundleBlob({
+			payload,
+			// Element copy keeps the bytes on the synchronous native file channel;
+			// the private bundle only carries metadata in this browser path.
+			files: [],
+		})
+		const preventDefault = vi.fn()
+		const stopPropagation = vi.fn()
+		const event = createPasteEvent({
+			types: ["Files"],
+			files: [file],
+			preventDefault,
+			stopPropagation,
+		})
+		const resolveReference = vi.fn(async () => ({
+			kind: "project" as const,
+			path: "/images/source.png",
+			projectPath: "/images/source.png",
+			fileId: "source-file",
+			resourceIdentity: "workspace:/project-a/images/source.png",
+			fileName: file.name,
+		}))
+		const onAsset = vi.fn()
+		const onExternalFile = vi.fn()
+		const controller = new CanvasClipboardPasteController({
+			read: async () => [
+				createClipboardItem(bundle, "web application/x-canvas-design-clipboard-bundle"),
+			],
+			resolveReference,
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				...target,
+				projectId: "project-a",
+				preferPrivateBundleWithNativeFallback: true,
+			},
+			{ onAsset, onExternalFile },
+		)
+
+		expect(result.accepted).toHaveLength(1)
+		expect(result.accepted[0]).toMatchObject({
+			fileName: "source.png",
+			reference: expect.objectContaining({ kind: "project", fileId: "source-file" }),
+		})
+		expect(resolveReference).toHaveBeenCalledTimes(1)
+		expect(onAsset).toHaveBeenCalledTimes(1)
+		expect(onExternalFile).not.toHaveBeenCalled()
+		expect(preventDefault).toHaveBeenCalledTimes(1)
+		expect(stopPropagation).toHaveBeenCalledTimes(1)
+	})
+
+	it("uses native files when the hidden private bundle cannot be read", async () => {
+		const fallback = new File(["fallback"], "fallback.png", { type: "image/png" })
+		const event = createPasteEvent({ types: ["Files"], files: [fallback] })
+		;(event.clipboardData as unknown as { getData: (type: string) => string }).getData = (
+			type,
+		) => (type === "text/plain" ? "before" : type === "text/html" ? "<b>before</b>" : "")
+		const onExternalFile = vi.fn()
+		const controller = new CanvasClipboardPasteController({
+			read: async () => {
+				throw new Error("clipboard permission denied")
+			},
+		})
+
+		const result = await controller.paste(
+			event,
+			{
+				...target,
+				preferPrivateBundleWithNativeFallback: true,
+			},
+			{ onExternalFile },
+		)
+
+		expect(result.accepted).toHaveLength(1)
+		expect(result.accepted[0]).toMatchObject({
+			origin: "external-file",
+			fileName: "fallback.png",
+			file: fallback,
+		})
+		expect(onExternalFile).toHaveBeenCalledWith(
+			expect.objectContaining({ fileName: "fallback.png" }),
+			{ text: "before", html: "<b>before</b>" },
+		)
+	})
+
 	it("does not downgrade private clipboard media to external attachments when the bundle is corrupt", async () => {
 		const privateItem = {
 			types: ["web application/x-canvas-design-clipboard-bundle", "image/png"],

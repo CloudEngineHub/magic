@@ -12,6 +12,7 @@ use App\Application\File\Service\FileCleanupAppService;
 use App\Application\SuperMagic\Common\Service\AbstractAppService;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\File\Repository\Persistence\Facade\CloudFileRepositoryInterface;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\File\Constant\ConvertStatusEnum;
 use App\Domain\SuperMagic\File\Entity\TaskFileEntity;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
@@ -322,6 +323,7 @@ class FileConverterAppService extends AbstractAppService
                 CoContext::setRequestId($requestId);
                 $convertType = $fileRequest->getConvertType();
                 try {
+                    di(MagicClawRuntimePolicyDomainService::class)->assertProject((int) $projectId);
                     $response = $this->fileConverterService->convert($dataIsolation, $actualSandboxId, $projectId, $fileRequest, $fullWorkdir);
 
                     if (! $response->isSuccess()) {

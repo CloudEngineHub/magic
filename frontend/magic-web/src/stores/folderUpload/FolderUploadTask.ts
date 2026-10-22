@@ -68,6 +68,10 @@ export class FolderUploadTask implements IFolderUploadTask {
 	// 实时保存相关
 	private pendingSaveFiles: UploadResult[] = [] // 待保存的文件结果
 	private saveDebounceTimer: NodeJS.Timeout | null = null // 防抖定时器
+	// 正在执行的实时保存，finalize 需要等它们及其异步消费方结束
+	private pendingSavePromises = new Set<Promise<void>>()
+	// 最终保存只执行一次，避免完成监控与执行流程并发重复保存
+	private finalizePromise: Promise<void> | null = null
 	private readonly SAVE_DEBOUNCE_DELAY = 5000 // 5秒防抖延迟
 	// 文件ID到UploadResult的映射，用于实时保存
 	private fileResultMap: Map<string, UploadResult> = new Map()
@@ -343,7 +347,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 			// 完成 - 确保所有待保存的文件都被保存
 			await this.finalizeRemainingFiles()
 
-			if (this.state.isError) {
+			if (this.state.isError || this.state.isCompleted) {
 				return
 			}
 
@@ -473,7 +477,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 							relative_file_path: file.relative_file_path,
 						})),
 					}
-					this.callbacks.onBatchSaveComplete(batchSaveInfo)
+					await this.callbacks.onBatchSaveComplete(batchSaveInfo)
 					console.log(
 						`📡 Triggered fallback onBatchSaveComplete callback for ${unsavedFiles.length} files`,
 					)
@@ -502,7 +506,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 						file_size: file.file_size,
 					})),
 				}
-				this.callbacks.onBatchSaveComplete(batchSaveInfo)
+				await this.callbacks.onBatchSaveComplete(batchSaveInfo)
 				console.log(
 					`📡 Triggered onBatchSaveComplete callback for ${ossResults.length} uploaded files (onlyUpload fallback)`,
 				)
@@ -919,7 +923,8 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 			// 设置新的防抖定时器，用于触发回调返回上传结果
 			this.saveDebounceTimer = setTimeout(() => {
-				this.notifyUploadResults()
+				this.saveDebounceTimer = null
+				this.trackPendingSave(this.notifyUploadResults())
 			}, this.SAVE_DEBOUNCE_DELAY)
 
 			console.log(
@@ -935,7 +940,8 @@ export class FolderUploadTask implements IFolderUploadTask {
 
 		// 设置新的防抖定时器
 		this.saveDebounceTimer = setTimeout(() => {
-			this.executePendingSave()
+			this.saveDebounceTimer = null
+			this.trackPendingSave(this.executePendingSave())
 		}, this.SAVE_DEBOUNCE_DELAY)
 
 		console.log(
@@ -1015,7 +1021,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 						relative_file_path: file.relative_file_path,
 					})),
 				}
-				this.callbacks.onBatchSaveComplete(batchSaveInfo)
+				await this.callbacks.onBatchSaveComplete(batchSaveInfo)
 				console.log(
 					`📡 Triggered onBatchSaveComplete callback for ${filesToSave.length} files`,
 				)
@@ -1032,7 +1038,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 	/**
 	 * 通知上传结果（onlyUpload 模式）
 	 */
-	private notifyUploadResults(): void {
+	private async notifyUploadResults(): Promise<void> {
 		if (this.pendingSaveFiles.length === 0) return
 
 		const uploadedFiles = [...this.pendingSaveFiles] // 复制数组
@@ -1054,7 +1060,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 					file_size: file.file_size,
 				})),
 			}
-			this.callbacks.onBatchSaveComplete(batchSaveInfo)
+			await this.callbacks.onBatchSaveComplete(batchSaveInfo)
 			console.log(
 				`📡 Triggered onBatchSaveComplete callback for ${uploadedFiles.length} uploaded files (onlyUpload mode)`,
 			)
@@ -1155,13 +1161,49 @@ export class FolderUploadTask implements IFolderUploadTask {
 	}
 
 	/**
+	 * 跟踪保存相关的异步工作（含消费方），完成前统一等待
+	 */
+	private trackPendingSave(promise: Promise<void>): void {
+		this.pendingSavePromises.add(promise)
+		void promise.then(
+			() => this.pendingSavePromises.delete(promise),
+			() => this.pendingSavePromises.delete(promise),
+		)
+	}
+
+	/**
 	 * 完成任务前保存所有剩余的待保存文件
 	 */
-	private async finalizeRemainingFiles(): Promise<void> {
+	private finalizeRemainingFiles(): Promise<void> {
+		if (this.finalizePromise) {
+			return this.finalizePromise
+		}
+
+		const finalizePromise = this.runFinalizeRemainingFiles()
+		this.finalizePromise = finalizePromise
+		void finalizePromise.finally(() => {
+			if (this.finalizePromise === finalizePromise) {
+				this.finalizePromise = null
+			}
+		})
+		return finalizePromise
+	}
+
+	private async runFinalizeRemainingFiles(): Promise<void> {
 		// 取消防抖定时器
 		if (this.saveDebounceTimer) {
 			clearTimeout(this.saveDebounceTimer)
 			this.saveDebounceTimer = null
+		}
+
+		// 已触发但尚未结束的实时保存也属于完成前置工作
+		while (this.pendingSavePromises.size > 0) {
+			await Promise.allSettled(Array.from(this.pendingSavePromises))
+			// 等待期间新排队的保存由本次 finalize 统一处理
+			if (this.saveDebounceTimer) {
+				clearTimeout(this.saveDebounceTimer)
+				this.saveDebounceTimer = null
+			}
 		}
 
 		// 如果 onlyUpload 为 true，跳过保存到项目的步骤，但触发回调返回上传结果
@@ -1193,7 +1235,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 							file_size: file.file_size,
 						})),
 					}
-					this.callbacks.onBatchSaveComplete(batchSaveInfo)
+					await this.callbacks.onBatchSaveComplete(batchSaveInfo)
 					console.log(
 						`📡 Triggered final onBatchSaveComplete callback for ${unnotifiedFiles.length} uploaded files (onlyUpload mode)`,
 					)
@@ -1239,7 +1281,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 							relative_file_path: file.relative_file_path,
 						})),
 					}
-					this.callbacks.onBatchSaveComplete(batchSaveInfo)
+					await this.callbacks.onBatchSaveComplete(batchSaveInfo)
 					console.log(
 						`📡 Triggered final onBatchSaveComplete callback for ${unsavedFiles.length} files`,
 					)
@@ -1592,7 +1634,7 @@ export class FolderUploadTask implements IFolderUploadTask {
 					// 确保所有待保存的文件都被保存
 					await this.finalizeRemainingFiles()
 
-					if (this.state.isError) {
+					if (this.state.isError || this.state.isCompleted) {
 						return
 					}
 

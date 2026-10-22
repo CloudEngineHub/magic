@@ -190,7 +190,7 @@ function ProjectNavigation({
 										side="right"
 										align="start"
 										collisionPadding={12}
-										className="flex max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))] w-72 flex-col overflow-hidden p-1"
+										className="flex max-h-[min(70vh,640px,var(--radix-popover-content-available-height))] w-72 flex-col overflow-hidden p-1 supports-[height:100dvh]:max-h-[min(70dvh,640px,var(--radix-popover-content-available-height))]"
 									>
 										<div className="flex shrink-0 items-center justify-between gap-2 px-2 py-1 text-sm font-medium">
 											<span>{t("projectNavigation.recent")}</span>

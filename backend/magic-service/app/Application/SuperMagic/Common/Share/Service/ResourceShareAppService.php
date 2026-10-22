@@ -148,11 +148,15 @@ class ResourceShareAppService extends AbstractShareAppService
         $this->logger = $loggerFactory->get(get_class($this));
     }
 
+    /** Check the real micro-app manager before delegating the link write to its owner. */
+    public function assertMicroAppShareAllowed(MagicUserAuthorization $authorization, int $shareType): void
+    {
+        $this->assertAllowed($authorization, 'micro_app', $shareType);
+    }
+
     /**
      * 创建分享.
      *
-     * @param MagicUserAuthorization $userAuthorization 当前用户
-     * @param CreateShareRequestDTO $dto 创建分享请求DTO
      * @return ShareItemDTO 分享项目DTO
      * @throws Exception 创建分享异常
      */

@@ -8,6 +8,7 @@ import type { ApiError } from "@magic-admin-v2/api/types"
 import { useReviewSkillVersionMutation } from "@magic-admin-v2/features/platform-publish-review/mutations"
 import { useSkillReviewListQuery } from "@magic-admin-v2/features/platform-publish-review/queries"
 import {
+	type PublishReviewFilterDraft,
 	type PublishReviewAction,
 	type PublishReviewPublisherType,
 	type PublishReviewVariant,
@@ -19,12 +20,9 @@ import {
 	getLocalizedText,
 	type ReviewDialogState,
 } from "@magic-admin-v2/features/platform-publish-review/formatters"
-import {
-	createDefaultFilterDraft,
-	createReviewPayload,
-	toSkillReviewParams,
-} from "@magic-admin-v2/features/platform-publish-review/params"
-import { useListQueryParams } from "@magic-admin-v2/hooks/use-list-query-params"
+import { createReviewPayload } from "@magic-admin-v2/features/platform-publish-review/params"
+import type { ListQueryParamsState } from "@magic-admin-v2/hooks/use-list-query-params"
+import type { SkillReviewListParams } from "@magic-admin-v2/features/platform-publish-review/types"
 import {
 	createReviewActionColumn,
 	createReviewVersionColumn,
@@ -42,11 +40,17 @@ import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 export function SkillReviewPanel({
 	isActive,
 	onFetchingChange,
+	queryState,
+	onMobileFilterOpenChange,
+	mobileFilterOpen,
 	refreshToken,
 	variant,
 }: {
 	isActive: boolean
 	onFetchingChange: (isFetching: boolean) => void
+	queryState: ListQueryParamsState<PublishReviewFilterDraft, SkillReviewListParams>
+	onMobileFilterOpenChange: (open: boolean) => void
+	mobileFilterOpen: boolean
 	refreshToken: number
 	variant: PublishReviewVariant
 }) {
@@ -55,20 +59,7 @@ export function SkillReviewPanel({
 	const hasPlatformEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_EDIT)
 	const hasInternalEditRight = useRights(PERMISSION_KEY_MAP.SKILL_REVIEW_EDIT)
 	const hasEditRight = variant === "platform" ? hasPlatformEditRight : hasInternalEditRight
-	const {
-		filterDraft,
-		page,
-		pageSize,
-		params,
-		setDebouncedField,
-		setFilterDraft,
-		setPage,
-		setPageSize,
-	} = useListQueryParams({
-		debounceFields: ["search_value"],
-		initialDraft: () => createDefaultFilterDraft("skill", variant),
-		toParams: toSkillReviewParams,
-	})
+	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const [reviewDialog, setReviewDialog] =
 		useState<ReviewDialogState<SkillVersionReviewItem>>(null)
 	const query = useSkillReviewListQuery(params, isActive, variant)
@@ -94,6 +85,7 @@ export function SkillReviewPanel({
 						fallbackIcon={<Sparkles className="size-4" aria-hidden="true" />}
 						name={getLocalizedText(row.original.name_i18n, language)}
 						secondary={`${t("publishReview.column.packageName")}: ${row.original.package_name || t("common.emptyValue")}`}
+						secondaryCopyValue={row.original.package_name || undefined}
 					/>
 				),
 			},
@@ -160,9 +152,10 @@ export function SkillReviewPanel({
 				kind="skill"
 				minWidth={1640}
 				onDraftChange={setFilterDraft}
+				onMobileFilterOpenChange={onMobileFilterOpenChange}
+				mobileFilterOpen={isActive && mobileFilterOpen}
 				onPageChange={setPage}
 				onPageSizeChange={setPageSize}
-				onSearchValueChange={(value) => setDebouncedField("search_value", value)}
 				page={page}
 				pageSize={pageSize}
 				queryError={query.error as ApiError | null}

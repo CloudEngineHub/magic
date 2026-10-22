@@ -35,6 +35,8 @@
 
 .header .name {
 	font-weight: var(--font-weight-semibold, 600);
+	font-size: var(--text-sm-font-size, 14px);
+	line-height: var(--text-sm-line-height, 20px);
 }
 
 .generation-status {

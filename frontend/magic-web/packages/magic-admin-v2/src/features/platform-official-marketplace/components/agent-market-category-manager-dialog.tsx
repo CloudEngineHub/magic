@@ -331,8 +331,8 @@ export function AgentMarketCategoryManagerDialog({
 						</DialogDescription>
 					</DialogHeader>
 
-					<div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
-						<div className="flex min-w-0 flex-wrap items-end gap-2">
+					<div className="min-h-0 flex-1 overflow-y-auto">
+						<div className="flex min-w-0 flex-wrap items-end gap-2 px-5 pt-5">
 							{/* Keep the two filters side by side on narrow screens; actions can wrap below them. */}
 							<div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:contents">
 								<FilterControlField
@@ -431,7 +431,7 @@ export function AgentMarketCategoryManagerDialog({
 							</Button>
 						</div>
 
-						<div>
+						<div className="mx-5 mb-5 mt-4">
 							{query.error ? (
 								<div className="p-5">
 									<EmptyState

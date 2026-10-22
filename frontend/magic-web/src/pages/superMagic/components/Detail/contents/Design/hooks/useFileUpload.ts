@@ -296,6 +296,7 @@ export function useFileUpload(options: UseFileUploadOptions): UseFileUploadRetur
 							storageType: "workspace",
 							source: UploadSource.Home,
 							onProgress: callbacks.onProgress,
+							onFileProgress: callbacks.onFileProgress,
 							onBatchSaveComplete: callbacks.onBatchSaveComplete,
 							onComplete: callbacks.onComplete,
 							onError: callbacks.onError,

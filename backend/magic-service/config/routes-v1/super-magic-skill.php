@@ -79,6 +79,7 @@ Router::addGroup('/api/v1', static function () {
         Router::post('/last-versions/queries', [SkillApi::class, 'queryLatestPublishedVersions']);
 
         // 获取技能协作者列表
+        Router::post('/{code}/transfer', [SkillApi::class, 'transfer']);
         Router::get('/{code}/collaborators', [SkillCollaboratorApi::class, 'index']);
 
         // 新增技能协作者

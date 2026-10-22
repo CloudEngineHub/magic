@@ -28,11 +28,11 @@ export function SortOrderCell<TRecord extends MarketRecord>({
 				onBlur={(event) =>
 					void tableState.updateSortOrder(record, Number(event.target.value || 0))
 				}
+				data-testid="platform-official-marketplace-input"
 				onKeyDown={(event) => {
 					if (event.key === "Enter") event.currentTarget.blur()
 				}}
-				type="number"
-			 data-testid="platform-official-marketplace-input"/>
+				type="number"/>
 			{isSaving ? <Loader2 className="size-4 animate-spin text-muted-foreground" /> : null}
 		</div>
 	)

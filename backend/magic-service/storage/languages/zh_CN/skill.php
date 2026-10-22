@@ -5,6 +5,8 @@ declare(strict_types=1);
  * Copyright (c) The Magic , Distributed under the software license
  */
 return [
+    'project_binding_conflict' => '该项目关联了多个技能，请先修复项目关联。',
+    'publish_preparation_stale' => '技能发布准备已过期或内容已变化，请重新准备并确认。',
     'import_concurrent_error' => '技能导入并发错误，请稍后重试',
     'invalid_file_format' => '无效的文件格式，仅支持 .skill 或 .zip 格式',
     'file_too_large' => '文件过大，文件大小不能超过 :max_size 字节',

@@ -225,6 +225,10 @@ export interface AssetComplianceResponse {
 	compliance_failed_reason: string | null
 }
 
+export interface BatchAssetComplianceResponse {
+	items: AssetComplianceResponse[]
+}
+
 export interface AssetTagGroupItem {
 	id: string
 	parentId: string | null
@@ -404,6 +408,18 @@ export const generateAssetsApi = (fetch: ServiceHttpClient) => ({
 				...response,
 				compliance_status: normalizeAssetComplianceStatus(response.compliance_status),
 			}))
+	},
+
+	/** 批量查询素材的异步合规状态，供多个进行中素材共享一次轮询请求。 */
+	batchGetAssetCompliance(params: BatchGetAssetsParams) {
+		return fetch
+			.post<BatchAssetComplianceResponse>("/api/v1/assets/batch-compliance", params)
+			.then((response) =>
+				response.items.map((item) => ({
+					...item,
+					compliance_status: normalizeAssetComplianceStatus(item.compliance_status),
+				})),
+			)
 	},
 
 	/** 查询官方和当前用户创建的标签树。 */

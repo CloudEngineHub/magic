@@ -13,8 +13,10 @@ use App\Application\SuperMagic\Project\DTO\Request\PublishedMicroAppListRequestD
 use App\Application\SuperMagic\Project\DTO\Request\PublishMicroAppRequestDTO;
 use App\Application\SuperMagic\Project\DTO\Request\UpdateMicroAppRequestDTO;
 use App\Application\SuperMagic\Project\Service\MicroAppProjectAppService;
+use App\Application\SuperMagic\Project\Service\MicroAppTransferAppService;
 use App\Application\SuperMagic\Project\Service\ProjectAppService;
 use App\Infrastructure\Util\Context\RequestContext;
+use App\Interfaces\SuperMagic\Common\DTO\Request\TransferResourceRequestDTO;
 use App\Interfaces\SuperMagic\Common\Support\Facade\AbstractApi;
 use Dtyq\ApiResponse\Annotation\ApiResponse;
 use Hyperf\HttpServer\Contract\RequestInterface;
@@ -28,6 +30,7 @@ class MicroAppProjectApi extends AbstractApi
     public function __construct(
         protected RequestInterface $request,
         private readonly ProjectAppService $projectAppService,
+        private readonly MicroAppTransferAppService $microAppTransferAppService,
         private readonly MicroAppProjectAppService $microAppProjectAppService
     ) {
         parent::__construct($request);
@@ -43,6 +46,12 @@ class MicroAppProjectApi extends AbstractApi
         $requestDTO = CreateMicroAppProjectRequestDTO::fromRequest($this->request);
 
         return $this->projectAppService->createMicroAppProject($requestContext, $requestDTO);
+    }
+
+    public function transfer(RequestContext $requestContext, int $appId): array
+    {
+        $requestContext->setUserAuthorization($this->getAuthorization());
+        return $this->microAppTransferAppService->transfer($requestContext, $appId, TransferResourceRequestDTO::fromRequest($this->request));
     }
 
     public function publish(RequestContext $requestContext, int $appId): array
