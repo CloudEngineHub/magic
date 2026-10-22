@@ -12,10 +12,8 @@ Instruction priority: system/developer instructions and the user's request take 
 
 ## Environment & Tooling
 - **Runtime**: Node.js ≥ 18, package manager is `pnpm` (v9+). Do not switch managers.
-- **Browser compatibility baseline**: The minimum supported browser is Chrome `100.0.4896.58`. This matches the Android DingTalk embedded browser released in March 2022. Some newer web APIs, JavaScript syntax, CSS features, and browser behaviors are unavailable or incomplete at this baseline.
-- When adding browser-facing code, verify the API and syntax against Chrome 100, use feature detection or a compatible fallback when needed, and validate critical flows in the DingTalk Android embedded browser. Do not assume that support in the latest Chrome or the current `browserslist` output implies support at the minimum baseline.
-- To install the baseline Chromium build locally for compatibility testing, run:
-  `npx @puppeteer/browsers install chromium@971463 --path /your/custom/path`
+- **Browser compatibility standard**: Chrome/Edge `111+`, Firefox `114+`, Safari `16.4+` are the supported minimums. Treat this range as the target for new browser-facing code.
+- Browsers below the supported minimum only receive the early upgrade prompt; no compatibility is promised for them. `package.json#browserslist` describes build output only and neither widens nor narrows this standard.
 - **Key commands**
   - `pnpm install` — install dependencies.
   - `pnpm dev` — HTTPS dev server on port 443.
