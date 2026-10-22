@@ -1960,9 +1960,7 @@ export class PPTStore {
 			void this.ensureSlideContent(index, priority)
 		})
 
-		if (this.config.autoLoadAndGenerate !== false && !this.isFullscreen) {
-			void this.ensureActiveSlidePreview()
-		}
+		// 导航只请求真实正文；缩略图由侧边栏可见范围和保存／插入等明确入口提出需求。
 	}
 
 	setActiveIndex(index: number): void {
