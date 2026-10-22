@@ -54,7 +54,6 @@ export function HelpDialogFrame({
 	onCloseAutoFocus,
 	header,
 	hasNavigation,
-	header,
 	children,
 }: Pick<HelpDialogProps, "id" | "help" | "onCloseAutoFocus" | "header"> & {
 	hasNavigation: boolean
