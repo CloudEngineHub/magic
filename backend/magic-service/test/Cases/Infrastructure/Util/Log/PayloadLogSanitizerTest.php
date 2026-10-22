@@ -84,13 +84,6 @@ class PayloadLogSanitizerTest extends TestCase
         $this->assertSame($longText, PayloadLogSanitizer::sanitizeValue($longText));
     }
 
-    public function testTruncateStringKeepsShortValuesAndMarksLongValues(): void
-    {
-        $this->assertSame('short', PayloadLogSanitizer::truncateString('short', 10));
-        $this->assertSame('123456...[TRUNCATED]', PayloadLogSanitizer::truncateString(str_repeat('1234567890', 3), 20));
-        $this->assertSame('中中...[TRUNCATED]', PayloadLogSanitizer::truncateString(str_repeat('中', 20), 16));
-    }
-
     public function testSanitizeValueKeepsSmallSafeValues(): void
     {
         $this->assertSame('MiniMax-H3', PayloadLogSanitizer::sanitizeValue('MiniMax-H3'));

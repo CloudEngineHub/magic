@@ -72,7 +72,6 @@ use App\Infrastructure\ImageGenerate\ImageWatermarkProcessor;
 use App\Infrastructure\ImageGenerate\WatermarkPolicyInterface;
 use App\Infrastructure\Util\Context\CoContext;
 use App\Infrastructure\Util\IdGenerator\IdGenerator;
-use App\Infrastructure\Util\Log\PayloadLogSanitizer;
 use App\Infrastructure\Util\SSRF\Exception\SSRFException;
 use App\Infrastructure\Util\SSRF\SSRFUtil;
 use App\Infrastructure\Util\StringMaskUtil;
@@ -107,8 +106,6 @@ use Throwable;
 
 class LLMAppService extends AbstractLLMAppService
 {
-    private const int MAX_WEB_LOG_VALUE_LENGTH = 2048;
-
     /**
      * Conversation endpoint memory cache prefix.
      */
@@ -680,7 +677,7 @@ class LLMAppService extends AbstractLLMAppService
             'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
             'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
             'provider' => $provider,
-            'url' => PayloadLogSanitizer::truncateString($webScrapeRequestDTO->getUrl(), self::MAX_WEB_LOG_VALUE_LENGTH),
+            'url' => $webScrapeRequestDTO->getUrl(),
             'formats' => $webScrapeRequestDTO->getFormats(),
             'mode' => $webScrapeRequestDTO->getMode(),
         ]);
@@ -705,15 +702,8 @@ class LLMAppService extends AbstractLLMAppService
             $this->logger->info('WebScrapeSuccess', [
                 'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
                 'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
-                'url' => PayloadLogSanitizer::truncateString($webScrapeRequestDTO->getUrl(), self::MAX_WEB_LOG_VALUE_LENGTH),
+                'url' => $webScrapeRequestDTO->getUrl(),
                 'provider' => $response->getProvider(),
-                'status' => 'success',
-                'content_length' => is_string($response->getContent()) ? mb_strlen($response->getContent(), 'UTF-8') : 0,
-                'content_truncated' => is_string($response->getContent())
-                    && mb_strlen($response->getContent(), 'UTF-8') > self::MAX_WEB_LOG_VALUE_LENGTH,
-                'content_preview' => is_string($response->getContent())
-                    ? PayloadLogSanitizer::truncateString($response->getContent(), self::MAX_WEB_LOG_VALUE_LENGTH)
-                    : '',
                 'response_time' => $responseTime,
             ]);
 
@@ -732,10 +722,8 @@ class LLMAppService extends AbstractLLMAppService
                 'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
                 'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
                 'provider' => $provider,
-                'status' => 'failed',
-                'url' => PayloadLogSanitizer::truncateString($webScrapeRequestDTO->getUrl(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'error' => PayloadLogSanitizer::truncateString($e->getMessage(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'response_time' => (int) ((microtime(true) - $startTime) * 1000),
+                'url' => $webScrapeRequestDTO->getUrl(),
+                'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
@@ -875,37 +863,15 @@ class LLMAppService extends AbstractLLMAppService
                 'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
                 'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
                 'engine' => $adapter->getEngineName(),
-                'provider' => $adapter->getEngineName(),
-                'query' => PayloadLogSanitizer::truncateString($searchRequestDTO->getQuery(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'status' => 'success',
+                'query' => $searchRequestDTO->getQuery(),
                 'result_count' => $webPages ? count($webPages->getValue()) : 0,
                 'total_matches' => $webPages ? $webPages->getTotalEstimatedMatches() : 0,
                 'response_time' => $responseTime,
             ]);
 
-            foreach ($webPages?->getValue() ?? [] as $index => $resultItem) {
-                $this->logger->info('UnifiedSearchResult', [
-                    'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
-                    'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
-                    'provider' => $adapter->getEngineName(),
-                    'status' => 'success',
-                    'result_index' => $index,
-                    'url' => PayloadLogSanitizer::truncateString($resultItem->getUrl(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                ]);
-            }
-
             // Return unified response (Bing-compatible format)
             return $unifiedResponse;
         } catch (BusinessException $e) {
-            $this->logger->error('UnifiedSearchFailed', [
-                'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
-                'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
-                'provider' => $adapter?->getEngineName() ?? ($provider ?? 'unknown'),
-                'query' => PayloadLogSanitizer::truncateString($searchRequestDTO->getQuery(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'status' => 'failed',
-                'error' => PayloadLogSanitizer::truncateString($e->getMessage(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'response_time' => (int) ((microtime(true) - $startTime) * 1000),
-            ]);
             $this->dispatchUnifiedSearchFailureAudit(
                 $searchRequestDTO,
                 $modelGatewayDataIsolation,
@@ -923,10 +889,8 @@ class LLMAppService extends AbstractLLMAppService
                 'organization_code' => $modelGatewayDataIsolation->getCurrentOrganizationCode(),
                 'user_id' => $modelGatewayDataIsolation->getCurrentUserId(),
                 'provider' => $provider ?? 'unknown',
-                'query' => PayloadLogSanitizer::truncateString($searchRequestDTO->getQuery(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'status' => 'failed',
-                'error' => PayloadLogSanitizer::truncateString($e->getMessage(), self::MAX_WEB_LOG_VALUE_LENGTH),
-                'response_time' => (int) ((microtime(true) - $startTime) * 1000),
+                'query' => $searchRequestDTO->getQuery(),
+                'error' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
