@@ -1,6 +1,7 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
-import { Trash2 } from "lucide-react"
+import { useDraggable } from "@dnd-kit/core"
+import { GripVertical, Trash2 } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import MagicTooltip from "@/components/base/MagicTooltip"
 import SmartTooltip from "@/components/other/SmartTooltip"
@@ -28,11 +29,40 @@ export function PPTBuildQueueItem({
 }) {
 	const { t } = useTranslation("super")
 	const id = useId()
+	const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, isDragging } =
+		useDraggable({
+			id: `item:${entry.selector}`,
+			disabled,
+			data: { type: "item", selector: entry.selector },
+		})
 	const groups = selected ? groupBuildQueue(entries) : []
 	const grouped = (groups.find((group) => group.step === entry.build.step)?.items.length ?? 0) > 1
 	return (
-		<li className={cn("rounded p-2", selected && "bg-accent")}>
+		<li
+			ref={setNodeRef}
+			style={
+				transform
+					? { transform: `translate(${transform.x}px, ${transform.y}px)` }
+					: undefined
+			}
+			className={cn(
+				"relative rounded bg-background p-2",
+				selected && "bg-accent",
+				isDragging && "z-20 opacity-80 shadow-md",
+			)}
+		>
 			<div className="flex min-w-0 items-center gap-1">
+				<button
+					type="button"
+					ref={setActivatorNodeRef}
+					disabled={disabled}
+					className="flex size-5 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label={t("ppt.build.dragItem")}
+					{...attributes}
+					{...listeners}
+				>
+					<GripVertical size={14} />
+				</button>
 				<button
 					type="button"
 					className="min-w-0 flex-1 rounded text-left text-sm hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"

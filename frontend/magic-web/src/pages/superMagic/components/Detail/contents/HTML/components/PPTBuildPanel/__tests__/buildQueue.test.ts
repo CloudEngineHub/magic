@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 import type { PPTBuildEntry } from "../../../iframe-bridge/types/props"
-import { appendBuildStep, groupBuildQueue, reorderBuildQueue } from "../buildQueue"
+import {
+	appendBuildStep,
+	groupBuildQueue,
+	NEW_STEP_DROP_ID,
+	reorderBuildQueue,
+	resolveItemDrop,
+} from "../buildQueue"
 
 const entry = (selector: string, step: number): PPTBuildEntry => ({
 	selector,
@@ -39,5 +45,31 @@ describe("build queue", () => {
 			["c", 3, "appear"],
 		])
 		expect(appendBuildStep([entry("a", 7)], "b")[0].build?.step).toBe(8)
+	})
+
+	it("moves an element into another step, keeping its effect", () => {
+		const entries = [
+			entry("a", 1),
+			{ ...entry("b", 2), build: { step: 2, effect: "appear" as const } },
+		]
+		expect(resolveItemDrop(entries, "b", 1)).toEqual([
+			{ selector: "b", build: { step: 1, effect: "appear" } },
+		])
+	})
+
+	it("ignores drops that change nothing", () => {
+		const entries = [entry("a", 1), entry("b", 1), entry("c", 2)]
+		expect(resolveItemDrop(entries, "a", 1)).toEqual([])
+		expect(resolveItemDrop(entries, "missing", 2)).toEqual([])
+		expect(resolveItemDrop(entries, "a", "other")).toEqual([])
+		// c is alone in its step already
+		expect(resolveItemDrop(entries, "c", NEW_STEP_DROP_ID)).toEqual([])
+	})
+
+	it("splits an element out of a shared step into a new last step", () => {
+		const entries = [entry("a", 1), entry("b", 1), entry("c", 2)]
+		expect(resolveItemDrop(entries, "a", NEW_STEP_DROP_ID)).toEqual([
+			{ selector: "a", build: { step: 3, effect: "fade" } },
+		])
 	})
 })

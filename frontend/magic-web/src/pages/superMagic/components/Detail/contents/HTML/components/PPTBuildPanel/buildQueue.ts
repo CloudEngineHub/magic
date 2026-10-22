@@ -57,3 +57,25 @@ export function appendBuildStep(
 		},
 	]
 }
+
+export const NEW_STEP_DROP_ID = "new-step"
+
+/**
+ * Updates for dropping one element onto a step (its numeric step) or the new-step zone.
+ * Dropping where it already is changes nothing, and a lone element already is its own step.
+ */
+export function resolveItemDrop(
+	entries: PPTBuildEntry[],
+	selector: string,
+	overId: string | number,
+): PPTBuildUpdate[] {
+	const entry = entries.find((item) => item.selector === selector)
+	if (!entry) return []
+	if (overId === NEW_STEP_DROP_ID) {
+		const own = groupBuildQueue(entries).find((group) => group.step === entry.build.step)
+		if (own && own.items.length === 1) return []
+		return appendBuildStep(entries, selector, entry.build.effect)
+	}
+	if (typeof overId !== "number" || overId === entry.build.step) return []
+	return [{ selector, build: { ...entry.build, step: overId } }]
+}

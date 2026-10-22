@@ -6,8 +6,12 @@ import {
 	KeyboardSensor,
 	PointerSensor,
 	closestCenter,
+	pointerWithin,
+	rectIntersection,
+	useDroppable,
 	useSensor,
 	useSensors,
+	type CollisionDetection,
 	type DragEndEvent,
 } from "@dnd-kit/core"
 import {
@@ -36,7 +40,13 @@ import { cn } from "@/utils/cn"
 import type { HTMLEditorV2Ref } from "../../iframe-bridge/types/props"
 import { useStylePanelStore } from "../../iframe-bridge/contexts/StylePanelContext"
 import { useSelectedElement } from "../StylePanel/hooks/useSelectedElement"
-import { appendBuildStep, groupBuildQueue, reorderBuildQueue } from "./buildQueue"
+import {
+	appendBuildStep,
+	groupBuildQueue,
+	NEW_STEP_DROP_ID,
+	reorderBuildQueue,
+	resolveItemDrop,
+} from "./buildQueue"
 import { usePPTBuildQueue } from "./usePPTBuildQueue"
 import { PPTBuildQueueItem } from "./PPTBuildQueueItem"
 
@@ -88,8 +98,22 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 	)
 	const selected = entries.find((entry) => entry.selector === selectedElement?.selector)
 	const move = (from: number, to: number) => void update(reorderBuildQueue(entries, from, to))
+	const [draggingItem, setDraggingItem] = useState(false)
+	// Moving an element is aimed with the pointer; reordering whole steps keeps sorting behavior.
+	const collisionDetection: CollisionDetection = (args) => {
+		if (args.active.data.current?.type !== "item") return closestCenter(args)
+		const hits = pointerWithin(args)
+		return hits.length ? hits : rectIntersection(args)
+	}
 	const onDragEnd = ({ active, over }: DragEndEvent) => {
+		setDraggingItem(false)
 		if (!over || active.id === over.id || locked) return
+		const data = active.data.current
+		if (data?.type === "item") {
+			const updates = resolveItemDrop(entries, data.selector as string, over.id)
+			if (updates.length) void update(updates)
+			return
+		}
 		const from = groups.findIndex((group) => group.step === active.id)
 		const to = groups.findIndex((group) => group.step === over.id)
 		if (from >= 0 && to >= 0) move(from, to)
@@ -193,7 +217,11 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 				) : (
 					<DndContext
 						sensors={sensors}
-						collisionDetection={closestCenter}
+						collisionDetection={collisionDetection}
+						onDragStart={({ active }) =>
+							setDraggingItem(active.data.current?.type === "item")
+						}
+						onDragCancel={() => setDraggingItem(false)}
 						onDragEnd={onDragEnd}
 					>
 						<SortableContext
@@ -260,6 +288,9 @@ export const PPTBuildPanel = observer(function PPTBuildPanel({
 								))}
 							</ol>
 						</SortableContext>
+						{draggingItem ? (
+							<NewStepDropZone label={t("ppt.build.dropNewStep")} />
+						) : null}
 					</DndContext>
 				)}
 			</ScrollArea>
@@ -301,7 +332,7 @@ function SortableStep({
 		transform,
 		transition,
 		isDragging,
-	} = useSortable({ id, disabled: locked })
+	} = useSortable({ id, disabled: locked, data: { type: "group" } })
 	return (
 		<li
 			ref={setNodeRef}
@@ -345,5 +376,20 @@ function SortableStep({
 			</div>
 			{children}
 		</li>
+	)
+}
+
+function NewStepDropZone({ label }: { label: string }) {
+	const { setNodeRef, isOver } = useDroppable({ id: NEW_STEP_DROP_ID })
+	return (
+		<div
+			ref={setNodeRef}
+			className={cn(
+				"mt-3 rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground",
+				isOver && "border-primary bg-accent text-foreground",
+			)}
+		>
+			{label}
+		</div>
 	)
 }
