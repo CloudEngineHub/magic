@@ -24,8 +24,18 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 - The bottom line opens with a decision badge (`decision-go`, `decision-conditional`, or `decision-nogo` in the default template) and a one-sentence answer before any detail; recommendations follow it, while findings retain the counter-evidence and uncertainty that qualify it.
 - State next to the opening answer that interviewees are AI-simulated and give clearly labeled whole-study totals: completed AI interviews, external sources reviewed, and real-person validation status. Put planned, failed and downweighted sample accounting in `method` and `limitations`; these numbers do not measure support for a claim. Follow methods.md for qualitative frequency wording and evidence judgments.
 - Charts and data tables are optional inline fragments chosen by report-charts.md, placed in `findings` (or `hypotheses`), never in `summary`. They carry their own styles, so any template shows them; a report without them is correct when the data does not warrant one.
-- Replace every sample text in the template with study content, and set `<html lang>` to the user's language.
+- Replace every sample text in the template with study content, and set `<html lang>` to the user's language. This includes short labels the template shows in English, such as verdict, decision and confidence badges and the labels inside its scripts (marked TRANSLATE); no English badge text may remain for a non-English reader.
 - Keep the template's own scripts. Behaviour a template lacks (citation popovers, persona portraits) is not added; citations then work as plain anchor links.
+
+### Build report.html From the Template File
+
+Never retype or rewrite a template: a full template is too long to reproduce, and a hand-written page loses its navigation, styles, scripts and structure. Build the report from the file itself:
+
+1. Copy the chosen template file to `studies/<slug>/report.html` with code, not by writing its text out. For example: `shutil.copyfile("templates/voices.html", "studies/<slug>/report.html")`.
+2. Edit the copy in place with `edit_file` or `multi_edit_file`, one section at a time. Replace only the sample content (text, quotes, citations, badges, figures); keep `<head>`, the `<style>` and `<script>` blocks, section ids, class names and data attributes. Duplicate a sample row for each extra item; delete a row or section only when it does not apply.
+3. Before sending `report_written`, search the file for sample leftovers (`Zhang Wei`, `Li Na`, `Illustrative`, `example.com`, `image-placeholder`) and for English badge text; fix anything found.
+
+A report whose HTML has none of the template's section ids, `<nav class="top-bar">`, contents list or script blocks was not built from the template; rebuild it.
 
 ## Write for a Reader Making a Decision
 
