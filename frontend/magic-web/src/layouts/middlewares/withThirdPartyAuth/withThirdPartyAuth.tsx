@@ -22,6 +22,7 @@ import { defaultClusterCode } from "@/routes/helpers"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { authEventBus } from "@/services/auth/AuthEventBus"
 import { AuthEventName } from "@/services/auth/AuthEvents"
+import { isAccountDisabledError } from "@/services/auth/AuthFailureClassifier"
 
 const logger = Logger.createLogger("withThirdPartyAuth")
 
@@ -39,6 +40,8 @@ export function withThirdPartyAuth<T extends object>(
 ) {
 	return function WithThirdPartyAuth(props: T) {
 		const { t } = useTranslation("interface")
+		/** 登录流程的提示文案单独取 login 命名空间，避免与界面文案混用。 */
+		const { t: tLogin } = useTranslation("login")
 
 		const { setClusterCode } = useClusterCode()
 		const { setAuthorization } = useAuthorization()
@@ -239,6 +242,16 @@ export function withThirdPartyAuth<T extends object>(
 								throw new Error("thirdPartyAuthDeployCode is required")
 							}
 						} catch (err) {
+							/*
+							 * 账号被平台禁用（3109）是确定的终态：继续走临时码换 token 或免登
+							 * 只会再撞一次同样的错误，因此这里直接提示并终止整个免登初始化。
+							 */
+							if (isAccountDisabledError(err)) {
+								magicToast.error(
+									tLogin("magicOrganizationSyncStep.accountDisabled"),
+								)
+								return
+							}
 							// Prohibit the non login process when there is a temporary authorization code
 							if (tempAuthorizationCode) {
 								await generateAuthorizationToken(tempAuthorizationCode)
