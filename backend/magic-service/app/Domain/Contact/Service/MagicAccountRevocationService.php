@@ -11,8 +11,22 @@ use App\Domain\Contact\Entity\ValueObject\AccountStatus;
 use App\Domain\Token\Entity\ValueObject\MagicTokenType;
 use Hyperf\DbConnection\Db;
 
+/**
+ * 账号禁用及凭证撤销领域服务。
+ *
+ * 禁用账号时同时清理账号级、用户级及模型网关凭证，并停用关联 API Key。
+ * 组织成员关系和成员状态不在这里修改，避免覆盖通讯录同步结果。
+ */
 class MagicAccountRevocationService
 {
+    /** @var int[] */
+    private const array USER_TOKEN_TYPES = [
+        MagicTokenType::User->value,
+        MagicTokenType::PersonalAccessToken->value,
+        MagicTokenType::RefreshToken->value,
+        MagicTokenType::ModelGatewayUser->value,
+    ];
+
     public function __construct(
         private readonly MagicAccountStatusService $statusService,
     ) {
@@ -21,69 +35,83 @@ class MagicAccountRevocationService
     /**
      * 禁用账号并撤销该账号下的本地凭证。
      *
-     * Redis 中已经缓存的授权对象仍可能在其 60 秒 TTL 内被使用，缓存过期后会因数据库凭证已撤销而失效。
-     *
      * @return array{
      *     magic_id: string,
      *     already_disabled: bool,
      *     user_count: int,
      *     account_tokens: int,
      *     user_tokens: int,
+     *     refresh_tokens: int,
+     *     model_gateway_tokens: int,
      *     api_keys: int
      * }
      */
     public function revoke(string $magicId): array
     {
         return Db::transaction(function () use ($magicId): array {
-            $alreadyDisabled = ! $this->statusService->updateStatus($magicId, AccountStatus::Disable);
+            $changed = $this->statusService->updateStatus($magicId, AccountStatus::Disable);
 
             $userIds = Db::table('magic_contact_users')
                 ->where('magic_id', $magicId)
+                ->whereNull('deleted_at')
                 ->pluck('user_id')
-                ->filter(static fn ($userId): bool => (string) $userId !== '')
-                ->map(static fn ($userId): string => (string) $userId)
+                ->filter(static fn (mixed $userId): bool => (string) $userId !== '')
+                ->map(static fn (mixed $userId): string => (string) $userId)
                 ->unique()
                 ->values()
                 ->all();
 
             $accountTokens = Db::table('magic_tokens')
                 ->where('type', MagicTokenType::Account->value)
-                ->where('type_relation_value', $magicId)
-                ->delete();
+                ->where('type_relation_value', $magicId);
+            $accountTokenCount = (int) $accountTokens->count();
+            if ($accountTokenCount > 0) {
+                $accountTokens->delete();
+            }
 
-            $userTokens = 0;
-            $apiKeys = 0;
+            $userTokenCount = 0;
+            $refreshTokenCount = 0;
+            $modelGatewayTokenCount = 0;
             if ($userIds !== []) {
                 $userTokens = Db::table('magic_tokens')
-                    ->whereIn('type', [
-                        MagicTokenType::User->value,
-                        MagicTokenType::PersonalAccessToken->value,
-                        MagicTokenType::RefreshToken->value,
-                        MagicTokenType::ModelGatewayUser->value,
-                    ])
-                    ->whereIn('type_relation_value', $userIds)
-                    ->delete();
+                    ->whereIn('type', self::USER_TOKEN_TYPES)
+                    ->whereIn('type_relation_value', $userIds);
+                $userTokenCount = (int) $userTokens->count();
+                $refreshTokenCount = (int) (clone $userTokens)
+                    ->where('type', MagicTokenType::RefreshToken->value)
+                    ->count();
+                $modelGatewayTokenCount = (int) (clone $userTokens)
+                    ->where('type', MagicTokenType::ModelGatewayUser->value)
+                    ->count();
+                if ($userTokenCount > 0) {
+                    $userTokens->delete();
+                }
+            }
 
+            $apiKeyCount = 0;
+            if ($userIds !== []) {
                 $apiKeys = Db::table('magic_api_access_tokens')
-                    ->where('type', 'user')
-                    ->whereNull('deleted_at')
-                    ->where(static function ($query) use ($userIds): void {
-                        $query->whereIn('relation_id', $userIds)
-                            ->orWhereIn('user_id', $userIds);
-                    })
-                    ->update([
+                    ->whereIn('user_id', $userIds)
+                    ->where('enabled', 1)
+                    ->whereNull('deleted_at');
+                $apiKeyCount = (int) $apiKeys->count();
+                if ($apiKeyCount > 0) {
+                    $apiKeys->update([
                         'enabled' => 0,
                         'updated_at' => date('Y-m-d H:i:s'),
                     ]);
+                }
             }
 
             return [
                 'magic_id' => $magicId,
-                'already_disabled' => $alreadyDisabled,
+                'already_disabled' => ! $changed,
                 'user_count' => count($userIds),
-                'account_tokens' => $accountTokens,
-                'user_tokens' => $userTokens,
-                'api_keys' => $apiKeys,
+                'account_tokens' => $accountTokenCount,
+                'user_tokens' => $userTokenCount,
+                'refresh_tokens' => $refreshTokenCount,
+                'model_gateway_tokens' => $modelGatewayTokenCount,
+                'api_keys' => $apiKeyCount,
             ];
         });
     }

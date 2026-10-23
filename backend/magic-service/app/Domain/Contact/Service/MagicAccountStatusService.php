@@ -11,6 +11,11 @@ use App\Domain\Contact\Entity\ValueObject\AccountStatus;
 use App\Domain\Contact\Repository\Facade\MagicAccountRepositoryInterface;
 use Hyperf\DbConnection\Db;
 
+/**
+ * 账号状态领域服务。
+ *
+ * 状态变更集中在 magic-service，统一复用账号仓储的行锁和缓存失效逻辑。
+ */
 class MagicAccountStatusService
 {
     public function __construct(
@@ -18,6 +23,11 @@ class MagicAccountStatusService
     ) {
     }
 
+    /**
+     * 启用账号。
+     *
+     * @return bool 是否发生了状态变更
+     */
     public function enable(string $magicId): bool
     {
         return Db::transaction(function () use ($magicId): bool {
@@ -26,7 +36,9 @@ class MagicAccountStatusService
     }
 
     /**
-     * Update an account status inside the caller's transaction.
+     * 在调用方事务中更新账号状态。
+     *
+     * @return bool 是否发生了状态变更
      */
     public function updateStatus(string $magicId, AccountStatus $targetStatus): bool
     {
