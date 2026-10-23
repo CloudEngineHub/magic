@@ -50,6 +50,10 @@ use App\Application\Notification\Strategy\NotificationCatalogStrategyInterface;
 use App\Application\Provider\Policy\DefaultProviderControlPolicy;
 use App\Application\Provider\Policy\ProviderControlPolicyInterface;
 use App\Application\SuperMagic\Message\Event\Subscribe\SuperAgentMessageSubscriberV2;
+use App\Application\SuperMagic\Review\Service\CreatorReviewNotificationRecipients;
+use App\Application\SuperMagic\Review\Service\ReviewNotificationAppService;
+use App\Application\SuperMagic\Review\Service\ReviewNotificationAppServiceFactory;
+use App\Application\SuperMagic\Review\Service\ReviewNotificationRecipientsInterface;
 use App\Domain\Admin\Repository\Facade\AdminGlobalSettingsRepositoryInterface;
 use App\Domain\Admin\Repository\Persistence\AdminGlobalSettingsRepository;
 use App\Domain\Agent\Repository\Facade\AgentRepositoryInterface;
@@ -394,6 +398,8 @@ use Hyperf\SocketIOServer\SidProvider\SidProviderInterface;
 use Psr\Http\Client\ClientInterface;
 
 $dependencies = [
+    ReviewNotificationAppService::class => ReviewNotificationAppServiceFactory::class,
+    ReviewNotificationRecipientsInterface::class => CreatorReviewNotificationRecipients::class,
     NotificationCatalogStrategyInterface::class => DefaultNotificationCatalogStrategy::class,
     NotificationEventPublisherInterface::class => NotificationEventAppService::class,
     NotificationEventTypeRegistry::class => NotificationEventTypeRegistry::class,

@@ -86,6 +86,7 @@ final class TaskNotificationSubscriber implements ListenerInterface
         $labels = $this->container->get(TaskNotificationLabelResolver::class)->resolve(event: $event);
         $payload = [
             'resource_type' => 'project',
+            'resource_id' => $labels['project_id'],
             'task_id' => $taskId,
             'topic_id' => (string) $event->getTopicId(),
             'task_name' => $labels['topic_name'],

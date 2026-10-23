@@ -50,10 +50,6 @@ final readonly class ShareNotificationAppService
             return;
         }
 
-        $currentRecipients = $after->getShareType() === ShareAccessType::TeamShare->value
-            ? $this->resolveRecipients($after)
-            : [];
-
         // A soft-deleted share starts a new notification cycle when it is
         // restored. Do not carry the previous cycle's recipient snapshot into
         // the new share, otherwise re-sharing to the same user is treated as
@@ -63,7 +59,23 @@ final readonly class ShareNotificationAppService
             && $before->getShareType() === ShareAccessType::TeamShare->value
             ? $this->snapshot($before)
             : [];
-        $newRecipients = array_values(array_diff($currentRecipients, $previous));
+        // Access scope is not a mailing list. Keep only the existing notification
+        // snapshot so cancellation can still withdraw previously delivered messages.
+        if ($after->getShareType() === ShareAccessType::TeamShare->value && $after->getShareRange() === 'all') {
+            $extra = $after->getExtra() ?? [];
+            $extra[self::RECIPIENT_SNAPSHOT] = $previous;
+            $after->setExtra($extra);
+            return;
+        }
+
+        $currentRecipients = $after->getShareType() === ShareAccessType::TeamShare->value
+            ? $this->resolveRecipients($after)
+            : [];
+        // Legacy all-team snapshots may include queued events that were skipped.
+        // Re-enqueue selected recipients; notification source keys remain idempotent.
+        $newRecipients = $before?->getShareRange() === 'all'
+            ? $currentRecipients
+            : array_values(array_diff($currentRecipients, $previous));
         $removedRecipients = array_values(array_diff($previous, $currentRecipients));
 
         // 快照仅表示当前仍持有分享消息的对象。不能累积历史收件人，
@@ -192,14 +204,7 @@ final readonly class ShareNotificationAppService
     {
         $organizationCode = $share->getOrganizationCode();
         $userIds = [];
-        if ($share->getShareRange() === 'all') {
-            $cursor = null;
-            do {
-                $batch = $this->users->getActiveUserIdsByOrganization($organizationCode, $cursor, self::RECIPIENT_BATCH_SIZE);
-                $userIds = array_merge($userIds, $batch);
-                $cursor = $batch === [] ? null : $batch[array_key_last($batch)];
-            } while ($batch !== [] && count($batch) === self::RECIPIENT_BATCH_SIZE);
-        } elseif ($share->getShareRange() === 'designated') {
+        if ($share->getShareRange() === 'designated') {
             $userTargetIds = [];
             $departmentIds = [];
             foreach ($share->getTargetIdsArray() as $target) {

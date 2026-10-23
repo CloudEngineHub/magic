@@ -84,13 +84,22 @@ final readonly class NotificationConsumerService
                 }
                 $this->logger->info('Task notification event skipped because task notifications are disabled', [
                     'event_id' => $eventId,
-                    'event_type' => $event->getEventType()?->value,
+                    'event_type' => $event->getEventType()->value,
                     'notification_count' => 0,
                 ]);
                 return;
             }
 
             $envelope = EventEnvelope::fromArray($this->validator->validate($event->getEventPayload()));
+            // Drain queued broadcasts without affecting cancellation events.
+            if (in_array($envelope->eventType, ['share.project.recipients_added', 'share.file.recipients_added'], true)
+                && in_array($envelope->payload['share_scope'] ?? null, ['all', '全员'], true)) {
+                if (! $this->events->markSucceeded($eventId, $token, 0, date('Y-m-d H:i:s'))) {
+                    throw new RuntimeException('Notification event lease was lost');
+                }
+                $this->logger->info('All-team share notification event skipped', ['event_id' => $eventId, 'notification_count' => 0]);
+                return;
+            }
             $notificationCount = Db::transaction(function () use ($event, $envelope, $eventId, $token): int {
                 $count = $this->consumeEnvelope($event, $envelope);
                 if (! $this->events->markSucceeded($eventId, $token, $count, date('Y-m-d H:i:s'))) {

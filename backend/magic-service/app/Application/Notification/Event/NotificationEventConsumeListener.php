@@ -12,7 +12,10 @@ use Dtyq\AsyncEvent\Kernel\Annotation\AsyncListener;
 use Hyperf\Event\Annotation\Listener;
 use Hyperf\Event\Contract\ListenerInterface;
 
-#[AsyncListener]
+// Collaboration producers publish inside a transaction. The coroutine driver
+// defers consumption until that coroutine exits, after its transaction commits;
+// an AMQP worker can otherwise receive an uncommitted async-event record.
+#[AsyncListener(driver: 'coroutine')]
 #[Listener]
 final readonly class NotificationEventConsumeListener implements ListenerInterface
 {

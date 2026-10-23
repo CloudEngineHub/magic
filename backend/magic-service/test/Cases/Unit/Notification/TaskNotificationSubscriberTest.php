@@ -24,6 +24,8 @@ use App\Domain\SuperMagic\Topic\Service\TopicDomainService;
 use App\Domain\SuperMagic\Workspace\Entity\WorkspaceEntity;
 use App\Domain\SuperMagic\Workspace\Service\WorkspaceDomainService;
 use App\Interfaces\SuperMagic\Message\DTO\TopicTaskMessageDTO;
+use Hyperf\Config\Config;
+use Hyperf\Contract\ConfigInterface;
 use Hyperf\Logger\LoggerFactory;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
@@ -210,6 +212,16 @@ final class TaskNotificationSubscriberTest extends TestCase
         $subscriber->process($event);
     }
 
+    public function testDisabledTaskNotificationsDoNotSubscribeOrPublishQueuedCallbacks(): void
+    {
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::never())->method('publish');
+        [$subscriber, $event] = $this->subscriberAndEvent('finished', $publisher, expectPublisher: false, taskEnabled: false);
+
+        self::assertSame([], $subscriber->listen());
+        $subscriber->process($event);
+    }
+
     public function testRepeatedCallbackKeepsStableIdempotencyIdentity(): void
     {
         $published = [];
@@ -251,6 +263,7 @@ final class TaskNotificationSubscriberTest extends TestCase
         bool $withLabels = false,
         bool $withMetadataLabels = false,
         array $eventLabels = [],
+        bool $taskEnabled = true,
     ): array {
         $logger = $this->createMock(LoggerInterface::class);
         $loggerFactory = $this->createMock(LoggerFactory::class);
@@ -312,6 +325,7 @@ final class TaskNotificationSubscriberTest extends TestCase
                 $workspaceService,
             ): object {
                 return match ($id) {
+                    ConfigInterface::class => new Config(['notification' => ['task_enabled' => true]]),
                     NotificationEventPublisherInterface::class => $publisher,
                     TaskNotificationLabelResolver::class => $labelResolver,
                     TopicDomainService::class => $topicService,
@@ -321,7 +335,9 @@ final class TaskNotificationSubscriberTest extends TestCase
                 };
             });
         } else {
-            $container->expects(self::never())->method('get');
+            $container->expects(self::exactly($taskEnabled ? 1 : 2))->method('get')
+                ->with(ConfigInterface::class)
+                ->willReturn(new Config(['notification' => ['task_enabled' => $taskEnabled]]));
         }
 
         return [new TaskNotificationSubscriber($container, $loggerFactory), $event];
