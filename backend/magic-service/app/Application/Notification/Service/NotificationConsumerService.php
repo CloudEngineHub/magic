@@ -84,7 +84,7 @@ final readonly class NotificationConsumerService
                 }
                 $this->logger->info('Task notification event skipped because task notifications are disabled', [
                     'event_id' => $eventId,
-                    'event_type' => $event->getEventType()?->value,
+                    'event_type' => $event->getEventType()->value,
                     'notification_count' => 0,
                 ]);
                 return;
