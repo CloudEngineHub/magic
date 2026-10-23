@@ -717,6 +717,7 @@ readonly class VideoOperationAppService
         return [
             'model' => $estimateRequest->getModelId(),
             'provider_model_id' => $estimateRequest->getProviderModelId(),
+            'provider_code' => $estimateRequest->getProviderCode(),
             'resolution' => $estimateRequest->getResolution(),
             'output_duration_seconds' => $estimateRequest->getOutputDurationSeconds(),
             'output_width' => $estimateRequest->getOutputWidth(),
@@ -724,6 +725,7 @@ readonly class VideoOperationAppService
             'input_video_duration_seconds' => $estimateRequest->getInputVideoDurationSeconds(),
             'has_reference_video' => $estimateRequest->hasReferenceVideo(),
             'has_audio_output' => $estimateRequest->hasAudioOutput(),
+            'input_media' => $estimateRequest->getInputMedia(),
             'reference_material' => $referenceMaterial,
             'topic_id' => $operation->getTopicId(),
             'task_id' => $operation->getTaskId(),
