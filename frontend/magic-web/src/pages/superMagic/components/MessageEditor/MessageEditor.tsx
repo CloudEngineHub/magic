@@ -9,10 +9,18 @@ const MessageEditorRuntime = React.lazy(() =>
 	})),
 )
 
-export const MessageEditor = React.forwardRef<MessageEditorRef, MessageEditorProps>(
-	function MessageEditor(props, ref) {
+interface MessageEditorLoaderProps extends MessageEditorProps {
+	/**
+	 * Shown while the editor runtime loads. Defaults to nothing; a composer that is visible before
+	 * the runtime arrives (e.g. the desktop project page) passes a skeleton so it never looks empty.
+	 */
+	loadingFallback?: React.ReactNode
+}
+
+export const MessageEditor = React.forwardRef<MessageEditorRef, MessageEditorLoaderProps>(
+	function MessageEditor({ loadingFallback = null, ...props }, ref) {
 		return (
-			<React.Suspense fallback={null}>
+			<React.Suspense fallback={loadingFallback}>
 				<MessageEditorRuntime {...props} ref={ref} />
 			</React.Suspense>
 		)

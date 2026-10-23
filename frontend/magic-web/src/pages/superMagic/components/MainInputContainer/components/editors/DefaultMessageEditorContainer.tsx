@@ -26,7 +26,9 @@ import { useOfficialPromptsPayload } from "@/pages/superMagic/hooks/useOfficialP
 import useTopicExamplesPortal from "@/pages/superMagic/hooks/useTopicExamplesPortal"
 import GlobalMentionPanelStore from "@/components/business/MentionPanel/builtin-store"
 import type { SceneEditorContext, SceneEditorNodes } from "./types"
-import { useOptionalSceneStateStore } from "../../stores"
+import { useOptionalScenePanelVariant, useOptionalSceneStateStore } from "../../stores"
+import { ScenePanelVariant } from "../LazyScenePanel/types"
+import MessageEditorSkeleton from "../skeleton/MessageEditorSkeleton"
 import { cn } from "@/utils/cn"
 import { generateTextFromJSONContent } from "@/pages/superMagic/components/MessageEditor/utils"
 import { TaskStatus } from "@/pages/superMagic/pages/Workspace/types"
@@ -50,6 +52,10 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 	const { t } = useTranslation("super")
 	const lt = useLocaleText()
 	const isMobile = useIsMobile()
+	// The desktop project composer shell is already on screen when the lazy editor runtime starts
+	// loading; keep the scene's loading skeleton in it until the editor arrives.
+	const scenePanelVariant = useOptionalScenePanelVariant()
+	const isDesktopProjectScene = !isMobile && scenePanelVariant === ScenePanelVariant.TopicPage
 	const sceneStateStore = useOptionalSceneStateStore()
 	const inputLayout = useConversationInputLayout()
 	// Only fixed conversation panels ask the shared editor to occupy all available height.
@@ -533,6 +539,7 @@ export default function DefaultMessageEditorContainer(props: DefaultMessageEdito
 			<div className={cn("min-h-0", shouldFillHeight && "flex-1")}>
 				<MessageEditor
 					ref={bindEditorRef}
+					loadingFallback={isDesktopProjectScene ? <MessageEditorSkeleton /> : null}
 					headerContent={<QueueDraftNotice context={queueContext} />}
 					{...editorStyleProps}
 					placeholder={placeholder}
