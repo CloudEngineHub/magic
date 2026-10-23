@@ -42,6 +42,11 @@ import type {
 } from "../types"
 import { buildShareClipboardText } from "../utils/buildShareClipboardText"
 import { isOrganizationShareScopeAll } from "@/pages/superMagic/components/ShareManagement/utils/shareScopeSummary"
+import { ensureOrganizationAllMembersShareConfirmed } from "@/pages/superMagic/components/Share/utils/organizationShareConfirm"
+import {
+	DEFAULT_NEW_ORGANIZATION_SHARE_RANGE,
+	isOrganizationDesignatedShareIncomplete,
+} from "@/pages/superMagic/components/Share/utils/organizationShareGuards"
 import { isPartialFileShare, isWholeProjectShare } from "../utils/shareScope"
 import {
 	buildRecordingShareSelection,
@@ -73,7 +78,7 @@ function createInitialFormState(
 		shareType: isFreePlan ? ShareType.Public : ShareType.PasswordProtected,
 		shareExpiry: null,
 		password: generateSharePassword(),
-		shareRange: "all",
+		shareRange: DEFAULT_NEW_ORGANIZATION_SHARE_RANGE,
 		shareTargets: [],
 		advancedSettings: {
 			allowCopy: true,
@@ -1006,8 +1011,8 @@ export function useProjectShareSheet({
 		setMemberSelectorOpen(false)
 		setFormState((prev) => ({
 			...prev,
-			// For mobile, selecting members implies sharing with a designated scope, preventing fallback to organization-wide visibility during submission.
-			shareRange: normalizedMembers.length > 0 ? "designated" : "all",
+			// Keep explicit "all team" choice; designated scope stays designated even when the list is empty.
+			shareRange: prev.shareRange === "all" ? "all" : DEFAULT_NEW_ORGANIZATION_SHARE_RANGE,
 			shareTargets: normalizedMembers.map((item) => ({
 				target_type: isShareMemberUser(item) ? "User" : "Department",
 				target_id: item.id,
@@ -1112,6 +1117,24 @@ export function useProjectShareSheet({
 			magicToast.warning(t("share.noShareableFiles"))
 			return
 		}
+
+		if (
+			isOrganizationDesignatedShareIncomplete(
+				formState.shareType,
+				formState.shareRange,
+				formState.shareTargets.length,
+			)
+		) {
+			magicToast.error(t("share.organizationDesignatedMembersRequired"))
+			return
+		}
+
+		const confirmed = await ensureOrganizationAllMembersShareConfirmed(
+			formState.shareType,
+			formState.shareRange,
+			t,
+		)
+		if (!confirmed) return
 
 		setSaving(true)
 		try {

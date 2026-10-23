@@ -16,6 +16,7 @@ import type { ShareRange, ShareTarget } from "@/pages/superMagic/components/Shar
 import type { AttachmentItem } from "@/pages/superMagic/components/TopicFilesButton/hooks"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
+import { ensureOrganizationAllMembersShareConfirmed } from "@/pages/superMagic/components/Share/utils/organizationShareConfirm"
 import { useShareTypePermissions } from "@/pages/superMagic/components/Share/hooks/useShareTypePermissions"
 import {
 	canCreateShareType,
@@ -121,7 +122,11 @@ function MicroAppPublishDialog({
 		[formState, hasPublished, publishedFormState],
 	)
 	const validationError = useMemo(() => getMicroAppPublishValidationError(formState), [formState])
-	const validationMessage = validationError ? t(`microAppPage.publish.${validationError}`) : ""
+	const validationMessage = validationError
+		? validationError === "organizationDesignatedMembersRequired"
+			? t("share.organizationDesignatedMembersRequired")
+			: t(`microAppPage.publish.${validationError}`)
+		: ""
 
 	useEffect(() => {
 		if (!open || !appId) return
@@ -373,9 +378,21 @@ function MicroAppPublishDialog({
 		if (!hasPublished && !canCreateShareType(formState.shareType, isFreePlan)) return
 		const nextValidationError = getMicroAppPublishValidationError(formState)
 		if (nextValidationError) {
-			magicToast.error(t(`microAppPage.publish.${nextValidationError}`))
+			magicToast.error(
+				nextValidationError === "organizationDesignatedMembersRequired"
+					? t("share.organizationDesignatedMembersRequired")
+					: t(`microAppPage.publish.${nextValidationError}`),
+			)
 			return
 		}
+
+		const confirmed = await ensureOrganizationAllMembersShareConfirmed(
+			formState.shareType,
+			formState.shareRange,
+			t,
+		)
+		if (!confirmed) return
+
 		const nextAppName = formState.appName.trim()
 
 		setSaving(true)

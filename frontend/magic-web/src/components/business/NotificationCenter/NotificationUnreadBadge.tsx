@@ -1,18 +1,18 @@
 import { cn } from "@/utils/cn"
 
-interface InboxUnreadBadgeProps {
+interface NotificationUnreadBadgeProps {
 	label: string | null
 	className?: string
 	testId?: string
 	variant?: "entry" | "system" | "auth"
 }
 
-function InboxUnreadBadge({
+function NotificationUnreadBadge({
 	label,
 	className,
 	testId = "inbox-unread-badge",
 	variant = "entry",
-}: InboxUnreadBadgeProps) {
+}: NotificationUnreadBadgeProps) {
 	if (!label) return null
 
 	return (
@@ -34,4 +34,4 @@ function InboxUnreadBadge({
 	)
 }
 
-export default InboxUnreadBadge
+export default NotificationUnreadBadge

@@ -12,22 +12,22 @@ import {
 } from "./notificationErrors"
 import { notificationLocaleFromI18n, readTemplateCache, writeTemplateCache } from "./templateCache"
 import type {
-	InboxAuthStatus,
-	InboxMessage,
-	InboxMessageId,
-	InboxTab,
-	InboxTemplateCatalog,
+	NotificationAuthStatus,
+	NotificationItemData,
+	NotificationId,
+	NotificationTab,
+	NotificationTemplateCatalog,
 } from "./types"
 
-const logger = Logger.createLogger("InboxStore")
+const logger = Logger.createLogger("NotificationCenterStore")
 const PAGE_SIZE = 10
 const MARK_ALL_PAGE_SIZE = 100
 const MARK_ALL_MAX_PAGES = 10
 
-export class InboxStore {
+export class NotificationCenterStore {
 	visible = false
-	activeTab: InboxTab = "all"
-	messages: InboxMessage[] = []
+	activeTab: NotificationTab = "all"
+	messages: NotificationItemData[] = []
 	nextCursor: string | null = null
 	hasMore = false
 	listLoading = false
@@ -35,7 +35,7 @@ export class InboxStore {
 	systemUnread = 0
 	authorizationPending = 0
 	totalUnread = 0
-	catalog: InboxTemplateCatalog | null = null
+	catalog: NotificationTemplateCatalog | null = null
 	actingIds: Record<string, true> = {}
 	private listRequestId = 0
 	private countsRequest: Promise<void> | null = null
@@ -91,7 +91,7 @@ export class InboxStore {
 		this.visible = false
 	}
 
-	setActiveTab(tab: InboxTab) {
+	setActiveTab(tab: NotificationTab) {
 		if (this.activeTab === tab) return Promise.resolve()
 		this.activeTab = tab
 		this.invalidateList()
@@ -287,7 +287,7 @@ export class InboxStore {
 		}
 	}
 
-	async markRead(id: InboxMessageId) {
+	async markRead(id: NotificationId) {
 		const message = this.messages.find((item) => item.id === id)
 		if (!message || message.category === "auth" || !message.is_unread) return
 		if (this.readingIds.has(id)) return
@@ -342,7 +342,7 @@ export class InboxStore {
 		await this.refreshAfterMutation()
 	}
 
-	async respondAuth(id: InboxMessageId, status: Exclude<InboxAuthStatus, "pending">) {
+	async respondAuth(id: NotificationId, status: Exclude<NotificationAuthStatus, "pending">) {
 		const scope = this.scopeRevision
 		const message = this.messages.find((item) => item.id === id)
 		if (!message || message.category !== "auth" || message.auth_status !== "pending") return
@@ -440,12 +440,12 @@ export class InboxStore {
 	}
 }
 
-export const inboxStore = new InboxStore()
+export const notificationCenterStore = new NotificationCenterStore()
 
-export function openInbox() {
-	inboxStore.open()
+export function openNotificationCenter() {
+	notificationCenterStore.open()
 }
 
-export function clearInboxUserCache() {
-	inboxStore.clearUserCache()
+export function clearNotificationCenterUserCache() {
+	notificationCenterStore.clearUserCache()
 }

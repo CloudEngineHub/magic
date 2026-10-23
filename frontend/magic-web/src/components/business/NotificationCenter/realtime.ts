@@ -3,13 +3,13 @@ import chatWebSocket from "@/apis/clients/chatWebSocket"
 import type { NotificationUpdate } from "@/apis/modules/notifications"
 import { userStore } from "@/models/user"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
-import { inboxStore } from "./store"
+import { notificationCenterStore } from "./store"
 
 let consumers = 0
 let dispose: (() => void) | undefined
 
 /** Desktop and mobile entries share one subscription and one reconciliation owner. */
-export function acquireInboxRealtime() {
+export function acquireNotificationCenterRealtime() {
 	consumers += 1
 	if (consumers === 1) {
 		const hasScope = () => {
@@ -17,12 +17,12 @@ export function acquireInboxRealtime() {
 			return Boolean(authorization && userInfo?.user_id && organizationCode)
 		}
 		const reconcile = () => {
-			if (hasScope()) void inboxStore.reconcile()
+			if (hasScope()) void notificationCenterStore.reconcile()
 		}
 		const handleUpdate = (update: NotificationUpdate) => {
 			if (!hasScope() || update.organization_code !== userStore.user.organizationCode) return
-			inboxStore.setCounts(update.counts)
-			void inboxStore.reloadList()
+			notificationCenterStore.setCounts(update.counts)
+			void notificationCenterStore.reloadList()
 		}
 		const handleVisibility = () => {
 			if (document.visibilityState === "visible") reconcile()
@@ -35,7 +35,7 @@ export function acquireInboxRealtime() {
 				userStore.user.organizationCode,
 			],
 			() => {
-				inboxStore.clearUserCache()
+				notificationCenterStore.clearUserCache()
 				reconcile()
 			},
 			{ fireImmediately: true, equals: comparer.structural },
@@ -52,7 +52,7 @@ export function acquireInboxRealtime() {
 			document.removeEventListener("visibilitychange", handleVisibility)
 			window.removeEventListener("pageshow", reconcile)
 			window.removeEventListener("online", reconcile)
-			inboxStore.clearUserCache()
+			notificationCenterStore.clearUserCache()
 		}
 	}
 	let released = false

@@ -11,7 +11,7 @@ import type { LoginService } from "./LoginService/LoginService"
 import type { ConfigService } from "../config/ConfigService"
 import { UserRepository } from "@/models/user/repositories/UserRepository"
 import MessageService from "@/services/chat/message/MessageService"
-import { clearInboxUserCache } from "@/components/business/Inbox/store"
+import { clearNotificationCenterUserCache } from "@/components/business/NotificationCenter/store"
 import { OrganizationService } from "./OrganizationService"
 import { isEmpty, keyBy } from "lodash-es"
 import { toJS } from "mobx"
@@ -109,7 +109,7 @@ export class AccountService {
 					.setMagicOrganizationCode(magicOrganizationCode)
 
 				// Step 3: 同步用户信息
-				clearInboxUserCache()
+				clearNotificationCenterUserCache()
 				await this.service.get<UserService>("userService").fetchUserInfo()
 				const magicOrganizationMap = await this.service
 					.get<LoginService>("loginService")
@@ -179,7 +179,7 @@ export class AccountService {
 		this.service.get<UserService>("userService").removeOrganization()
 		await this.service.get<ConfigService>("configService").setClusterCode("")
 		MessageService.destroy()
-		clearInboxUserCache()
+		clearNotificationCenterUserCache()
 
 		return { cleanupStatus }
 	}
@@ -201,7 +201,7 @@ export class AccountService {
 		}
 		const allClean = async () => {
 			MessageService.destroy()
-			clearInboxUserCache()
+			clearNotificationCenterUserCache()
 
 			// 移除当前token
 			const user = new UserRepository()

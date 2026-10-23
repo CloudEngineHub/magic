@@ -16,7 +16,9 @@ import { useLocation } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { userStore } from "@/models/user"
 
-const InboxPanel = lazy(() => import("@/components/business/Inbox/InboxPanel"))
+const NotificationCenterPanel = lazy(
+	() => import("@/components/business/NotificationCenter/NotificationCenterPanel"),
+)
 
 const MagicSidebar = observer(
 	({
@@ -186,7 +188,7 @@ const MagicSidebar = observer(
 					</SheetContent>
 				</Sheet>
 				<Suspense fallback={null}>
-					<InboxPanel />
+					<NotificationCenterPanel />
 				</Suspense>
 			</SidebarProvider>
 		)

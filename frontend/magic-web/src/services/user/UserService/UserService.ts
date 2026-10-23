@@ -10,7 +10,7 @@ import { userTransformer } from "@/models/user/transformers"
 import { UserRepository } from "@/models/user/repositories/UserRepository"
 import { AccountRepository } from "@/models/user/repositories/AccountRepository"
 import { AuthApi, ChatApi } from "@/apis"
-import { clearInboxUserCache } from "@/components/business/Inbox/store"
+import { clearNotificationCenterUserCache } from "@/components/business/NotificationCenter/store"
 import { logger as Logger } from "@/infrastructure/logger"
 import { BroadcastChannelSender } from "@/broadcastChannel"
 import { env, isDev } from "@/utils/env"
@@ -332,7 +332,7 @@ export class UserService {
 			stage = "transform_target_user"
 			const userInfo = userTransformer(targetUser)
 			stage = "set_target_user"
-			clearInboxUserCache()
+			clearNotificationCenterUserCache()
 			this.setUserInfo(userInfo)
 
 			/** 广播切换组织 */
@@ -420,7 +420,7 @@ export class UserService {
 		}
 
 		const userInfo = userTransformer(targetUser)
-		clearInboxUserCache()
+		clearNotificationCenterUserCache()
 		this.setUserInfo(userInfo)
 
 		/** 广播切换组织 */

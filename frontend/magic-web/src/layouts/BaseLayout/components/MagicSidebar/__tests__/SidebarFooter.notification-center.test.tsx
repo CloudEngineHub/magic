@@ -60,18 +60,20 @@ vi.mock("@/infrastructure/logger", () => ({
 
 describe("SidebarFooter inbox entry", () => {
 	afterEach(async () => {
-		const { inboxStore } = await import("@/components/business/Inbox/store")
-		await act(async () => inboxStore.reset())
+		const { notificationCenterStore } =
+			await import("@/components/business/NotificationCenter/store")
+		await act(async () => notificationCenterStore.reset())
 		vi.clearAllMocks()
 	})
 
 	it.each([false, true])(
 		"renders three icon-only actions when collapsed=%s",
 		async (collapsed) => {
-			const { inboxStore } = await import("@/components/business/Inbox/store")
-			inboxStore.reset()
-			inboxStore.systemUnread = 11
-			inboxStore.authorizationPending = 3
+			const { notificationCenterStore } =
+				await import("@/components/business/NotificationCenter/store")
+			notificationCenterStore.reset()
+			notificationCenterStore.systemUnread = 11
+			notificationCenterStore.authorizationPending = 3
 			notificationApi.getNotificationCounts.mockResolvedValue({
 				total: 14,
 				system_unread: 11,
@@ -108,7 +110,7 @@ describe("SidebarFooter inbox entry", () => {
 			expect(buttons[0].parentElement).toHaveClass(collapsed ? "flex-col" : "justify-around")
 			expect(screen.getByTestId("inbox-sidebar-badge")).toBeEmptyDOMElement()
 			await act(async () => fireEvent.click(buttons[0]))
-			expect(inboxStore.visible).toBe(true)
+			expect(notificationCenterStore.visible).toBe(true)
 		},
 	)
 })

@@ -93,7 +93,7 @@ const pubsub = new TypedPubSub<PubSubTypedPayloadMap>()
 export default pubsub
 
 export const PubSubEvents = {
-	/** Inbox counts changed; consumers reconcile message bodies through HTTP. */
+	/** Notification counts changed; consumers reconcile notification bodies through HTTP. */
 	Notification_Updated: "notification_updated",
 	/** 超级麦吉 - 展示快捷键列表 */
 	Show_Shortcut_Keys: "PubSub_Show_Shortcut_Keys",

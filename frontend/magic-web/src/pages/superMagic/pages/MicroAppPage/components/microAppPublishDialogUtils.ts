@@ -7,6 +7,10 @@ import type {
 } from "@/apis/modules/superMagic"
 import { ShareType } from "@/pages/superMagic/components/Share/types"
 import { generateSharePassword } from "@/pages/superMagic/components/Share/utils"
+import {
+	DEFAULT_NEW_ORGANIZATION_SHARE_RANGE,
+	isOrganizationDesignatedShareIncomplete,
+} from "@/pages/superMagic/components/Share/utils/organizationShareGuards"
 
 export interface MicroAppPublishFormState {
 	appName: string
@@ -22,7 +26,10 @@ export interface MicroAppPublishFormState {
 }
 
 export type MicroAppPublishValidationError =
-	"projectNameRequired" | "projectNameTooLong" | "passwordInvalid"
+	| "projectNameRequired"
+	| "projectNameTooLong"
+	| "passwordInvalid"
+	| "organizationDesignatedMembersRequired"
 
 export function normalizeMicroAppPublishShareType(
 	shareType: MicroAppPublishShareType,
@@ -55,7 +62,7 @@ export function createDefaultMicroAppPublishFormState(
 	return {
 		appName,
 		shareType: resolveDefaultMicroAppPublishShareType(isPersonalOrganization, isFreePlan),
-		shareRange: "all",
+		shareRange: DEFAULT_NEW_ORGANIZATION_SHARE_RANGE,
 		targets: [],
 		password: generateSharePassword(),
 		coverFileKey: undefined,
@@ -116,6 +123,16 @@ export function getMicroAppPublishValidationError(
 		if (passwordLength < 4 || passwordLength > 32) return "passwordInvalid"
 	}
 
+	if (
+		isOrganizationDesignatedShareIncomplete(
+			formState.shareType,
+			formState.shareRange,
+			formState.targets.length,
+		)
+	) {
+		return "organizationDesignatedMembersRequired"
+	}
+
 	return null
 }
 
@@ -139,7 +156,7 @@ export function createFormStateFromPublishedItem(
 				resolveDefaultMicroAppPublishShareType(isPersonalOrganization, isFreePlan),
 			isPersonalOrganization,
 		),
-		shareRange: item?.share_range || "all",
+		shareRange: item?.share_range ?? (item ? "all" : DEFAULT_NEW_ORGANIZATION_SHARE_RANGE),
 		targets: item?.target_ids || [],
 		// 只有后端明确标记为已发布时才保留空密码，未发布的密码分享需要可直接编辑的初始密码。
 		password:

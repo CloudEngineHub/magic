@@ -1,4 +1,4 @@
-import type { InboxTemplateCatalog } from "./types"
+import type { NotificationTemplateCatalog } from "./types"
 
 const VERSION = "v1"
 
@@ -6,11 +6,11 @@ function storageKey(locale: string) {
 	return `notificationTemplates:${VERSION}:${locale}`
 }
 
-export function readTemplateCache(locale: string): InboxTemplateCatalog | null {
+export function readTemplateCache(locale: string): NotificationTemplateCatalog | null {
 	try {
 		const raw = localStorage.getItem(storageKey(locale))
 		if (!raw) return null
-		const parsed = JSON.parse(raw) as InboxTemplateCatalog
+		const parsed = JSON.parse(raw) as NotificationTemplateCatalog
 		if (!parsed?.templates || typeof parsed.catalog_version !== "number") return null
 		return parsed
 	} catch {
@@ -18,7 +18,7 @@ export function readTemplateCache(locale: string): InboxTemplateCatalog | null {
 	}
 }
 
-export function writeTemplateCache(catalog: InboxTemplateCatalog) {
+export function writeTemplateCache(catalog: NotificationTemplateCatalog) {
 	try {
 		localStorage.setItem(storageKey(catalog.locale), JSON.stringify(catalog))
 	} catch {
