@@ -1,7 +1,6 @@
 import type { WithPage, WithPageToken } from "@admin/types/common"
 import type { AiModel } from "@admin/const/aiModel"
 import type { AiManage } from "../../types/aiManage"
-import type { DataDashboard } from "../../types/datadashboard"
 import { RequestUrl } from "../constant"
 import { genRequestUrl } from "../utils"
 import type { HttpClient } from "../core/HttpClient"
@@ -207,42 +206,6 @@ export const generateAIManageApi = (client: HttpClient) => {
 			return client.post<null>(RequestUrl.addModalIdNonOfficial, { model_id })
 		},
 
-		/** 组织后台 - 获取员工审核列表 */
-		getOrganizationAgentVersionReviewList(
-			data: AiManage.GetOrganizationAgentVersionReviewListParams,
-		) {
-			return client.post<WithPage<AiManage.OrganizationAgentVersionReview>>(
-				RequestUrl.getOrganizationAgentVersionReviewList,
-				data,
-			)
-		},
-
-		/** 组织后台 - 审核员工版本 */
-		reviewOrganizationAgentVersion(id: string, data: AiManage.ReviewOrganizationVersionParams) {
-			return client.put<null>(
-				genRequestUrl(RequestUrl.reviewOrganizationAgentVersion, { id }),
-				data,
-			)
-		},
-
-		/** 组织后台 - 获取 Skill 审核列表 */
-		getOrganizationSkillVersionReviewList(
-			data: AiManage.GetOrganizationSkillVersionReviewListParams,
-		) {
-			return client.post<WithPage<AiManage.OrganizationSkillVersionReview>>(
-				RequestUrl.getOrganizationSkillVersionReviewList,
-				data,
-			)
-		},
-
-		/** 组织后台 - 审核 Skill 版本 */
-		reviewOrganizationSkillVersion(id: string, data: AiManage.ReviewOrganizationVersionParams) {
-			return client.put<null>(
-				genRequestUrl(RequestUrl.reviewOrganizationSkillVersion, { id }),
-				data,
-			)
-		},
-
 		/** 获取默认图标 */
 		getDefaultIcon(params: { business_type: AiModel.BusinessType }) {
 			return client.get<AiManage.Icon[]>(
@@ -267,118 +230,6 @@ export const generateAIManageApi = (client: HttpClient) => {
 		getOfficialPointsStatistics() {
 			return client.get<AiManage.OfficialPointsStatistics>(
 				RequestUrl.getOfficialPointsStatistics,
-			)
-		},
-
-		/** 数据看板 - 数字员工筛选选项 */
-		getDataDashboardAgentOptions() {
-			return client.get<DataDashboard.AgentOptions>(RequestUrl.getDataDashboardAgentOptions)
-		},
-
-		/** 数据看板 - 数字员工分析 Summary */
-		getDataDashboardAgentSummary(data: DataDashboard.AgentSummaryQuery) {
-			return client.get<DataDashboard.AgentSummary>(
-				genRequestUrl(RequestUrl.getDataDashboardAgentSummary, {}, data),
-			)
-		},
-
-		/** 数据看板 - 数字员工分析 Tabs */
-		getDataDashboardAgentTabs(data: DataDashboard.AgentTabsQuery) {
-			return client.get<DataDashboard.PagedResponse<DataDashboard.AgentTabRow>>(
-				genRequestUrl(RequestUrl.getDataDashboardAgentTabs, {}, data),
-			)
-		},
-
-		/** 数据看板 - 成员分析 Summary */
-		getDataDashboardMemberSummary(data: DataDashboard.MemberSummaryQuery) {
-			return client.get<DataDashboard.MemberSummary>(
-				genRequestUrl(RequestUrl.getDataDashboardMemberSummary, {}, data),
-			)
-		},
-
-		/** 数据看板 - 成员分析 Tabs */
-		getDataDashboardMemberTabs(data: DataDashboard.MemberTabsQuery) {
-			return client.get<DataDashboard.PagedResponse<DataDashboard.MemberTabRow>>(
-				genRequestUrl(RequestUrl.getDataDashboardMemberTabs, {}, data),
-			)
-		},
-
-		/** 数据看板 - 组织分析 Summary */
-		getDataDashboardOrganizationSummary(data: DataDashboard.OrganizationSummaryQuery) {
-			return client.get<DataDashboard.OrganizationSummary>(
-				genRequestUrl(RequestUrl.getDataDashboardOrganizationSummary, {}, data),
-			)
-		},
-
-		/** 数据看板 - 组织分析 Tabs */
-		getDataDashboardOrganizationTabs(data: DataDashboard.OrganizationTabsQuery) {
-			return client.get<DataDashboard.PagedResponse<DataDashboard.OrganizationTabRow>>(
-				genRequestUrl(RequestUrl.getDataDashboardOrganizationTabs, {}, data),
-			)
-		},
-
-		/** 数据看板 - 消耗分析 Summary */
-		getDataDashboardConsumptionSummary(data: DataDashboard.ConsumptionAnalysisQuery) {
-			return client.get<DataDashboard.ConsumptionAnalysisSummary>(
-				genRequestUrl(RequestUrl.getDataDashboardConsumptionSummary, {}, data),
-			)
-		},
-
-		/** 数据看板 - 文件产出分析 Summary */
-		getDataDashboardFileAnalysisSummary(data: DataDashboard.FileAnalysisSummaryQuery) {
-			return client.get<DataDashboard.FileAnalysisSummary>(
-				genRequestUrl(RequestUrl.getDataDashboardFileAnalysisSummary, {}, data),
-			)
-		},
-
-		/** 数据看板 - 文件产出分析 Tabs */
-		getDataDashboardFileAnalysisTabs(data: DataDashboard.FileAnalysisTabsQuery) {
-			return client.get<DataDashboard.PagedResponse<DataDashboard.FileTabRow>>(
-				genRequestUrl(RequestUrl.getDataDashboardFileAnalysisTabs, {}, data),
-			)
-		},
-
-		/** 数据看板 - 创建组织分析导出任务 */
-		createDataDashboardOrganizationExport(data: DataDashboard.DashboardExportRequest) {
-			return client.post<DataDashboard.DashboardExportCreated>(
-				RequestUrl.createDataDashboardOrganizationExport,
-				data,
-				{ enableErrorMessagePrompt: false },
-			)
-		},
-
-		/** 数据看板 - 创建数字员工分析导出任务 */
-		createDataDashboardAgentExport(data: DataDashboard.DashboardExportRequest) {
-			return client.post<DataDashboard.DashboardExportCreated>(
-				RequestUrl.createDataDashboardAgentExport,
-				data,
-				{ enableErrorMessagePrompt: false },
-			)
-		},
-
-		/** 数据看板 - 创建成员分析导出任务 */
-		createDataDashboardMemberExport(data: DataDashboard.DashboardExportRequest) {
-			return client.post<DataDashboard.DashboardExportCreated>(
-				RequestUrl.createDataDashboardMemberExport,
-				data,
-				{ enableErrorMessagePrompt: false },
-			)
-		},
-
-		/** 数据看板 - 创建文件产出分析导出任务 */
-		createDataDashboardFileAnalysisExport(data: DataDashboard.DashboardExportRequest) {
-			return client.post<DataDashboard.DashboardExportCreated>(
-				RequestUrl.createDataDashboardFileAnalysisExport,
-				data,
-				{ enableErrorMessagePrompt: false },
-			)
-		},
-
-		/** 数据看板 - 查询导出任务 */
-		getDataDashboardExportTask(exportId: string) {
-			return client.get<DataDashboard.DashboardExportTask>(
-				genRequestUrl(RequestUrl.getDataDashboardExportTask, { export_id: exportId }),
-				{ enableErrorMessagePrompt: false },
 			)
 		},
 

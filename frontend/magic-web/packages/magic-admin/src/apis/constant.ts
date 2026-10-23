@@ -71,10 +71,6 @@ export const RequestUrl = {
 	uploadFile: "/api/v1/file/upload-business-file",
 	/** 获取上传凭证 */
 	getUploadCredentials: "/api/v1/file/temporary-credential",
-	/** 获取业务隔离的公有桶上传凭证 */
-	getPublicBusinessUploadToken: "/api/v1/file/public-upload-token",
-	/** 获取业务隔离的私有桶上传凭证 */
-	getPrivateBusinessUploadToken: "/api/v1/file/private-upload-token",
 	/** 删除文件 */
 	deleteFile: "/api/v1/file/delete-business-file",
 	/** 获取文件临时链接 */
@@ -83,17 +79,6 @@ export const RequestUrl = {
 	getOfficialPointsStatistics: "/api/v1/quota/points/statistics",
 	/** 获取商品列表并携带sku */
 	getProductListWithSku: "/api/v1/official/admin/products/details",
-
-	/** 组织后台 - 员工审核列表 */
-	getOrganizationAgentVersionReviewList:
-		"/api/v1/organization/admin/super-magic/agents/versions/queries",
-	/** 组织后台 - 审核员工版本 */
-	reviewOrganizationAgentVersion:
-		"/api/v1/organization/admin/super-magic/agents/versions/${id}/review",
-	/** 组织后台 - Skill 审核列表 */
-	getOrganizationSkillVersionReviewList: "/api/v1/organization/admin/skills/versions/queries",
-	/** 组织后台 - 审核 Skill 版本 */
-	reviewOrganizationSkillVersion: "/api/v1/organization/admin/skills/versions/${id}/review",
 
 	/** AI管理 - 助理管理 */
 	/** 获取企业内部助理列表 */
@@ -116,40 +101,6 @@ export const RequestUrl = {
 	getOrgControlRule: "/api/v1/quota/points/control",
 	/** 查询管控目标已用积分 */
 	getControlTargetUsedPoints: "/api/v1/quota/points/control/points-used/queries",
-
-	/** AI管理 - 数据看板 */
-	/** 数据看板 - 数字员工筛选选项 */
-	getDataDashboardAgentOptions: "/api/v1/admin/data-dashboard/agent-options",
-	/** 数据看板 - 数字员工分析 Summary */
-	getDataDashboardAgentSummary: "/api/v1/admin/data-dashboard/agent-analysis/summary",
-	/** 数据看板 - 数字员工分析 Tabs */
-	getDataDashboardAgentTabs: "/api/v1/admin/data-dashboard/agent-analysis/tabs",
-	/** 数据看板 - 成员分析 Summary */
-	getDataDashboardMemberSummary: "/api/v1/admin/data-dashboard/member-analysis/summary",
-	/** 数据看板 - 成员分析 Tabs */
-	getDataDashboardMemberTabs: "/api/v1/admin/data-dashboard/member-analysis/tabs",
-	/** 数据看板 - 组织分析 Summary */
-	getDataDashboardOrganizationSummary:
-		"/api/v1/admin/data-dashboard/organization-analysis/summary",
-	/** 数据看板 - 组织分析 Tabs */
-	getDataDashboardOrganizationTabs: "/api/v1/admin/data-dashboard/organization-analysis/tabs",
-	/** 数据看板 - 消耗分析 Summary */
-	getDataDashboardConsumptionSummary: "/api/v1/admin/data-dashboard/consumption-analysis/summary",
-	/** 数据看板 - 文件产出分析 Summary */
-	getDataDashboardFileAnalysisSummary: "/api/v1/admin/data-dashboard/file-analysis/summary",
-	/** 数据看板 - 文件产出分析 Tabs */
-	getDataDashboardFileAnalysisTabs: "/api/v1/admin/data-dashboard/file-analysis/tabs",
-	/** 数据看板 - 创建数字员工分析导出任务 */
-	createDataDashboardAgentExport: "/api/v1/admin/data-dashboard/agent-analysis/export",
-	/** 数据看板 - 创建组织分析导出任务 */
-	createDataDashboardOrganizationExport:
-		"/api/v1/admin/data-dashboard/organization-analysis/export",
-	/** 数据看板 - 创建成员分析导出任务 */
-	createDataDashboardMemberExport: "/api/v1/admin/data-dashboard/member-analysis/export",
-	/** 数据看板 - 创建文件产出分析导出任务 */
-	createDataDashboardFileAnalysisExport: "/api/v1/admin/data-dashboard/file-analysis/export",
-	/** 数据看板 - 查询导出任务 */
-	getDataDashboardExportTask: "/api/v1/admin/export-tasks/${export_id}",
 
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */
@@ -299,16 +250,6 @@ export const RequestUrl = {
 	deleteAppMenu: "/api/v1/admin/applications/delete",
 	/** 设置应用菜单状态（启用/禁用） */
 	updateAppMenuStatus: "/api/v1/admin/applications/status",
-	/** 非官方组织后台 - 分页查询应用菜单列表 */
-	getOrganizationAppMenuList: "/api/v1/organization/admin/applications/queries",
-	/** 非官方组织后台 - 获取应用菜单详情 */
-	getOrganizationAppMenuDetail: "/api/v1/organization/admin/applications/${id}",
-	/** 非官方组织后台 - 保存应用菜单 */
-	saveOrganizationAppMenu: "/api/v1/organization/admin/applications/save",
-	/** 非官方组织后台 - 删除应用菜单 */
-	deleteOrganizationAppMenu: "/api/v1/organization/admin/applications/delete",
-	/** 非官方组织后台 - 设置应用菜单状态 */
-	updateOrganizationAppMenuStatus: "/api/v1/organization/admin/applications/status",
 
 	/** File */
 	/** 检查文件上传状态 */

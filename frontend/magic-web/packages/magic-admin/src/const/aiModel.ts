@@ -81,6 +81,8 @@ export namespace AiModel {
 		/** Wangsu */
 		Wangsu = "Wangsu",
 		Keling = "Keling",
+		/** Lovart */
+		Lovart = "Lovart",
 	}
 
 	/** 服务商默认 API 地址（与后端默认占位一致） */
@@ -106,6 +108,7 @@ export namespace AiModel {
 		[ServiceProvider.Google]: "https://generativelanguage.googleapis.com/v1beta",
 		[ServiceProvider.Anthropic]: "https://api.anthropic.com",
 		[ServiceProvider.Keling]: "https://api.klingai.com",
+		[ServiceProvider.Lovart]: "https://lgw.lovart.ai",
 	}
 
 	/** 权限 */
