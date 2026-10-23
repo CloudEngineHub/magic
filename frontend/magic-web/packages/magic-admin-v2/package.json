@@ -34,9 +34,6 @@
 	},
 	"dependencies": {
 		"@dtyq/upload-sdk": "~0.0.9",
-		"@feb/approval-flow-render": "1.53.7",
-		"@feb/editor-tiptap": "1.3.12",
-		"@feb/form-lity": "1.89.1",
 		"@hookform/resolvers": "^5.2.2",
 		"@tabler/icons-react": "^3.38.0",
 		"@tanstack/react-query": "^5.0.0",
@@ -98,7 +95,6 @@
 		"@dnd-kit/core": "^6.3.1",
 		"@dnd-kit/sortable": "^10.0.0",
 		"@dnd-kit/utilities": "^3.2.2",
-		"@feb/approval-flow-render": ">= 1.53.7",
 		"@radix-ui/react-alert-dialog": "^1.1.15",
 		"@radix-ui/react-checkbox": "^1.3.4",
 		"@radix-ui/react-collapsible": "^1.1.13",
@@ -115,10 +111,5 @@
 		"react-i18next": "^14.1.1",
 		"react-router": "^6.23.1",
 		"react-router-dom": "^6.23.1"
-	},
-	"peerDependenciesMeta": {
-		"@feb/approval-flow-render": {
-			"optional": true
-		}
 	}
 }
