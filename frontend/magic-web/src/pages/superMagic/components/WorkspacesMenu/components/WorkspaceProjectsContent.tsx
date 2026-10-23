@@ -239,7 +239,10 @@ export default function WorkspaceProjectsContent({
 								project={resourceProject}
 								viewMode={props.viewMode}
 								onClick={(project) => {
-									if (!project.project_id) {
+									// 只有资源接口返回的条目（带 resourceId）才可能缺少关联项目；
+									// 普通工作区里的 agent/skill 模式项目来自项目列表，没有 project_id 字段，
+									// 其项目 id 即 id，不能因此拦截点击。
+									if (project.resourceId && !project.project_id) {
 										magicToast.info(t("fileManager.locateUnavailable"))
 										return
 									}
