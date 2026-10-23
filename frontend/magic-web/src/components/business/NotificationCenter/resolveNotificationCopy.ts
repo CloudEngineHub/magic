@@ -1,28 +1,28 @@
 import i18next from "i18next"
 import { logger as Logger } from "@/infrastructure/logger"
-import { inboxIconForType } from "./mapNotification"
+import { notificationIconForType } from "./mapNotification"
 import {
 	renderTemplate,
 	renderTemplateParts,
 	templateCatalogKey,
 } from "./renderNotificationTemplate"
-import { applyInboxResourceNameFallbacks } from "./inboxResourceFallback"
-import { formatInboxPermission } from "./formatInboxPayload"
-import type { InboxMessage } from "./types"
+import { applyNotificationResourceNameFallbacks } from "./notificationResourceFallback"
+import { formatNotificationPermission } from "./formatNotificationPayload"
+import type { NotificationItemData } from "./types"
 
-const logger = Logger.createLogger("InboxCopy")
+const logger = Logger.createLogger("NotificationCopy")
 
 function formatMappedValue(value: unknown, mapped: string | undefined) {
 	if (value == null || value === "") return "-"
 	return mapped ?? String(value)
 }
 
-export function formatInboxPayload(payload: Record<string, unknown>) {
+export function formatNotificationPayload(payload: Record<string, unknown>) {
 	const permission = payload.permission
 	const shareScope = payload.share_scope
 	return {
 		...payload,
-		permission: formatInboxPermission(permission),
+		permission: formatNotificationPermission(permission),
 		share_scope: formatMappedValue(
 			shareScope,
 			shareScope === "all"
@@ -34,12 +34,12 @@ export function formatInboxPayload(payload: Record<string, unknown>) {
 	}
 }
 
-export function resolveInboxCopy(
-	message: InboxMessage,
+export function resolveNotificationCopy(
+	message: NotificationItemData,
 	templates: Record<string, { title_template: string; body_template: string }> | undefined,
 ) {
 	const template = templates?.[templateCatalogKey(message.type, message.template_version)]
-	const payload: Record<string, unknown> = formatInboxPayload(message.payload)
+	const payload: Record<string, unknown> = formatNotificationPayload(message.payload)
 	if (message.type === "task_finished" || message.type === "task_failed") {
 		// Match sidebar fallback names before substituting task notification templates.
 		payload.workspace_name =
@@ -48,7 +48,7 @@ export function resolveInboxCopy(
 		payload.project_name =
 			message.payload.project_name || i18next.t("project.unnamedProject", { ns: "super" })
 	}
-	applyInboxResourceNameFallbacks(message, payload)
+	applyNotificationResourceNameFallbacks(message, payload)
 	if (!template) {
 		logger.error({
 			eventKey: "inbox_template_unavailable",
@@ -61,7 +61,7 @@ export function resolveInboxCopy(
 			body: i18next.t("inbox.templateUnavailable", { ns: "sidebar" }),
 			bodyParts: undefined,
 			unavailable: true,
-			icon: inboxIconForType(message.type, message.payload.resource_type),
+			icon: notificationIconForType(message.type, message.payload.resource_type),
 			payload,
 		}
 	}
@@ -71,7 +71,7 @@ export function resolveInboxCopy(
 		body: bodyParts.map((part) => part.text).join(""),
 		bodyParts,
 		unavailable: false,
-		icon: inboxIconForType(message.type, message.payload.resource_type),
+		icon: notificationIconForType(message.type, message.payload.resource_type),
 		payload,
 	}
 }

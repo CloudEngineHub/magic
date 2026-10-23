@@ -5,7 +5,7 @@ function text(value: unknown) {
 	return String(value)
 }
 
-export function formatInboxPermission(value: unknown) {
+export function formatNotificationPermission(value: unknown) {
 	if (value === "viewer") return i18next.t("inbox.permission.viewer", { ns: "sidebar" })
 	if (value === "editor") return i18next.t("inbox.permission.editor", { ns: "sidebar" })
 	// Collaboration roles use "manage"; retain "manager" for existing notification payloads.
@@ -21,25 +21,25 @@ function formatShareScope(value: unknown) {
 }
 
 /** Payload display values for template substitution. Field-level missing values become "-". */
-export function formatInboxPayload(payload: Record<string, unknown>) {
+export function formatNotificationPayload(payload: Record<string, unknown>) {
 	const next: Record<string, unknown> = { ...payload }
-	if ("permission" in payload) next.permission = formatInboxPermission(payload.permission)
+	if ("permission" in payload) next.permission = formatNotificationPermission(payload.permission)
 	if ("share_scope" in payload) next.share_scope = formatShareScope(payload.share_scope)
 	return next
 }
 
-export function inboxPointsAmount(payload: Record<string, unknown>) {
+export function notificationPointsAmount(payload: Record<string, unknown>) {
 	const points = payload.points
 	if (points == null || points === "") return undefined
 	return `+${points}`
 }
 
-export function inboxResource(payload: Record<string, unknown>) {
+export function notificationResource(payload: Record<string, unknown>) {
 	const organization = payload.organization_name
 	const permission = payload.permission
 	if (organization == null && permission == null) return undefined
 	return {
 		organization: text(organization),
-		permission: formatInboxPermission(permission),
+		permission: formatNotificationPermission(permission),
 	}
 }

@@ -1,7 +1,7 @@
 import type { NotificationListItem } from "@/apis/modules/notifications"
-import type { InboxIconName, InboxMessage } from "./types"
+import type { NotificationIconName, NotificationItemData } from "./types"
 
-const ICON_BY_TYPE: Record<string, InboxIconName> = {
+const ICON_BY_TYPE: Record<string, NotificationIconName> = {
 	payment_success: "payment",
 	points_referral_reward: "points",
 	points_manual_reward: "points",
@@ -21,7 +21,7 @@ const ICON_BY_TYPE: Record<string, InboxIconName> = {
 	micro_app_access_revoked: "microApp",
 }
 
-const ICON_BY_RESOURCE_TYPE: Record<string, InboxIconName> = {
+const ICON_BY_RESOURCE_TYPE: Record<string, NotificationIconName> = {
 	project: "project",
 	skill: "spark",
 	agent: "robot",
@@ -31,7 +31,10 @@ const ICON_BY_RESOURCE_TYPE: Record<string, InboxIconName> = {
 	connector: "connector",
 }
 
-export function inboxIconForType(type: string, resourceType?: unknown): InboxIconName {
+export function notificationIconForType(
+	type: string,
+	resourceType?: unknown,
+): NotificationIconName {
 	if (Object.prototype.hasOwnProperty.call(ICON_BY_TYPE, type)) return ICON_BY_TYPE[type]
 	// Keep resource artwork for events without a dedicated mapping, including future event types.
 	const normalizedResourceType =
@@ -41,7 +44,7 @@ export function inboxIconForType(type: string, resourceType?: unknown): InboxIco
 	return "share"
 }
 
-export function mapNotificationItem(item: NotificationListItem): InboxMessage {
+export function mapNotificationItem(item: NotificationListItem): NotificationItemData {
 	// Handling an invitation clears its dot even when the API read state lags behind.
 	const isHandledAuthorization =
 		item.category === "authorization" &&

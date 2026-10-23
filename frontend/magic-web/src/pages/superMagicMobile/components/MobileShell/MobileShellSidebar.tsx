@@ -23,9 +23,11 @@ import { SHELL_RECENT_CHAT_ACTION_KEYS } from "@/pages/superMagicMobile/utils/mo
 import { useMobileShellVisibleActionKeys } from "./hooks/useMobileShellVisibleActionKeys"
 import { MobileShellRecentFloatingMenu } from "./MobileShellRecentFloatingMenu"
 import { MobileShellRecentItemRow } from "./MobileShellRecentItemRow"
-import InboxMobileSidebarEntry from "@/components/business/Inbox/InboxMobileSidebarEntry"
+import NotificationCenterMobileSidebarEntry from "@/components/business/NotificationCenter/NotificationCenterMobileSidebarEntry"
 
-const InboxMobilePanel = lazy(() => import("@/components/business/Inbox/InboxMobilePanel"))
+const NotificationCenterMobilePanel = lazy(
+	() => import("@/components/business/NotificationCenter/NotificationCenterMobilePanel"),
+)
 
 export interface MobileShellSidebarProps {
 	/** 复用壳层前缀，保证不同页面的 `data-testid` 不冲突。 */
@@ -239,7 +241,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 
 							return (
 								<div key="inbox-before-trash" className="contents">
-									<InboxMobileSidebarEntry
+									<NotificationCenterMobileSidebarEntry
 										testIdPrefix={MOBILE_SHELL_SHARED_TEST_ID_PREFIX}
 										rowClassName={navRowClass()}
 									/>
@@ -248,7 +250,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 							)
 						})}
 						{secondaryNavItems.every((item) => item.key !== "trash") ? (
-							<InboxMobileSidebarEntry
+							<NotificationCenterMobileSidebarEntry
 								testIdPrefix={MOBILE_SHELL_SHARED_TEST_ID_PREFIX}
 								rowClassName={navRowClass()}
 							/>
@@ -370,7 +372,7 @@ const MobileShellSidebarView = observer(function MobileShellSidebarView({
 			{projectActionComponents}
 			{chatProjectActionComponents}
 			<Suspense fallback={null}>
-				<InboxMobilePanel />
+				<NotificationCenterMobilePanel />
 			</Suspense>
 		</div>
 	)

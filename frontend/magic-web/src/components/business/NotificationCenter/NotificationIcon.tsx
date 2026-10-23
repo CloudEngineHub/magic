@@ -8,11 +8,11 @@ import PlugIcon from "@/components/business/MentionPanel/components/icons/PlugIc
 import successIcon from "@/pages/superMagic/assets/svg/topic-status-success.svg"
 import alertIcon from "@/pages/superMagic/assets/svg/interrupt.svg"
 import { cn } from "@/utils/cn"
-import type { InboxIconName } from "./types"
+import type { NotificationIconName } from "./types"
 
 // Reuse existing product artwork for notification categories.
-const INBOX_IMAGES: Record<
-	Exclude<InboxIconName, "spark" | "robot" | "microApp" | "connector">,
+const NOTIFICATION_IMAGES: Record<
+	Exclude<NotificationIconName, "spark" | "robot" | "microApp" | "connector">,
 	string
 > = {
 	file: folderIcon,
@@ -25,7 +25,13 @@ const INBOX_IMAGES: Record<
 	success: successIcon,
 }
 
-function InboxMessageIcon({ name, mobile = false }: { name: InboxIconName; mobile?: boolean }) {
+function NotificationIcon({
+	name,
+	mobile = false,
+}: {
+	name: NotificationIconName
+	mobile?: boolean
+}) {
 	const size = mobile ? 40 : 32
 	return (
 		<div
@@ -46,7 +52,7 @@ function InboxMessageIcon({ name, mobile = false }: { name: InboxIconName; mobil
 				<PlugIcon size={size} />
 			) : (
 				<img
-					src={INBOX_IMAGES[name]}
+					src={NOTIFICATION_IMAGES[name]}
 					alt=""
 					width={size}
 					height={size}
@@ -57,4 +63,4 @@ function InboxMessageIcon({ name, mobile = false }: { name: InboxIconName; mobil
 	)
 }
 
-export default InboxMessageIcon
+export default NotificationIcon

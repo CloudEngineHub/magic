@@ -1,8 +1,8 @@
-export type InboxCategory = "system" | "auth"
-export type InboxTab = "all" | InboxCategory
-export type InboxAuthStatus = "pending" | "accepted" | "rejected"
+export type NotificationCategory = "system" | "auth"
+export type NotificationTab = "all" | NotificationCategory
+export type NotificationAuthStatus = "pending" | "accepted" | "rejected"
 
-export type InboxIconName =
+export type NotificationIconName =
 	| "users"
 	| "share"
 	| "project"
@@ -16,22 +16,22 @@ export type InboxIconName =
 	| "microApp"
 	| "connector"
 
-export type InboxMessageId = string
+export type NotificationId = string
 
-export interface InboxMessage {
-	id: InboxMessageId
-	category: InboxCategory
+export interface NotificationItemData {
+	id: NotificationId
+	category: NotificationCategory
 	type: string
 	template_version: number
 	payload: Record<string, unknown>
 	created_at: string
 	message_status?: "active" | "withdrawn"
 	is_unread: boolean
-	auth_status?: InboxAuthStatus
+	auth_status?: NotificationAuthStatus
 	business_result?: "applied" | "expired"
 }
 
-export interface InboxTemplateCatalog {
+export interface NotificationTemplateCatalog {
 	locale: string
 	catalog_version: number
 	templates: Record<string, { title_template: string; body_template: string }>

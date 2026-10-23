@@ -5,26 +5,26 @@ import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/shadcn-ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/shadcn-ui/sheet"
 import magicToast from "@/components/base/MagicToaster/utils"
-import InboxMessageList from "./InboxMessageList"
-import InboxTabs from "./InboxTabs"
-import { inboxStore } from "./store"
+import NotificationList from "./NotificationList"
+import NotificationTabs from "./NotificationTabs"
+import { notificationCenterStore } from "./store"
 
-const InboxMobilePanel = observer(function InboxMobilePanel() {
+const NotificationCenterMobilePanel = observer(function NotificationCenterMobilePanel() {
 	const { t, i18n } = useTranslation("sidebar")
 	useEffect(() => {
-		void inboxStore.loadTemplates(i18n.language)
+		void notificationCenterStore.loadTemplates(i18n.language)
 	}, [i18n.language])
 
 	async function handleMarkAllRead() {
-		await inboxStore.markAllSystemRead()
+		await notificationCenterStore.markAllSystemRead()
 		magicToast.info(t("inbox.toast.markAllRead"))
 	}
 
 	return (
 		<Sheet
-			open={inboxStore.visible}
+			open={notificationCenterStore.visible}
 			onOpenChange={(open) => {
-				if (!open) inboxStore.close()
+				if (!open) notificationCenterStore.close()
 			}}
 		>
 			<SheetContent
@@ -42,7 +42,7 @@ const InboxMobilePanel = observer(function InboxMobilePanel() {
 						className="size-9"
 						aria-label={t("inbox.back")}
 						data-testid="inbox-back"
-						onClick={() => inboxStore.close()}
+						onClick={() => notificationCenterStore.close()}
 					>
 						<ChevronLeft className="size-4" />
 					</Button>
@@ -58,11 +58,11 @@ const InboxMobilePanel = observer(function InboxMobilePanel() {
 						{t("inbox.markAllRead")}
 					</Button>
 				</header>
-				<InboxTabs mobile />
-				<InboxMessageList mobile />
+				<NotificationTabs mobile />
+				<NotificationList mobile />
 			</SheetContent>
 		</Sheet>
 	)
 })
 
-export default InboxMobilePanel
+export default NotificationCenterMobilePanel

@@ -2,9 +2,9 @@ import { RoutePath } from "@/constants/routes"
 import { RouteName } from "@/routes/constants"
 import { fillRoute, getRoutePath } from "@/routes/history/helpers"
 import { logger as Logger } from "@/infrastructure/logger"
-import type { InboxMessage } from "./types"
+import type { NotificationItemData } from "./types"
 
-const logger = Logger.createLogger("InboxRoute")
+const logger = Logger.createLogger("NotificationRoute")
 
 const RESOURCE_NAME_FIELDS = ["resource_name"]
 const PROJECT_NAME_FIELDS = ["resource_name", "project_name"]
@@ -32,7 +32,7 @@ function buildRoute(name: RouteName, params: Record<string, string>) {
 	})
 }
 
-function isTaskNotification(message: InboxMessage) {
+function isTaskNotification(message: NotificationItemData) {
 	const payload = message.payload
 	return (
 		message.type === "task_finished" ||
@@ -42,7 +42,7 @@ function isTaskNotification(message: InboxMessage) {
 	)
 }
 
-function isShareNotification(message: InboxMessage) {
+function isShareNotification(message: NotificationItemData) {
 	const payload = message.payload
 	return (
 		message.type === "project_shared" ||
@@ -87,14 +87,14 @@ function shareRoute(shareCode: string) {
 	}
 }
 
-function resolveShareRoute(message: InboxMessage) {
+function resolveShareRoute(message: NotificationItemData) {
 	if (!isShareNotification(message)) return undefined
 	const shareCode = routeValue(message.payload.share_code)
 	if (!shareCode) return undefined
 	return shareRoute(shareCode)
 }
 
-function resolveApprovalRoute(message: InboxMessage) {
+function resolveApprovalRoute(message: NotificationItemData) {
 	const payload = message.payload
 	const resourceType = resourceTypeValue(payload)
 	const code = routeValue(payload.resource_code)
@@ -117,7 +117,7 @@ function resolveApprovalRoute(message: InboxMessage) {
 }
 
 /** Each notification type owns its jump contract. */
-function resolvePathByNotificationType(message: InboxMessage) {
+function resolvePathByNotificationType(message: NotificationItemData) {
 	const share = resolveShareRoute(message)
 	if (share) return share
 
@@ -170,7 +170,7 @@ function resolvePathByNotificationType(message: InboxMessage) {
 	}
 }
 
-function resolveLegacyPath(message: InboxMessage) {
+function resolveLegacyPath(message: NotificationItemData) {
 	const share = resolveShareRoute(message)
 	if (share) return share
 
@@ -184,7 +184,7 @@ function resolveLegacyPath(message: InboxMessage) {
 	return undefined
 }
 
-export function getInboxResourceRoute(message: InboxMessage) {
+export function getNotificationResourceRoute(message: NotificationItemData) {
 	// Only an accepted, still-valid invitation grants entry. Revocation notices
 	// describe lost access and must never offer a link back to the resource.
 	if (

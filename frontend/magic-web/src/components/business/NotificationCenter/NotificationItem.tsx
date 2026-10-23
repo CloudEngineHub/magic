@@ -5,32 +5,32 @@ import { Link } from "react-router-dom"
 import { Button } from "@/components/shadcn-ui/button"
 import magicToast from "@/components/base/MagicToaster/utils"
 import { cn } from "@/utils/cn"
-import { getInboxResourceRoute } from "./getInboxResourceRoute"
-import InboxMessageIcon from "./InboxMessageIcon"
-import { inboxResourceLinkLabel } from "./inboxResourceFallback"
-import { resolveInboxCopy } from "./resolveInboxCopy"
-import { inboxStore } from "./store"
-import type { InboxMessage } from "./types"
-import { useInboxAuthResultCopy } from "./useInboxMessageCopy"
+import { getNotificationResourceRoute } from "./getNotificationResourceRoute"
+import NotificationIcon from "./NotificationIcon"
+import { notificationResourceLinkLabel } from "./notificationResourceFallback"
+import { resolveNotificationCopy } from "./resolveNotificationCopy"
+import { notificationCenterStore } from "./store"
+import type { NotificationItemData } from "./types"
+import { useNotificationAuthResultCopy } from "./useNotificationCopy"
 
-interface InboxMessageCardProps {
-	message: InboxMessage
+interface NotificationItemProps {
+	message: NotificationItemData
 	mobile?: boolean
 }
 
-const InboxMessageCard = observer(function InboxMessageCard({
+const NotificationItem = observer(function NotificationItem({
 	message,
 	mobile = false,
-}: InboxMessageCardProps) {
+}: NotificationItemProps) {
 	const { t } = useTranslation("sidebar")
-	const copy = resolveInboxCopy(message, inboxStore.catalog?.templates)
-	const result = useInboxAuthResultCopy(message)
+	const copy = resolveNotificationCopy(message, notificationCenterStore.catalog?.templates)
+	const result = useNotificationAuthResultCopy(message)
 	const isPendingAuth = message.category === "auth" && message.auth_status === "pending"
-	const acting = Boolean(inboxStore.actingIds[message.id])
+	const acting = Boolean(notificationCenterStore.actingIds[message.id])
 	const organization = message.payload.organization_name
 	const permission = copy.payload.permission
 	const points = message.payload.points
-	const resourceRoute = getInboxResourceRoute(message)
+	const resourceRoute = getNotificationResourceRoute(message)
 	const statusLabel =
 		message.auth_status === "accepted"
 			? t("inbox.meta.accepted")
@@ -41,7 +41,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 					: null
 
 	async function handleAuth(status: "accepted" | "rejected") {
-		const outcome = await inboxStore.respondAuth(message.id, status)
+		const outcome = await notificationCenterStore.respondAuth(message.id, status)
 		if (!outcome) return
 		if (outcome.ok && outcome.expired) {
 			magicToast.info(t("inbox.toast.expired"))
@@ -71,7 +71,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 				!mobile && message.is_unread && "border-[#e3e5eb] dark:border-border",
 			)}
 		>
-			<InboxMessageIcon name={copy.icon} mobile={mobile} />
+			<NotificationIcon name={copy.icon} mobile={mobile} />
 			<div className="min-w-0 flex-1">
 				{/* Keep the title at the icon's top edge without adding space above the message body. */}
 				<div className="flex items-start gap-2">
@@ -120,7 +120,7 @@ const InboxMessageCard = observer(function InboxMessageCard({
 								rel="noopener noreferrer"
 								className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
 							>
-								{inboxResourceLinkLabel(
+								{notificationResourceLinkLabel(
 									message,
 									part.field,
 									copy.payload,
@@ -215,4 +215,4 @@ const InboxMessageCard = observer(function InboxMessageCard({
 	)
 })
 
-export default InboxMessageCard
+export default NotificationItem

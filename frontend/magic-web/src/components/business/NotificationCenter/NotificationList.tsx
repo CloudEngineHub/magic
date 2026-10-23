@@ -3,28 +3,28 @@ import { useCallback, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Spinner } from "@/components/shadcn-ui/spinner"
 import { cn } from "@/utils/cn"
-import { groupInboxMessages } from "./groupInboxMessages"
-import InboxMessageCard from "./InboxMessageCard"
-import { inboxStore } from "./store"
-import { useInboxAutoRead } from "./useInboxAutoRead"
+import { groupNotifications } from "./groupNotifications"
+import NotificationItem from "./NotificationItem"
+import { notificationCenterStore } from "./store"
+import { useNotificationAutoRead } from "./useNotificationAutoRead"
 
-const InboxMessageList = observer(function InboxMessageList({
+const NotificationList = observer(function NotificationList({
 	mobile = false,
 }: {
 	mobile?: boolean
 }) {
 	const { t } = useTranslation("sidebar")
 	const [root, setRoot] = useState<HTMLDivElement | null>(null)
-	const messages = inboxStore.visibleMessages
-	const grouped = inboxStore.activeTab === "all"
-	const onRead = useCallback((id: Parameters<typeof inboxStore.markRead>[0]) => {
-		void inboxStore.markRead(id)
+	const messages = notificationCenterStore.visibleMessages
+	const grouped = notificationCenterStore.activeTab === "all"
+	const onRead = useCallback((id: Parameters<typeof notificationCenterStore.markRead>[0]) => {
+		void notificationCenterStore.markRead(id)
 	}, [])
-	const revision = `${inboxStore.activeTab}|${messages
+	const revision = `${notificationCenterStore.activeTab}|${messages
 		.map((message) => `${message.id}:${message.is_unread}`)
-		.join("|")}|${inboxStore.catalog?.catalog_version ?? 0}`
+		.join("|")}|${notificationCenterStore.catalog?.catalog_version ?? 0}`
 
-	useInboxAutoRead({
+	useNotificationAutoRead({
 		enabled: Boolean(root) && messages.length > 0,
 		root,
 		revision,
@@ -42,11 +42,11 @@ const InboxMessageList = observer(function InboxMessageList({
 			onScroll={(event) => {
 				const node = event.currentTarget
 				if (node.scrollHeight - node.scrollTop - node.clientHeight < 96) {
-					void inboxStore.loadMore()
+					void notificationCenterStore.loadMore()
 				}
 			}}
 		>
-			{inboxStore.listLoading && messages.length === 0 ? (
+			{notificationCenterStore.listLoading && messages.length === 0 ? (
 				<div
 					className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-muted-foreground"
 					data-testid="inbox-loading"
@@ -63,7 +63,7 @@ const InboxMessageList = observer(function InboxMessageList({
 					{t("inbox.empty")}
 				</div>
 			) : grouped ? (
-				groupInboxMessages(messages).map((group) => (
+				groupNotifications(messages).map((group) => (
 					<section
 						key={group.key}
 						data-testid={`inbox-group-${group.key}`}
@@ -84,16 +84,16 @@ const InboxMessageList = observer(function InboxMessageList({
 									: t("inbox.groups.earlier")}
 						</div>
 						{group.messages.map((message) => (
-							<InboxMessageCard key={message.id} message={message} mobile={mobile} />
+							<NotificationItem key={message.id} message={message} mobile={mobile} />
 						))}
 					</section>
 				))
 			) : (
 				messages.map((message) => (
-					<InboxMessageCard key={message.id} message={message} mobile={mobile} />
+					<NotificationItem key={message.id} message={message} mobile={mobile} />
 				))
 			)}
-			{inboxStore.listLoadingMore ? (
+			{notificationCenterStore.listLoadingMore ? (
 				<div
 					className="flex items-center justify-center gap-2 px-7 py-4 text-xs text-muted-foreground"
 					data-testid="inbox-loading-more"
@@ -107,4 +107,4 @@ const InboxMessageList = observer(function InboxMessageList({
 	)
 })
 
-export default InboxMessageList
+export default NotificationList
