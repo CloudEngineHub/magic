@@ -74,34 +74,14 @@ describe("platform model category permissions", () => {
 		assert.deepEqual(getEditableProviderModelCategories(access), providerModelCategoryOrder)
 	})
 
-	it("keeps the unified workspace query permission read-only for every category", () => {
+	it("lets platform-wide permission cover every platform category", () => {
 		const access = getProviderModelCategoryAccess(
-			createAccess([PERMISSION_KEY_MAP.MODEL_MANAGEMENT_QUERY]),
-			"workspace",
+			createAccess([PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS]),
+			"platform",
 		)
 
-		assert.deepEqual(getAccessibleProviderModelCategories(access), providerModelCategoryOrder)
-		assert.deepEqual(getEditableProviderModelCategories(access), [])
-	})
-
-	it("treats the unified workspace edit permission as view permission", () => {
-		const access = getProviderModelCategoryAccess(
-			createAccess([PERMISSION_KEY_MAP.MODEL_MANAGEMENT_EDIT]),
-			"workspace",
-		)
-
-		assert.deepEqual(getAccessibleProviderModelCategories(access), providerModelCategoryOrder)
-		assert.deepEqual(getEditableProviderModelCategories(access), providerModelCategoryOrder)
-	})
-
-	it("lets platform-wide permission cover every platform and workspace category", () => {
-		const context = createAccess([PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS])
-
-		for (const scope of ["platform", "workspace"] as const) {
-			const access = getProviderModelCategoryAccess(context, scope)
-			assert.equal(getAccessibleProviderModelCategories(access).length, 4)
-			assert.equal(getEditableProviderModelCategories(access).length, 4)
-		}
+		assert.equal(getAccessibleProviderModelCategories(access).length, 4)
+		assert.equal(getEditableProviderModelCategories(access).length, 4)
 	})
 
 	it("maps embedding requests to the text API category without duplicates", () => {

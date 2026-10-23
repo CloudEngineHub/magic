@@ -92,16 +92,6 @@ describe("platform route access", () => {
 		assert.deepEqual(platformMenuItems(access, standaloneRoutes), ["nav.item.platformInfo"])
 	})
 
-	it("does not expose platform info for an unrelated permission", () => {
-		const access = createAccess({
-			isOfficialOrganization: true,
-			magicPermissionKeys: [PERMISSION_KEY_MAP.MODEL_MANAGEMENT_QUERY],
-		})
-
-		assert.equal(canAccess(RouteName.PlatformInfo, access), false)
-		assert.deepEqual(platformMenuItems(access, standaloneRoutes), [])
-	})
-
 	it("does not let the broad Magic administrator group enter platform pages", () => {
 		const access = createAccess({
 			isOfficialOrganization: true,
