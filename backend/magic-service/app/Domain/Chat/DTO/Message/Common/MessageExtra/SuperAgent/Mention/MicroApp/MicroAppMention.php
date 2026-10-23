@@ -27,7 +27,7 @@ final class MicroAppMention extends AbstractMention
         }
 
         $label = str_replace(['\\', '[', ']'], ['\\\\', '\[', '\]'], $appName);
-        return sprintf('[%s](micro_app://%s)', $label, rawurlencode($appId));
+        return sprintf('[%s](micro-app://%s)', $label, rawurlencode($appId));
     }
 
     public function getMentionJsonStruct(): array

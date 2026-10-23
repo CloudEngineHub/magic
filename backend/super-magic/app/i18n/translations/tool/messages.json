@@ -2239,6 +2239,18 @@
         "zh_CN": "下一步",
         "en_US": "Next step"
     },
+    "get_html_design_style_source.fetching": {
+        "zh_CN": "正在获取设计风格「{{style_code}}」的设计文档",
+        "en_US": "Fetching the design document for \"{{style_code}}\""
+    },
+    "get_html_design_style_source.done": {
+        "zh_CN": "已获取设计文档",
+        "en_US": "Design document fetched"
+    },
+    "get_html_design_style_source.error": {
+        "zh_CN": "设计文档获取失败，请稍后重试",
+        "en_US": "Unable to fetch the design document. Please try again later."
+    },
     "find_agents.searching": {
         "zh_CN": "正在查找与「{{keywords}}」相关的数字员工",
         "en_US": "Looking for Crew related to \"{{keywords}}\""

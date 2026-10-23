@@ -1,7 +1,9 @@
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
 
 // 只接受 canonical typed-link 的 authority 部分，避免把查询参数或路径误当成 app ID。
-const MICRO_APP_LINK_PATTERN = /^micro_app:\/\/([^/?#]+)$/i
+// URL scheme（RFC 3986）不允许下划线，规范写法是 `micro-app://`；
+// `micro_app://` 是历史消息里已落库的旧写法，只读兼容，新内容一律生成连字符写法。
+const MICRO_APP_LINK_PATTERN = /^micro[-_]app:\/\/([^/?#]+)$/i
 const MICRO_APP_ROUTE_PATTERN = /(?:^|\/)micro[-_]app\/([^/?#]+)/i
 
 export function parseMicroAppLink(href: unknown): string | null {

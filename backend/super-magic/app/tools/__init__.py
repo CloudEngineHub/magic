@@ -10,6 +10,7 @@ from app.tools.micro_app_plan import MicroAppPlanTool
 from app.tools.update_html_app_memory import UpdateHtmlAppMemory
 from app.tools.web_search import WebSearch
 from app.tools.find_agents import FindAgentsTool
+from app.tools.get_html_design_style_source import GetHtmlDesignStyleSource
 from app.tools.call_subagent import CallSubagent
 from app.tools.wait_for_subagents import WaitForSubagents
 from app.tools.compact_chat_history import CompactChatHistory
@@ -349,6 +350,7 @@ __all__ = [
     "AnalysisSlideWebpage",
     "WebSearch",
     "FindAgentsTool",
+    "GetHtmlDesignStyleSource",
     "CallSubagent",
     "WaitForSubagents",
     "ConnectDingTalkBot",

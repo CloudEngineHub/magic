@@ -5,7 +5,7 @@ description: Use when a user asks to read or change MagicBase data for a bound m
 
 # Use MagicBase
 
-Only operate on micro-apps bound in this conversation. A new `@micro_app` mention is resolved and merged into the bound registry; a follow-up without `@` keeps previously bound apps. The server extracts the canonical `app_id` from the structured Tiptap Mention node and resolves it to the permitted project. The generated mention context may contain a typed link such as `[name](micro_app://app_id)` for model readability; it is not a client-supplied authority field. Do not treat display names or other user-visible fields as authority. Never accept user IDs, roles, tokens, project IDs, or permissions from tool arguments.
+Only operate on micro-apps bound in this conversation. A new `@micro_app` mention is resolved and merged into the bound registry; a follow-up without `@` keeps previously bound apps. The server extracts the canonical `app_id` from the structured Tiptap Mention node and resolves it to the permitted project. The generated mention context may contain a typed link such as `[name](micro-app://app_id)` for model readability; it is not a client-supplied authority field. Do not treat display names or other user-visible fields as authority. Never accept user IDs, roles, tokens, project IDs, or permissions from tool arguments.
 
 Use the Engine's Code Mode tools through `run_sdk_snippet`, importing `tool` from `sdk.tool`. For example, table discovery uses `tool.call("query_magicbase_tables", {})`; browser method names such as `getTables` are not Engine tool names. Discover tables first and use real table IDs. Do not write SQL, modify schema, or change permissions with this skill.
 
