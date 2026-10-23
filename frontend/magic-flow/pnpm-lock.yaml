@@ -617,7 +617,7 @@ packages:
       postcss-selector-parser: ^6.0.13
 
   '@dtyq/eslint-config@0.0.11':
-    resolution: {integrity: sha512-GK6Ky9ToFfsGaMvSe7TZNTlSd7cveb1Y4AeKFnVbh3lT3ur+3gXWKXm20cJine6hEQFW8rqxq5TAX8wBsYPTvw==, tarball: https://registry.npmjs.org/@dtyq/eslint-config/-/eslint-config-0.0.11.tgz}
+    resolution: {integrity: sha512-GK6Ky9ToFfsGaMvSe7TZNTlSd7cveb1Y4AeKFnVbh3lT3ur+3gXWKXm20cJine6hEQFW8rqxq5TAX8wBsYPTvw==}
     hasBin: true
     peerDependencies:
       eslint: '>=8.0.0'

@@ -112,7 +112,7 @@ importers:
         version: link:packages/browser-apm
       '@dtyq/es6-template-strings':
         specifier: ~0.0.5
-        version: 0.0.6
+        version: 0.0.6(lodash-es@4.18.1)
       '@dtyq/html-sandbox':
         specifier: workspace:*
         version: link:packages/html-sandbox
@@ -2586,10 +2586,13 @@ packages:
       react: '>=16.0.0'
 
   '@dtyq/es6-template-strings@0.0.6':
-    resolution: {integrity: sha512-xhZAmnLSfrllb7p/qKg8Jvqlq4GyAqYyn09YEjXmpMQBOYUA33NygWdfzTY8IU0p9BYJNDi3wgygVNI/lAFzPg==}
+    resolution: {integrity: sha512-QzusO9G+v7KFuyQaiVOH+7nN8DU6mnB3WpBfAYGFP/fvU1nxs6oh6WXyj+MBhJeU7gOGj2ZHf9NjchcG79crCQ==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      lodash-es: ^4.17.21
 
   '@dtyq/eslint-config@0.0.11':
-    resolution: {integrity: sha512-QFsMh5KAmLpfhL16i1ul9HyGPPW/eNEfzPRiPJK8WiLzX9uuScO6EadmRFH9wP8V3zOjuhWHJm7wq2JBS+b0PQ==}
+    resolution: {integrity: sha512-GK6Ky9ToFfsGaMvSe7TZNTlSd7cveb1Y4AeKFnVbh3lT3ur+3gXWKXm20cJine6hEQFW8rqxq5TAX8wBsYPTvw==}
     hasBin: true
     peerDependencies:
       eslint: 8.57.1
@@ -2599,7 +2602,7 @@ packages:
         optional: true
 
   '@dtyq/magic-flow@0.0.16':
-    resolution: {integrity: sha512-CdXswQFONTk+n3GbN77xTNMuay7HNzFZU9F53Ka/kOHd1xzYJCGuRyjkbhoPVci5i35chuCWbonNdwH46hrrDA==}
+    resolution: {integrity: sha512-TJuu4gL3zjybGmAcxFHZTJqZrNywMwFaVb7P19Q1zUGiYaKQGI4DdL11FZ5dFbXZCQjRQzkg69916te0m7oKDw==}
     peerDependencies:
       '@tabler/icons-react': 3.46.0
       lodash-es: ^4.17.21
@@ -2610,12 +2613,13 @@ packages:
       dayjs: ^1.11.12
 
   '@dtyq/upload-sdk@0.0.12':
-    resolution: {integrity: sha512-zSDjryMWEvhRTYTr+v/lmbmWUZlRg/fuE5nu9ik/1kI0qqsezQRgDCYUjwb3Qv3uugM6yIjPwQUqgbBdj+xKJA==}
+    resolution: {integrity: sha512-zwxRtg9wKJ3Z3tGX3CGCW5gqDJt0ctOvmGg4FuVJxc8GjiGAOOdBT5JDhp3aLi0aV5vvymmp3eoXkR2c0t3gLA==}
+    engines: {node: '>=18.0.0'}
     peerDependencies:
       lodash-es: ^4.17.21
 
   '@dtyq/user-selector@0.1.15':
-    resolution: {integrity: sha512-gmDSRNt5m4UN8cfXKukZNn5g+Sx/4tiAAsRsQhAhWkAVSJYJ4GgWj0LV3JH93xt0g1gvx5l1zYoGbhYggFZw+Q==}
+    resolution: {integrity: sha512-dDYmrFeQTHHJVfDNGgR749XRByokha3aqffeg3wyTw+fua1jffExgct0NxmBf6BFffxH1znvO+15whGuzvG0fw==}
     peerDependencies:
       '@radix-ui/react-avatar': '>=1 <2'
       '@radix-ui/react-checkbox': '>=1 <2'
@@ -18610,7 +18614,7 @@ snapshots:
       classnames: 2.5.1
       react: 18.3.1
 
-  '@dtyq/es6-template-strings@0.0.6':
+  '@dtyq/es6-template-strings@0.0.6(lodash-es@4.18.1)':
     dependencies:
       esniff: 1.1.3
 
