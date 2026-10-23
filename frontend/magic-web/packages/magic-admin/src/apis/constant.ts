@@ -8,60 +8,32 @@ export const RequestUrl = {
 	/** 搜索用户 */
 	searchUser: "/api/v2/magic/contact/user/searchForSelect",
 
-	/** 获取天书组织架构 */
-	getTeamshareOrganization: "api/organization/chart/queries",
-	/** 获取子管理员权限列表 */
-	getSubAdminPermissions: "/v4/console/sub-admin/permissions",
-	/** 获取组织当前订阅的套餐 */
-	getSubscriptionInfo: "/api/v1/admin/subscription",
-
 	/** AI管理 */
 	/** AI管理 - 模型管理 */
 	/** 获取服务提供商（非官方数据） */
 	getServiceProvider: "/api/v1/admin/service-providers/templates/queries",
-	/** 非官方组织获取服务提供商 */
-	getServiceProviderNonOfficial: "/api/v1/organization/admin/service-providers/templates/queries",
 	/** 官方组织获取服务商列表 */
 	getServiceProviderList: "/api/v1/admin/service-providers",
-	/** 非官方组织获取服务商列表 */
-	getServiceProviderListNonOfficial: "/api/v1/organization/admin/service-providers",
 	/** 获取服务商详细信息 */
 	getServiceProviderDetail: "/api/v1/admin/service-providers/${id}",
-	/** 非官方组织获取服务商详细信息 */
-	getServiceProviderDetailNonOfficial: "/api/v1/organization/admin/service-providers/${id}",
 	/** 获取服务商模型价格模板 */
 	getModelPricingTemplates: "/api/v1/admin/service-providers/model-pricing-templates/queries",
 
 	/** 激活/取消模型 */
 	updateModelStatus: "/api/v1/admin/service-providers/models/${id}/status",
-	/** 非官方组织激活/取消模型 */
-	updateModelStatusNonOfficial:
-		"/api/v1/organization/admin/service-providers/models/${id}/status",
 	/** 添加模型 */
 	addModel: "/api/v1/admin/service-providers/models",
-	/** 非官方组织添加模型 */
-	addModelNonOfficial: "/api/v1/organization/admin/service-providers/models",
 	/** 删除模型 */
 	deleteModel: "/api/v1/admin/service-providers/models/${id}",
-	/** 非官方组织删除模型 */
-	deleteModelNonOfficial: "/api/v1/organization/admin/service-providers/models/${id}",
 	/** 连通性测试 */
 	testConnection: "/api/v1/admin/service-providers/connectivity-test",
-	/** 非官方组织连通性测试 */
-	testConnectionNonOfficial: "/api/v1/organization/admin/service-providers/connectivity-test",
 
 	/** 获取模型标识列表 */
 	getOriginalModelList: "/api/v1/admin/service-providers/original-models",
-	/** 非官方组织获取原始模型列表 */
-	getOriginalModelListNonOfficial: "/api/v1/organization/admin/service-providers/original-models",
 	/** 删除模型标识 */
 	deleteModalId: "/api/v1/admin/service-providers/model-ids/${id}",
-	/** 非官方组织删除模型标识 */
-	deleteModalIdNonOfficial: "/api/v1/organization/admin/service-providers/model-ids/${id}",
 	/** 添加模型标识 */
 	addModalId: "/api/v1/admin/service-providers/model-id",
-	/** 非官方组织添加模型标识 */
-	addModalIdNonOfficial: "/api/v1/organization/admin/service-providers/model-id",
 	/** 判断当前组织是否是官方组织 */
 	isOfficialOrg: "/api/v1/admin/service-providers/office-info",
 
@@ -77,30 +49,6 @@ export const RequestUrl = {
 	getFileTemporaryLink: "/api/v1/file-utils/temporary-urls/queries",
 	/** 获取官方服务商积分统计 */
 	getOfficialPointsStatistics: "/api/v1/quota/points/statistics",
-	/** 获取商品列表并携带sku */
-	getProductListWithSku: "/api/v1/official/admin/products/details",
-
-	/** AI管理 - 助理管理 */
-	/** 获取企业内部助理列表 */
-	getAgentList: "/org/admin/agents",
-	/** 获取助理详情 */
-	updateAgentStatus: "/org/admin/agents/update-status",
-	/** 保存助理 */
-	saveAgent: "/api/v2/magic/bot/save",
-	/** 获取企业内助理创建人 */
-	getAgentCreator: "/org/admin/agents/creator",
-
-	/** AI管理 - 功能配置 */
-	/** 获取已发布助理列表 */
-	getPublishList: "/api/v1/admin/agents/published",
-	/** AI助理全局设置 */
-	agentGlobalSettings: "/api/v1/admin/globals/agents/settings",
-
-	/** AI管理 - 管控策略 */
-	/** 积分组织管控规则 */
-	getOrgControlRule: "/api/v1/quota/points/control",
-	/** 查询管控目标已用积分 */
-	getControlTargetUsedPoints: "/api/v1/quota/points/control/points-used/queries",
 
 	/** 平台管理 */
 	/** —————— 平台管理 - 模式管理 —————— */
@@ -178,8 +126,6 @@ export const RequestUrl = {
 	updateAiPower: "/api/v1/admin/ai-abilities/${code}",
 	/** 能力管理联通性测试  */
 	testAiPowerConnection: "/api/v1/admin/ai-abilities/connectivity-test",
-	/** 获取全局配置 */
-	getGlobalConfig: "/api/v1/settings/global",
 	/** —————— 平台管理 - PPT模板 —————— */
 	/** 查询PPT模板列表 */
 	querySlidesTemplates: "/api/v1/admin/slides-templates/queries",
@@ -235,7 +181,6 @@ export const RequestUrl = {
 	/** 平台信息 */
 	/** 获取平台信息 */
 	getPlatformInfo: "/api/v1/platform/setting",
-	modelBillingPreview: "/api/v1/platform/setting/model-billing-preview",
 	/** 修改平台信息 */
 	updatePlatformInfo: "/api/v1/platform/setting",
 
@@ -260,22 +205,4 @@ export const RequestUrl = {
 	getFileDownloadLink: "/api/v1/file/publicFileDownload",
 	/** 获取上传token */
 	getUploadToken: "/api/v1/file-utils/upload-token",
-
-	/** 审批 */
-	/** 获取审批详情 */
-	getApprovalInstance: "/api/oa-approval/instances/${id}",
-	/** 获取下一单审批 */
-	getNextApproval: "/api/oa-approval/instances/next-pending",
-	/** 审批分享 */
-	approvalShare: "/api/oa-approval/instances/${id}/share",
-	/** 重置审批分享链接 */
-	resetShareLink: "/api/oa-approval/instances/${id}/user-share/reset",
-	/** 创建审批分享链接 */
-	createShareLink: "/api/oa-approval/instances/${id}/user-share",
-	/** 通过分享链接获取访问记录 */
-	getShareLinkAccessRecord: "/api/oa-approval/instances/${id}/user-share/access-logs",
-	/** 获取分享链接 */
-	getShareLink: "/api/oa-approval/instances/${id}/user-share",
-	/** 激活审批分享链接 */
-	activeShareLink: "/api/oa-approval/instances/${id}/user-share/status",
 }
