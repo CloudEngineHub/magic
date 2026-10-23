@@ -23,29 +23,12 @@ export const RouteName = {
 	PlatformInfo: "platform-info",
 	/** 平台应用菜单。 */
 	PlatformAppMenu: "platform-app-menu",
-	/** AI 水印配置。 */
-	PlatformAiWatermark: "platform-ai-watermark",
-	/** 自定义服务商许可。 */
-	PlatformCustomProviderLicense: "platform-custom-provider-license",
-	/** 平台维护。 */
-	PlatformMaintenance: "platform-maintenance",
-	PlatformResourceAlerts: "platform-resource-alerts",
-	/** 套餐列表。 */
-	PlatformPackageList: "platform-package-list",
-	/** 套餐详情。 */
-	PlatformPackageDetail: "platform-package-detail",
-	/** 订单列表。 */
-	PlatformOrderList: "platform-order-list",
 	/** 发票申请管理。 */
 	PlatformInvoiceList: "platform-invoice-list",
 	/** 平台模型列表。 */
 	PlatformModelList: "platform-model-list",
-	/** 平台模型标识映射。 */
-	PlatformModelIdentifierMapping: "platform-model-identifier-mapping",
 	/** 平台模型服务商列表。 */
 	PlatformProviderList: "platform-provider-list",
-	/** 模型参考倍率。 */
-	PlatformModelMultiplier: "platform-model-multiplier",
 	/** 系统能力管理。 */
 	PlatformSystemCapabilities: "platform-system-capabilities",
 	/** PPT 模板管理。 */
@@ -71,8 +54,6 @@ export const RouteName = {
 
 	/* ---------- AI 管理 ---------- */
 
-	/** 内部员工和技能发布审核。 */
-	InternalPublishReview: "internal-publish-review",
 	/** 自定义模型列表。 */
 	CustomModelList: "custom-model-list",
 	/** 自定义模型服务商。 */
@@ -307,29 +288,12 @@ export const RoutePath = {
 	PlatformInfo: "platform/basic/platform-info",
 	/** 平台应用菜单。 */
 	PlatformAppMenu: "platform/operations/app-menu",
-	/** AI 水印配置。 */
-	PlatformAiWatermark: "platform/operations/ai-watermark",
-	/** 自定义服务商许可。 */
-	PlatformCustomProviderLicense: "platform/operations/custom-service-provider-license",
-	/** 平台维护。 */
-	PlatformMaintenance: "platform/operations/maintenance",
-	PlatformResourceAlerts: "platform/operations/resource-alerts",
-	/** 套餐列表。 */
-	PlatformPackageList: "platform/packages/package-list",
-	/** 套餐详情。 */
-	PlatformPackageDetail: "platform/packages/package-detail",
-	/** 订单列表。 */
-	PlatformOrderList: "platform/packages/order-list",
 	/** 发票申请管理。 */
 	PlatformInvoiceList: "platform/packages/invoice-list",
 	/** 平台模型列表。 */
 	PlatformModelList: "platform/models/model-list",
-	/** 平台模型标识映射。 */
-	PlatformModelIdentifierMapping: "platform/models/model-identifier-mapping",
 	/** 平台模型服务商列表。 */
 	PlatformProviderList: "platform/models/provider-list",
-	/** 模型参考倍率。 */
-	PlatformModelMultiplier: "platform/models/model-multiplier",
 	/** 系统能力管理。 */
 	PlatformSystemCapabilities: "platform/agents/system-capabilities",
 	/** PPT 模板管理。 */
@@ -355,8 +319,6 @@ export const RoutePath = {
 
 	/* ---------- AI 管理 ---------- */
 
-	/** 内部员工和技能发布审核。 */
-	InternalPublishReview: "ai-governance/reviews/internal-publish",
 	/** 自定义模型列表。 */
 	CustomModelList: "ai-governance/custom-models/model-list",
 	/** 自定义模型服务商。 */
@@ -480,16 +442,6 @@ export const RouteRedirectPath = {
 	EnterpriseOrganizationDepartment: "department",
 	/** 示例表单父路由进入单列表单页。 */
 	ExamplesFormSingle: "../form-single",
-} as const satisfies Record<string, string>
-
-/** 同级页面之间导航时使用的相对路径。 */
-export const RouteRelativePath = {
-	/** 套餐列表返回地址。 */
-	PlatformPackageList: "../package-list",
-	/** 套餐详情进入地址。 */
-	PlatformPackageDetail: "../package-detail",
-	/** 发票详情跳转订单列表地址。 */
-	PlatformOrderList: "../order-list",
 } as const satisfies Record<string, string>
 
 /** 路由声明外使用的应用内绝对链接。 */

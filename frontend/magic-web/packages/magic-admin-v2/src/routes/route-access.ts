@@ -15,39 +15,10 @@ export const platformInfoAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT,
 )
 
-/** 模型倍率使用独立权限，仍限定官方组织。 */
-export const platformModelMultiplierAccess = allowOfficialMagic(
-	PERMISSION_KEY_MAP.MODEL_MULTIPLIER_QUERY,
-	PERMISSION_KEY_MAP.MODEL_MULTIPLIER_EDIT,
-)
-
 export const platformAppMenuAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.APP_MENU_QUERY,
 	PERMISSION_KEY_MAP.APP_MENU_EDIT,
 )
-
-// 后端目前没有独立的 AI 水印资源权限，按平台全局信息设置权限保护。
-export const platformAiWatermarkAccess = platformInfoAccess
-
-// 自定义服务商白名单复用旧版 PlatformProviderAccess 的平台信息接口。
-export const platformCustomProviderLicenseAccess = platformInfoAccess
-
-export const platformMaintenanceAccess = allowOfficialMagic(
-	PERMISSION_KEY_MAP.INFO_MANAGEMENT_QUERY,
-	PERMISSION_KEY_MAP.INFO_MANAGEMENT_EDIT,
-)
-
-export const platformResourceAlertsAccess = allowMagic(
-	PERMISSION_KEY_MAP.RESOURCE_ALERT_QUERY,
-	PERMISSION_KEY_MAP.RESOURCE_ALERT_EDIT,
-)
-
-export const platformPackageAccess = allowOfficialMagic(
-	PERMISSION_KEY_MAP.PACKAGE_MANAGEMENT_QUERY,
-	PERMISSION_KEY_MAP.PACKAGE_MANAGEMENT_EDIT,
-)
-
-export const platformOrderAccess = allowOfficialMagic(PERMISSION_KEY_MAP.ORDER_MANAGEMENT_QUERY)
 
 export const platformInvoiceAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.INVOICE_MANAGEMENT_QUERY,
@@ -58,8 +29,6 @@ export const platformModelAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_QUERY,
 	PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_EDIT,
 )
-
-export const platformModelIdentifierMappingAccess = platformModelAccess
 
 export const platformSystemCapabilitiesAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.AI_ABILITY_MANAGEMENT_QUERY,
@@ -90,14 +59,4 @@ export const platformPublishReviewAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_EDIT,
 	PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_QUERY,
 	PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_EDIT,
-)
-
-export const internalPublishReviewAccess = and(
-	denyPersonalOrganization,
-	allowMagic(
-		PERMISSION_KEY_MAP.AGENT_REVIEW_QUERY,
-		PERMISSION_KEY_MAP.AGENT_REVIEW_EDIT,
-		PERMISSION_KEY_MAP.SKILL_REVIEW_QUERY,
-		PERMISSION_KEY_MAP.SKILL_REVIEW_EDIT,
-	),
 )
