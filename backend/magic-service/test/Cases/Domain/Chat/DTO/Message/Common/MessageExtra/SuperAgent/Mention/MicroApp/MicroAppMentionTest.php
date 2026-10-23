@@ -33,7 +33,7 @@ final class MicroAppMentionTest extends TestCase
         ]);
 
         $this->assertSame(
-            '[Demo App](micro_app://42)',
+            '[Demo App](micro-app://42)',
             $mention->getMentionTextStruct()
         );
 

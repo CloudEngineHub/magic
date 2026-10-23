@@ -80,7 +80,7 @@ export const MarkdownLink = observer((props: MarkdownLinkProps) => {
 	const normalizedStyle = normalizeInlineStyle(rawAttributes.style)
 	const microAppId = parseMicroAppLink(normalizedHref)
 	// Keep the custom scheme out of the anchor href. Browsers treat it as a relative
-	// path in the micro-app route, which produces `/micro-app/micro_app://...`.
+	// path in the micro-app route, which produces `/micro-app/micro-app://...`.
 	const microAppHref = normalizeMicroAppHref(normalizedHref)
 	const isCurrentMicroApp = isCurrentMicroAppLink(microAppId)
 	const attachments = resolvedProjectFilesStore?.workspaceFilesList ?? []

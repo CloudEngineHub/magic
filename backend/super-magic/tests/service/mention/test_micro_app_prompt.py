@@ -52,7 +52,7 @@ def test_extract_micro_app_app_ids_from_rich_text():
 
 
 def test_extract_micro_app_app_ids_ignores_plain_text_mentions_and_urls():
-    assert extract_micro_app_app_ids("@Demo App https://example.test/micro_app://app-1") == []
+    assert extract_micro_app_app_ids("@Demo App https://example.test/micro-app://app-1") == []
 
 
 @pytest.mark.asyncio
@@ -546,7 +546,7 @@ async def test_format_bound_micro_app_scope_context_renders_typed_links(tmp_path
     )
 
     context = await format_bound_micro_app_scope_context()
-    assert "[App One](micro_app://app-1)" in context
+    assert "[App One](micro-app://app-1)" in context
     assert "project_id: project-1" in context
     assert "use-magicbase" in context
     assert "built-in system skill" in context

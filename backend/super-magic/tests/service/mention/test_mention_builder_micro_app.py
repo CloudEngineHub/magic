@@ -32,7 +32,7 @@ async def test_builder_binds_single_micro_app_scope_once():
         context = await MentionContextBuilder().build(mentions)
 
     sync_mock.assert_awaited_once_with(mentions)
-    assert "micro_app://app-1" in context
+    assert "micro-app://app-1" in context
     assert "use-magicbase" in context
     assert MULTI_MICRO_APP_SCOPE_TIP not in context
 
@@ -126,8 +126,8 @@ async def test_builder_includes_previously_bound_micro_apps():
     ):
         context = await MentionContextBuilder().build(mentions)
 
-    assert "[App One](micro_app://app-1)" in context
-    assert "[App Two](micro_app://app-2)" in context
+    assert "[App One](micro-app://app-1)" in context
+    assert "[App Two](micro-app://app-2)" in context
     assert MULTI_MICRO_APP_SCOPE_TIP in context
 
 
@@ -155,6 +155,6 @@ async def test_builder_appends_bound_micro_apps_to_other_mentions():
     ):
         context = await MentionContextBuilder().build(mentions)
 
-    assert "[App One](micro_app://app-1)" in context
+    assert "[App One](micro-app://app-1)" in context
     assert "use-magicbase" in context
     assert MULTI_MICRO_APP_SCOPE_TIP not in context
