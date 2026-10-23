@@ -5,10 +5,12 @@ function text(value: unknown) {
 	return String(value)
 }
 
-function formatPermission(value: unknown) {
+export function formatInboxPermission(value: unknown) {
 	if (value === "viewer") return i18next.t("inbox.permission.viewer", { ns: "sidebar" })
 	if (value === "editor") return i18next.t("inbox.permission.editor", { ns: "sidebar" })
-	if (value === "manager") return i18next.t("inbox.permission.manager", { ns: "sidebar" })
+	// Collaboration roles use "manage"; retain "manager" for existing notification payloads.
+	if (value === "manage" || value === "manager")
+		return i18next.t("inbox.permission.manager", { ns: "sidebar" })
 	return text(value)
 }
 
@@ -21,7 +23,7 @@ function formatShareScope(value: unknown) {
 /** Payload display values for template substitution. Field-level missing values become "-". */
 export function formatInboxPayload(payload: Record<string, unknown>) {
 	const next: Record<string, unknown> = { ...payload }
-	if ("permission" in payload) next.permission = formatPermission(payload.permission)
+	if ("permission" in payload) next.permission = formatInboxPermission(payload.permission)
 	if ("share_scope" in payload) next.share_scope = formatShareScope(payload.share_scope)
 	return next
 }
@@ -38,6 +40,6 @@ export function inboxResource(payload: Record<string, unknown>) {
 	if (organization == null && permission == null) return undefined
 	return {
 		organization: text(organization),
-		permission: formatPermission(permission),
+		permission: formatInboxPermission(permission),
 	}
 }

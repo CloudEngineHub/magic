@@ -7,6 +7,7 @@ import {
 	templateCatalogKey,
 } from "./renderNotificationTemplate"
 import { applyInboxResourceNameFallbacks } from "./inboxResourceFallback"
+import { formatInboxPermission } from "./formatInboxPayload"
 import type { InboxMessage } from "./types"
 
 const logger = Logger.createLogger("InboxCopy")
@@ -21,16 +22,7 @@ export function formatInboxPayload(payload: Record<string, unknown>) {
 	const shareScope = payload.share_scope
 	return {
 		...payload,
-		permission: formatMappedValue(
-			permission,
-			permission === "viewer"
-				? i18next.t("inbox.permission.viewer", { ns: "sidebar" })
-				: permission === "editor"
-					? i18next.t("inbox.permission.editor", { ns: "sidebar" })
-					: permission === "manager"
-						? i18next.t("inbox.permission.manager", { ns: "sidebar" })
-						: undefined,
-		),
+		permission: formatInboxPermission(permission),
 		share_scope: formatMappedValue(
 			shareScope,
 			shareScope === "all"
