@@ -95,7 +95,7 @@ describe("platform route access", () => {
 	it("does not expose platform info for an unrelated permission", () => {
 		const access = createAccess({
 			isOfficialOrganization: true,
-			magicPermissionKeys: [PERMISSION_KEY_MAP.INFO_MANAGEMENT_QUERY],
+			magicPermissionKeys: [PERMISSION_KEY_MAP.MODEL_MANAGEMENT_QUERY],
 		})
 
 		assert.equal(canAccess(RouteName.PlatformInfo, access), false)

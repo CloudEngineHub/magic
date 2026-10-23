@@ -23,7 +23,7 @@ export function useAgentReviewListQuery(
 	return useQuery({
 		enabled,
 		queryKey: publishReviewKeys.employeeList(variant, params),
-		queryFn: ({ signal }) => publishReview.getAgentReviewList(params, variant, { signal }),
+		queryFn: ({ signal }) => publishReview.getAgentReviewList(params, { signal }),
 	})
 }
 
@@ -36,6 +36,6 @@ export function useSkillReviewListQuery(
 	return useQuery({
 		enabled,
 		queryKey: publishReviewKeys.skillList(variant, params),
-		queryFn: ({ signal }) => publishReview.getSkillReviewList(params, variant, { signal }),
+		queryFn: ({ signal }) => publishReview.getSkillReviewList(params, { signal }),
 	})
 }

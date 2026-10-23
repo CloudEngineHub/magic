@@ -1,10 +1,5 @@
 import { lazy } from "react"
-import {
-	RouteGroup,
-	RouteName,
-	RoutePath,
-	RouteSection,
-} from "@magic-admin-v2/constants/routes"
+import { RouteGroup, RouteName, RoutePath, RouteSection } from "@magic-admin-v2/constants/routes"
 import { RuntimeMode } from "@magic-admin-v2/constants/runtime"
 import AccessDeniedPage from "@magic-admin-v2/pages/access-denied-page"
 import { DefaultRouteRedirect } from "@magic-admin-v2/routes/default-route-redirect"
@@ -18,7 +13,7 @@ import {
 	platformSystemCapabilitiesAccess,
 	platformSlidesTemplateAccess,
 } from "@magic-admin-v2/routes/route-access"
-import { editionRoutes } from "@magic-admin-v2/routes/edition"
+import { editionRoutes, editionStandaloneRoutes } from "@magic-admin-v2/routes/edition"
 import type { Route } from "@magic-admin-v2/routes/types"
 
 const DashboardLayout = lazy(() => import("@magic-admin-v2/layouts/dashboard-layout"))
@@ -54,87 +49,88 @@ const PlatformSlidesTemplatePage = lazy(
 	() => import("@magic-admin-v2/features/platform-slides-template/platform-slides-template-page"),
 )
 
-function createBaseFeatureRoutes(): Route[] {
+function createBaseFeatureRoutes(mode: RuntimeMode): Route[] {
 	return [
-	{
-		name: RouteName.Overview,
-		path: RoutePath.Overview,
-		element: <DashboardPage />,
-		titleKey: "nav.item.overview",
-		meta: { menuVisible: false },
-	},
-	{
-		name: RouteName.PlatformInfo,
-		path: RoutePath.PlatformInfo,
-		element: <PlatformInfoPage />,
-		titleKey: "nav.item.platformInfo",
-		validate: platformInfoAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.BasicSettings },
-	},
-	{
-		name: RouteName.PlatformAppMenu,
-		path: RoutePath.PlatformAppMenu,
-		element: <PlatformAppMenuPage />,
-		titleKey: "nav.item.appMenu",
-		validate: platformAppMenuAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.BasicSettings },
-	},
-	{
-		name: RouteName.PlatformModelList,
-		path: RoutePath.PlatformModelList,
-		element: <PlatformModelListPage />,
-		titleKey: "nav.item.modelList",
-		validate: platformModelAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
-	},
-	{
-		name: RouteName.PlatformProviderList,
-		path: RoutePath.PlatformProviderList,
-		element: <PlatformProviderListPage />,
-		titleKey: "nav.item.providerList",
-		validate: platformModelAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
-	},
-	{
-		name: RouteName.PlatformSystemCapabilities,
-		path: RoutePath.PlatformSystemCapabilities,
-		element: <PlatformSystemCapabilitiesPage />,
-		titleKey: "nav.item.systemCapabilities",
-		validate: platformSystemCapabilitiesAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
-	},
-	{
-		name: RouteName.PlatformSlidesTemplate,
-		path: RoutePath.PlatformSlidesTemplate,
-		element: <PlatformSlidesTemplatePage />,
-		titleKey: "nav.item.slidesTemplate",
-		validate: platformSlidesTemplateAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
-	},
-	{
-		name: RouteName.PlatformOfficialStaff,
-		path: RoutePath.PlatformOfficialStaff,
-		element: <PlatformOfficialStaffPage />,
-		titleKey: "nav.item.officialStaff",
-		validate: platformOfficialStaffAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
-	},
-	{
-		name: RouteName.PlatformOfficialMarketplace,
-		path: RoutePath.PlatformOfficialMarketplace,
-		element: <PlatformOfficialMarketplacePage />,
-		titleKey: "nav.item.officialMarketplace",
-		validate: platformMarketplaceAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
-	},
-	{
-		name: RouteName.PlatformPublishReview,
-		path: RoutePath.PlatformPublishReview,
-		element: <PlatformPublishReviewPage />,
-		titleKey: "nav.item.publishReview",
-		validate: platformPublishReviewAccess,
-		meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
-	},
+		{
+			name: RouteName.Overview,
+			path: RoutePath.Overview,
+			element: <DashboardPage />,
+			titleKey: "nav.item.overview",
+			meta: { menuVisible: false },
+		},
+		{
+			name: RouteName.PlatformInfo,
+			path: RoutePath.PlatformInfo,
+			element: <PlatformInfoPage />,
+			titleKey: "nav.item.platformInfo",
+			validate: platformInfoAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.BasicSettings },
+		},
+		{
+			name: RouteName.PlatformAppMenu,
+			path: RoutePath.PlatformAppMenu,
+			element: <PlatformAppMenuPage />,
+			titleKey: "nav.item.appMenu",
+			validate: platformAppMenuAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.BasicSettings },
+		},
+		...(mode === RuntimeMode.Standalone ? editionStandaloneRoutes : []),
+		{
+			name: RouteName.PlatformModelList,
+			path: RoutePath.PlatformModelList,
+			element: <PlatformModelListPage />,
+			titleKey: "nav.item.modelList",
+			validate: platformModelAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
+		},
+		{
+			name: RouteName.PlatformProviderList,
+			path: RoutePath.PlatformProviderList,
+			element: <PlatformProviderListPage />,
+			titleKey: "nav.item.providerList",
+			validate: platformModelAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.ModelManagement },
+		},
+		{
+			name: RouteName.PlatformSystemCapabilities,
+			path: RoutePath.PlatformSystemCapabilities,
+			element: <PlatformSystemCapabilitiesPage />,
+			titleKey: "nav.item.systemCapabilities",
+			validate: platformSystemCapabilitiesAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
+		},
+		{
+			name: RouteName.PlatformSlidesTemplate,
+			path: RoutePath.PlatformSlidesTemplate,
+			element: <PlatformSlidesTemplatePage />,
+			titleKey: "nav.item.slidesTemplate",
+			validate: platformSlidesTemplateAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
+		},
+		{
+			name: RouteName.PlatformOfficialStaff,
+			path: RoutePath.PlatformOfficialStaff,
+			element: <PlatformOfficialStaffPage />,
+			titleKey: "nav.item.officialStaff",
+			validate: platformOfficialStaffAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
+		},
+		{
+			name: RouteName.PlatformOfficialMarketplace,
+			path: RoutePath.PlatformOfficialMarketplace,
+			element: <PlatformOfficialMarketplacePage />,
+			titleKey: "nav.item.officialMarketplace",
+			validate: platformMarketplaceAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
+		},
+		{
+			name: RouteName.PlatformPublishReview,
+			path: RoutePath.PlatformPublishReview,
+			element: <PlatformPublishReviewPage />,
+			titleKey: "nav.item.publishReview",
+			validate: platformPublishReviewAccess,
+			meta: { section: RouteSection.Platform, group: RouteGroup.AgentManagement },
+		},
 	]
 }
 

@@ -20,11 +20,6 @@ export const platformAppMenuAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.APP_MENU_EDIT,
 )
 
-export const platformInvoiceAccess = allowOfficialMagic(
-	PERMISSION_KEY_MAP.INVOICE_MANAGEMENT_QUERY,
-	PERMISSION_KEY_MAP.INVOICE_MANAGEMENT_EDIT,
-)
-
 export const platformModelAccess = allowOfficialMagic(
 	PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_QUERY,
 	PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_EDIT,
