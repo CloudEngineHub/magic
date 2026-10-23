@@ -47,9 +47,10 @@ describe("buildDesignStylePromptContent", () => {
 			},
 		})
 		expect(JSON.stringify(result)).toContain(`style_code: ${style.code}`)
-		expect(paragraphs).toHaveLength(7)
+		// Only dispatch information: skill, file, style. Rules stay in the skill.
+		expect(paragraphs).toHaveLength(3)
 		expect(paragraphs[0]?.content?.[0]?.text).toContain("html-design-style")
-		expect(JSON.stringify(result)).toContain("Preserve the existing content")
+		expect(JSON.stringify(result)).not.toContain("Preserve the existing content")
 	})
 
 	it.each([

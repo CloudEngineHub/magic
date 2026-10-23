@@ -415,6 +415,10 @@
         "zh_CN": "查找数字员工",
         "en_US": "Find Crew"
     },
+    "get_html_design_style_source": {
+        "zh_CN": "获取设计风格",
+        "en_US": "Get design style"
+    },
     "wait_for_subagents": {
         "zh_CN": "等待智能体完成任务",
         "en_US": "Wait for Agents"
