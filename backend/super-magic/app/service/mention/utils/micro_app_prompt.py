@@ -179,7 +179,7 @@ async def format_bound_micro_app_scope_context() -> str:
     for index, (app_id, entry) in enumerate(scopes.items(), 1):
         app_name = str(entry.get("app_name") or app_id).strip()
         label = app_name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
-        lines.append(f"{index}. [{label}](micro_app://{quote(app_id, safe='-._~')})")
+        lines.append(f"{index}. [{label}](micro-app://{quote(app_id, safe='-._~')})")
         project_id = str(entry.get("project_id") or "").strip()
         if project_id:
             lines.extend(await format_referenced_project_skill_lines(project_id))
@@ -188,7 +188,7 @@ async def format_bound_micro_app_scope_context() -> str:
     incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())
     if len(scopes) > 1 or incomplete:
         app_list = ", ".join(
-            f"{entry['app_name']} (micro_app://{scope_app_id})"
+            f"{entry['app_name']} (micro-app://{scope_app_id})"
             for scope_app_id, entry in scopes.items()
         )
         tip = (

@@ -14,7 +14,7 @@ async def test_micro_app_mention_uses_app_id_only():
     ):
         assert await handler.handle(
             {"type": "micro_app", "app_id": "app-1", "app_name": "Ignored"}, 1
-        ) == ["1. [Ignored](micro_app://app-1)"]
+        ) == ["1. [Ignored](micro-app://app-1)"]
 
 
 @pytest.mark.asyncio
@@ -43,7 +43,7 @@ async def test_micro_app_mention_prints_project_id_and_companion_skills(tmp_path
             1,
         )
 
-    assert lines[0] == "1. [库存助手](micro_app://app-1)"
+    assert lines[0] == "1. [库存助手](micro-app://app-1)"
     assert "   - project_id: 4001" in lines
     assert "   - skills: inventory_manager" in lines
 
@@ -125,8 +125,8 @@ async def test_micro_app_mention_tip_lists_multiple_bound_scopes():
     ):
         tip = await handler.get_tip({"type": "micro_app", "app_id": "app-1"})
     assert "Pass app_id" in tip
-    assert "micro_app://app-1" in tip
-    assert "micro_app://app-2" in tip
+    assert "micro-app://app-1" in tip
+    assert "micro-app://app-2" in tip
 
 
 @pytest.mark.asyncio

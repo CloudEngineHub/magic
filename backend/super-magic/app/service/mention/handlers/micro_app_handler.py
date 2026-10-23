@@ -4,7 +4,7 @@
   - app_id / app_name / project_id（顶层）
 
 handler 职责：
-  1. handle(): 把 mention 摘要写入 <mentions> 上下文（micro_app:// typed link）
+  1. handle(): 把 mention 摘要写入 <mentions> 上下文（micro-app:// typed link）
   2. get_tip(): 在已绑定 scope 后给出 MagicBase 与 companion skill 使用指引
 """
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -60,7 +60,7 @@ class MicroAppHandler(BaseMentionHandler):
         incomplete = bool(mentioned_ids) and set(mentioned_ids) != set(scopes.keys())
         if len(scopes) > 1 or incomplete:
             app_list = ", ".join(
-                f"{entry['app_name']} (micro_app://{scope_app_id})"
+                f"{entry['app_name']} (micro-app://{scope_app_id})"
                 for scope_app_id, entry in scopes.items()
             )
             return (
@@ -87,7 +87,7 @@ class MicroAppHandler(BaseMentionHandler):
         app_name = str(mention.get("app_name") or mention.get("name") or app_id).strip()
         label = app_name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
         target = quote(app_id, safe="-._~")
-        lines = [f"{index}. [{label}](micro_app://{target})"]
+        lines = [f"{index}. [{label}](micro-app://{target})"]
         project_id = _mention_project_id(mention, app_id)
         if project_id:
             lines.extend(await format_referenced_project_skill_lines(project_id))
