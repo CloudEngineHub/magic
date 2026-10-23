@@ -40,7 +40,9 @@ use App\Domain\ModelGateway\Service\VideoBillingDetailsResolver;
 use App\Domain\ModelGateway\Service\VideoGenerationConfigDomainService;
 use App\Domain\ModelGateway\Service\VideoQueueDomainService;
 use App\Domain\Operation\Event\OperationUsageFinishedEvent;
+use App\Domain\Operation\Event\OperationUsageWillStartEvent;
 use App\Domain\Provider\Entity\ValueObject\ProviderCode;
+use App\Domain\SuperMagic\Agent\Service\MagicClawRuntimePolicyDomainService;
 use App\Domain\SuperMagic\File\Service\TaskFileDomainService;
 use App\ErrorCode\MagicApiErrorCode;
 use App\ErrorCode\VideoGenerateErrorCode;
@@ -222,6 +224,101 @@ class VideoOperationAppServiceTest extends TestCase
         $this->assertSame('provider-task-1', $operationRepository->operations[$response->getId()]->getProviderTaskId());
         $this->assertSame(VideoOperationStatus::PROVIDER_RUNNING, $operationRepository->operations[$response->getId()]->getStatus());
         $this->assertTrue($logger->hasRecord('info', 'video operation submitted'));
+    }
+
+    public function testEnqueuePreservesProviderAndInputMediaForReservation(): void
+    {
+        $runtimePolicy = $this->createMock(MagicClawRuntimePolicyDomainService::class);
+        $runtimePolicy->expects($this->once())->method('assertModelInvocation');
+        $container = new class($runtimePolicy) implements ContainerInterface {
+            public function __construct(private readonly MagicClawRuntimePolicyDomainService $runtimePolicy)
+            {
+            }
+
+            public function get(string $id): mixed
+            {
+                if ($id === MagicClawRuntimePolicyDomainService::class) {
+                    return $this->runtimePolicy;
+                }
+
+                throw new RuntimeException(sprintf('test container entry not found: %s', $id));
+            }
+
+            public function has(string $id): bool
+            {
+                return $id === MagicClawRuntimePolicyDomainService::class;
+            }
+        };
+        ApplicationContext::setContainer(new EventDispatcherContainer($this->eventDispatcher, $container));
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(submitResult: 'provider-task-reservation');
+        $service = $this->createVideoOperationAppService(
+            $operationRepository,
+            $executor,
+            videoModel: new VideoModel([], 'doubao-seedance-2-5-260628', 'provider-model', ProviderCode::VolcengineArk),
+        );
+        $service->logger = new NullLogger();
+        $referenceImages = array_fill(0, 7, ['uri' => 'https://example.com/reference.webp']);
+
+        $response = $service->enqueue('token-reservation', new CreateVideoDTO([
+            'model_id' => 'seedance-token-model',
+            'task' => 'generate',
+            'prompt' => 'make a video',
+            'input_mode' => 'omni_reference',
+            'inputs' => ['reference_images' => $referenceImages],
+            'generation' => ['resolution' => '720p', 'duration_seconds' => 30],
+        ]));
+
+        $events = array_values(array_filter(
+            $this->eventDispatcher->events,
+            static fn (object $event): bool => $event instanceof OperationUsageWillStartEvent,
+        ));
+        $this->assertCount(1, $events);
+        $usage = $events[0]->getUsage();
+        $this->assertSame(ProviderCode::VolcengineArk->value, $usage['provider_code']);
+        $this->assertSame($referenceImages, $usage['input_media']['reference_images']);
+        $this->assertSame(7, $usage['reference_material']['reference_image_count']);
+        $this->assertSame(30, $usage['output_duration_seconds']);
+        $this->assertSame('video_operation:' . $response->getId(), $events[0]->getExecutionKey());
+        $this->assertCount(1, $executor->submittedOperations);
+    }
+
+    public function testEnqueueStopsBeforeProviderWhenReservationIsRejected(): void
+    {
+        $exception = new BusinessException('Insufficient points', 10104);
+        $dispatcher = new class($exception) implements EventDispatcherInterface {
+            public function __construct(private readonly BusinessException $exception)
+            {
+            }
+
+            public function dispatch(object $event): object
+            {
+                if ($event instanceof OperationUsageWillStartEvent) {
+                    throw $this->exception;
+                }
+
+                return $event;
+            }
+        };
+        ApplicationContext::setContainer(new EventDispatcherContainer($dispatcher, ApplicationContext::getContainer()));
+        $operationRepository = new InMemoryVideoQueueOperationRepository();
+        $executor = new RecordingQueueOperationExecutor(submitResult: 'unused');
+        $service = $this->createVideoOperationAppService($operationRepository, $executor);
+        $service->logger = new NullLogger();
+
+        try {
+            $service->enqueue('token-reservation-rejected', new CreateVideoDTO([
+                'model_id' => 'veo-3.1-fast-generate-preview',
+                'task' => 'generate',
+                'prompt' => 'make a video',
+            ]));
+            $this->fail('An insufficient reservation must reject video submission.');
+        } catch (BusinessException $caught) {
+            $this->assertSame($exception, $caught);
+        }
+
+        $this->assertSame([], $executor->submittedOperations);
+        $this->assertSame([], $operationRepository->operations);
     }
 
     public function testEnqueueDispatchesManagedPollMessageByDefault(): void
@@ -2548,6 +2645,7 @@ class VideoOperationAppServiceTest extends TestCase
         RecordingQueueOperationExecutor $executor,
         ?ModelGatewayDataIsolation $dataIsolation = null,
         ?Producer $producer = null,
+        ?VideoModel $videoModel = null,
     ): VideoOperationAppService {
         $dataIsolation ??= $this->createDataIsolation();
 
@@ -2561,7 +2659,7 @@ class VideoOperationAppServiceTest extends TestCase
         $modelGatewayMapper = $this->createMock(ModelGatewayMapper::class);
         $modelGatewayMapper->method('getOrganizationVideoModel')
             ->willReturn($this->createVideoModelEntry(
-                new VideoModel([], 'LCnVzCkkMnVulyrz', 'provider-model', ProviderCode::Cloudsway)
+                $videoModel ?? new VideoModel([], 'LCnVzCkkMnVulyrz', 'provider-model', ProviderCode::Cloudsway)
             ));
 
         return new VideoOperationAppService(
