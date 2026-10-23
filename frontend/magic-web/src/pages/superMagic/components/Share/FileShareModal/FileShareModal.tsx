@@ -18,6 +18,11 @@ import useStyles from "./style"
 import { findFileInTree, calculateActualFileCount } from "../FileSelector/utils"
 import { useDebounceFn } from "ahooks"
 import { handleShareTypeChangeWithConfirm, generateSharePassword } from "../utils"
+import { ensureOrganizationAllMembersShareConfirmed } from "../utils/organizationShareConfirm"
+import {
+	DEFAULT_NEW_ORGANIZATION_SHARE_RANGE,
+	isOrganizationDesignatedShareIncomplete,
+} from "../utils/organizationShareGuards"
 import MagicModal from "@/components/base/MagicModal"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { generateShareUrl } from "@/pages/superMagic/components/ShareManagement/utils/shareTypeHelpers"
@@ -143,7 +148,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 	const [shareExpiry, setShareExpiry] = useState<number | null>(null) // null = permanent
 
 	// State: share range (for Organization share type)
-	const [shareRange, setShareRange] = useState<ShareRange>("all")
+	const [shareRange, setShareRange] = useState<ShareRange>(DEFAULT_NEW_ORGANIZATION_SHARE_RANGE)
 	const [shareTargets, setShareTargets] = useState<ShareTarget[]>([])
 
 	// State: share type and settings
@@ -364,7 +369,7 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		setAttachmentList([])
 		setShareName("")
 		setShareExpiry(null)
-		setShareRange("all")
+		setShareRange(DEFAULT_NEW_ORGANIZATION_SHARE_RANGE)
 		setShareTargets([])
 		setDefaultOpenFileId(externalDefaultOpenFileId || null)
 		setShareProject(initialLockShareProject ? false : shareMode === ShareMode.Project)
@@ -779,6 +784,14 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 		)
 		if (!flushed) return
 
+		if (isOrganizationDesignatedShareIncomplete(shareType, shareRange, shareTargets.length)) {
+			magicToast.error(t("share.organizationDesignatedMembersRequired"))
+			return
+		}
+
+		const confirmed = await ensureOrganizationAllMembersShareConfirmed(shareType, shareRange, t)
+		if (!confirmed) return
+
 		setIsSaving(true)
 		// Capture create vs edit before the API; the first successful save marks the resource created.
 		const isNewShare = !hasResourceIdCreated.current
@@ -1133,7 +1146,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 							selectedFileIds.length === 0 ||
 							isAnalyzingDocumentDependencies ||
 							(shouldControlShareType && shareTypePermissions.isLoading) ||
-							!isSelectedShareTypePermitted
+							!isSelectedShareTypePermitted ||
+							isOrganizationDesignatedShareIncomplete(
+								shareType,
+								shareRange,
+								shareTargets.length,
+							)
 						}
 						hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 					/>
@@ -1325,7 +1343,12 @@ export default memo(function FileShareModal(props: FileShareModalProps) {
 					(selectedFileIds.length === 0 && !effectiveShareProject) ||
 					isAnalyzingDocumentDependencies ||
 					(shouldControlShareType && shareTypePermissions.isLoading) ||
-					!isSelectedShareTypePermitted
+					!isSelectedShareTypePermitted ||
+					isOrganizationDesignatedShareIncomplete(
+						shareType,
+						shareRange,
+						shareTargets.length,
+					)
 				}
 				hideManageShareLinks={fileShareUiConfig?.hideManageShareLinks}
 			/>

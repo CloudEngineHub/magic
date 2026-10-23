@@ -9,7 +9,7 @@ import { IS_DARK_MODE_DISABLED } from "@/constants/theme"
 import { isDev } from "@/utils/env"
 import { MagicTooltip } from "@/components/base"
 import { useActionButtonsMenu } from "./useActionButtonsMenu"
-import InboxSidebarEntry from "./InboxSidebarEntry"
+import NotificationCenterSidebarEntry from "./NotificationCenterSidebarEntry"
 interface ActionButtonsProps {
 	collapsed: boolean
 }
@@ -55,7 +55,7 @@ function ActionButtons({ collapsed }: ActionButtonsProps) {
 					collapsed ? "flex-col" : "justify-around",
 				)}
 			>
-				<InboxSidebarEntry collapsed={collapsed} />
+				<NotificationCenterSidebarEntry collapsed={collapsed} />
 				{actionItems.map((item) => {
 					const Icon = item.icon
 					return (

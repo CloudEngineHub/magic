@@ -1,20 +1,20 @@
 import { useEffect, useRef } from "react"
-import type { InboxCategory, InboxMessageId } from "./types"
+import type { NotificationCategory, NotificationId } from "./types"
 
-export const INBOX_AUTO_READ_DELAY_MS = 1000
-export const INBOX_AUTO_READ_THRESHOLD = 0.7
+export const NOTIFICATION_AUTO_READ_DELAY_MS = 1000
+export const NOTIFICATION_AUTO_READ_THRESHOLD = 0.7
 
-interface UseInboxAutoReadOptions {
+interface UseNotificationAutoReadOptions {
 	enabled: boolean
 	root: Element | null
 	/** Re-bind observers when unread flags or tab membership change. */
 	revision: string
-	onRead: (id: InboxMessageId) => void
+	onRead: (id: NotificationId) => void
 }
 
 function isSystemUnreadTarget(element: Element) {
 	return (
-		element.getAttribute("data-inbox-category") === ("system" satisfies InboxCategory) &&
+		element.getAttribute("data-inbox-category") === ("system" satisfies NotificationCategory) &&
 		element.getAttribute("data-inbox-unread") === "true"
 	)
 }
@@ -33,7 +33,7 @@ function isQualified(entry: IntersectionObserverEntry) {
 	return (
 		isSystemUnreadTarget(entry.target) &&
 		entry.isIntersecting &&
-		visibleFraction(entry) >= INBOX_AUTO_READ_THRESHOLD
+		visibleFraction(entry) >= NOTIFICATION_AUTO_READ_THRESHOLD
 	)
 }
 
@@ -43,7 +43,12 @@ function isQualified(entry: IntersectionObserverEntry) {
  * The clock is kept across list re-renders so marking one card does not
  * restart the wait for cards that are still on screen. Auth cards are ignored.
  */
-export function useInboxAutoRead({ enabled, root, revision, onRead }: UseInboxAutoReadOptions) {
+export function useNotificationAutoRead({
+	enabled,
+	root,
+	revision,
+	onRead,
+}: UseNotificationAutoReadOptions) {
 	const onReadRef = useRef(onRead)
 	onReadRef.current = onRead
 	const visibleSinceRef = useRef(new Map<string, number>())
@@ -72,14 +77,14 @@ export function useInboxAutoRead({ enabled, root, revision, onRead }: UseInboxAu
 			if (readTimers.has(id)) return
 			const since = visibleSinceRef.current.get(id)
 			if (since == null) return
-			const remaining = Math.max(0, INBOX_AUTO_READ_DELAY_MS - (Date.now() - since))
+			const remaining = Math.max(0, NOTIFICATION_AUTO_READ_DELAY_MS - (Date.now() - since))
 			readTimers.set(
 				id,
 				setTimeout(() => {
 					readTimers.delete(id)
 					if (!visibleSinceRef.current.has(id) || !isSystemUnreadTarget(card)) return
 					visibleSinceRef.current.delete(id)
-					onReadRef.current(id as InboxMessageId)
+					onReadRef.current(id as NotificationId)
 				}, remaining),
 			)
 		}
@@ -102,7 +107,7 @@ export function useInboxAutoRead({ enabled, root, revision, onRead }: UseInboxAu
 					scheduleRead(id, card)
 				})
 			},
-			{ root, threshold: [0, INBOX_AUTO_READ_THRESHOLD, 1] },
+			{ root, threshold: [0, NOTIFICATION_AUTO_READ_THRESHOLD, 1] },
 		)
 
 		const cards = root.querySelectorAll("[data-inbox-id]")

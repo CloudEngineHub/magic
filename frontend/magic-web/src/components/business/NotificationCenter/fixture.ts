@@ -1,7 +1,7 @@
 import type { NotificationListItem } from "@/apis/modules/notifications"
-import type { InboxTemplateCatalog } from "./types"
+import type { NotificationTemplateCatalog } from "./types"
 
-export const INBOX_TEST_TEMPLATES: InboxTemplateCatalog = {
+export const NOTIFICATION_TEST_TEMPLATES: NotificationTemplateCatalog = {
 	locale: "zh-CN",
 	catalog_version: 1,
 	templates: {

@@ -2,27 +2,30 @@ import { observer } from "mobx-react-lite"
 import { Mail } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { MagicTooltip } from "@/components/base"
-import InboxUnreadBadge from "@/components/business/Inbox/InboxUnreadBadge"
-import { inboxStore, openInbox } from "@/components/business/Inbox/store"
+import NotificationUnreadBadge from "@/components/business/NotificationCenter/NotificationUnreadBadge"
+import {
+	notificationCenterStore,
+	openNotificationCenter,
+} from "@/components/business/NotificationCenter/store"
 import { Button } from "@/components/shadcn-ui/button"
-import { useInboxBootstrap } from "@/components/business/Inbox/useInboxBootstrap"
+import { useNotificationCenterBootstrap } from "@/components/business/NotificationCenter/useNotificationCenterBootstrap"
 
-interface InboxSidebarEntryProps {
+interface NotificationCenterSidebarEntryProps {
 	collapsed: boolean
 }
 
-const InboxSidebarEntry = observer(function InboxSidebarEntry({
+const NotificationCenterSidebarEntry = observer(function NotificationCenterSidebarEntry({
 	collapsed,
-}: InboxSidebarEntryProps) {
+}: NotificationCenterSidebarEntryProps) {
 	const { t } = useTranslation("sidebar")
-	useInboxBootstrap()
+	useNotificationCenterBootstrap()
 	const label = t("footer.inbox")
 
 	return (
 		<MagicTooltip
 			title={label}
 			placement={collapsed ? "right" : "top"}
-			disabled={inboxStore.visible}
+			disabled={notificationCenterStore.visible}
 		>
 			<Button
 				type="button"
@@ -31,11 +34,11 @@ const InboxSidebarEntry = observer(function InboxSidebarEntry({
 				aria-label={label}
 				data-testid="inbox-sidebar-entry"
 				className="relative text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground"
-				onClick={openInbox}
+				onClick={openNotificationCenter}
 			>
 				<Mail className="size-4" />
-				<InboxUnreadBadge
-					label={inboxStore.unreadTotalLabel}
+				<NotificationUnreadBadge
+					label={notificationCenterStore.unreadTotalLabel}
 					testId="inbox-sidebar-badge"
 					className="pointer-events-none absolute -right-1.5 -top-1.5 h-4 min-w-4 border-2 border-sidebar px-1 text-[10px] font-semibold"
 				/>
@@ -44,4 +47,4 @@ const InboxSidebarEntry = observer(function InboxSidebarEntry({
 	)
 })
 
-export default InboxSidebarEntry
+export default NotificationCenterSidebarEntry

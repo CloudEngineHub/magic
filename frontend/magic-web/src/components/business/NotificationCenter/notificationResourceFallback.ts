@@ -1,5 +1,5 @@
 import i18next from "i18next"
-import type { InboxMessage } from "./types"
+import type { NotificationItemData } from "./types"
 
 function hasDisplayName(value: unknown) {
 	if (value == null) return false
@@ -7,7 +7,9 @@ function hasDisplayName(value: unknown) {
 }
 
 /** Align inbox copy with super workspace / crew naming fallbacks elsewhere in the product. */
-export function inboxUntitledResourceName(message: InboxMessage): string | undefined {
+export function notificationUntitledResourceName(
+	message: NotificationItemData,
+): string | undefined {
 	const type = message.type
 	const resourceType =
 		typeof message.payload.resource_type === "string"
@@ -34,7 +36,7 @@ export function inboxUntitledResourceName(message: InboxMessage): string | undef
 	return undefined
 }
 
-export function inboxUntitledNameForField(message: InboxMessage, field: string) {
+export function notificationUntitledNameForField(message: NotificationItemData, field: string) {
 	if (field === "project_name") {
 		return i18next.t("project.unnamedProject", { ns: "super" })
 	}
@@ -42,28 +44,28 @@ export function inboxUntitledNameForField(message: InboxMessage, field: string) 
 		return i18next.t("workspace.unnamedWorkspace", { ns: "super" })
 	}
 	if (field === "resource_name") {
-		return inboxUntitledResourceName(message)
+		return notificationUntitledResourceName(message)
 	}
 	return undefined
 }
 
-export function applyInboxResourceNameFallbacks(
-	message: InboxMessage,
+export function applyNotificationResourceNameFallbacks(
+	message: NotificationItemData,
 	payload: Record<string, unknown>,
 ) {
 	if (!hasDisplayName(payload.resource_name) && !hasDisplayName(message.payload.resource_name)) {
-		const fallback = inboxUntitledResourceName(message)
+		const fallback = notificationUntitledResourceName(message)
 		if (fallback) payload.resource_name = fallback
 	}
 }
 
-export function inboxResourceLinkLabel(
-	message: InboxMessage,
+export function notificationResourceLinkLabel(
+	message: NotificationItemData,
 	field: string,
 	payload: Record<string, unknown>,
 	partText: string,
 ) {
 	const raw = String(payload[field] ?? "").trim()
 	if (raw && raw !== "-") return partText
-	return inboxUntitledNameForField(message, field) ?? partText
+	return notificationUntitledNameForField(message, field) ?? partText
 }
