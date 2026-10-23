@@ -74,6 +74,7 @@
 	"dialog.enableTitle": "Enable staff?",
 	"dialog.groupDescription": "Configure the Chinese and English display names for this model group.",
 	"dialog.staffDescription": "Configure staff identifier, input placeholder text, display priority, and organization allowlist.",
+	"editor.iconUploadHint": "PNG, JPG, GIF, SVG, or WebP, up to 2MB.",
 	"empty.description": "No official staff match the current filters.",
 	"empty.title": "No official staff",
 	"error.agentNotFound": "Staff not found. Check whether the identifier is correct.",

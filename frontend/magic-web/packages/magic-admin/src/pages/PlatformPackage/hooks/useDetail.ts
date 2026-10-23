@@ -25,7 +25,7 @@ export function useDetail(route: string) {
 		try {
 			navigate({ delta: -1 })
 		} catch (error) {
-			navigate({ name: RouteName.AdminAIModel })
+			navigate({ name: RouteName.AdminPlatformAIModel })
 		} finally {
 			setExtraBreadcrumb(null)
 		}

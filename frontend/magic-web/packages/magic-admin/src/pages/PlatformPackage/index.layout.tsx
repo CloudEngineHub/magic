@@ -3,14 +3,12 @@ import { useTranslation } from "react-i18next"
 import {
 	IconInfoCircle,
 	IconUsers,
-	IconTool,
 	IconRobot,
 	IconSettingsAi,
 	IconPhotoAi,
 	IconSubtitlesAi,
 	IconMenu2,
 	IconCameraAi,
-	IconServerSpark,
 	IconFileTypePpt,
 } from "@tabler/icons-react"
 import { useAdminStore } from "@admin/stores/admin"
@@ -23,14 +21,10 @@ import {
 } from "../../const/common"
 import SecondaryLayout from "../../layouts/SecondaryLayout"
 import { RoutePath } from "@admin/const/routes"
-import { useAdmin } from "@admin/provider/AdminProvider"
 
 function PlatformPackageLayout() {
 	const { t } = useTranslation("admin/common")
 	const { isOfficialOrg } = useAdminStore()
-	const { env } = useAdmin()
-
-	const isSaas = env?.MAGIC_APP_ENV?.startsWith("saas") ?? false
 
 	const items = useMemo(() => {
 		if (!isOfficialOrg) return []
@@ -247,42 +241,10 @@ function PlatformPackageLayout() {
 							)
 						},
 					},
-					{
-						key: RoutePath.PlatformMaintenance,
-						label: t("nav.platformSubMenu.platformMaintenance"),
-						icon: <IconTool size={20} />,
-						validate: (permissions: string[], isSuperAdmin?: boolean) => {
-							return (
-								isSuperAdmin ||
-								permissions.includes(PERMISSION_KEY_MAP.INFO_MANAGEMENT_QUERY) ||
-								permissions.includes(PERMISSION_KEY_MAP.INFO_MANAGEMENT_EDIT)
-							)
-						},
-					},
-					...(isSaas
-						? [
-								{
-									key: RoutePath.PlatformProviderAccess,
-									label: t("nav.platformSubMenu.providerAccess"),
-									icon: <IconServerSpark size={20} />,
-									validate: (permissions: string[], isSuperAdmin?: boolean) => {
-										return (
-											isSuperAdmin ||
-											permissions.includes(
-												PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_QUERY,
-											) ||
-											permissions.includes(
-												PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT,
-											)
-										)
-									},
-								},
-							]
-						: []),
 				],
 			},
 		]
-	}, [t, isOfficialOrg, isSaas])
+	}, [t, isOfficialOrg])
 
 	return (
 		<SecondaryLayout

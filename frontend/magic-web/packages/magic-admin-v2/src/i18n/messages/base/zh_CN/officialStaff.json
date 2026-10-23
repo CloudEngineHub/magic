@@ -74,6 +74,7 @@
 	"dialog.enableTitle": "开启员工？",
 	"dialog.groupDescription": "配置模型分组的中英文展示名称。",
 	"dialog.staffDescription": "配置员工标识、输入框占位文本、展示优先级和组织白名单。",
+	"editor.iconUploadHint": "支持 PNG、JPG、GIF、SVG、WebP，文件不超过 2MB。",
 	"empty.description": "当前筛选条件下没有官方员工。",
 	"empty.title": "暂无官方员工",
 	"error.agentNotFound": "未找到员工，请确认标识是否正确。",

@@ -37,26 +37,13 @@ const routes: Route[] = [
 	createRoute(RouteName.AdminLogs, RouteSection.DataSecurity, RouteGroup.LogsAnalytics),
 	createRoute(RouteName.ConsumptionAnalysis, RouteSection.DataSecurity, RouteGroup.DataDashboard),
 	createRoute(RouteName.OrganizationAppMenu, RouteSection.AiGovernance, RouteGroup.ApplicationManagement),
-	createRoute(RouteName.InternalPublishReview, RouteSection.AiGovernance, RouteGroup.PublishReview),
 	createRoute(RouteName.ModelGovernance, RouteSection.AiGovernance, RouteGroup.GovernancePolicies),
 	createRoute(RouteName.CustomModelList, RouteSection.AiGovernance, RouteGroup.CustomModels),
 	createRoute(RouteName.PlatformModelList, RouteSection.Platform, RouteGroup.ModelManagement),
 	createRoute(RouteName.PlatformProviderList, RouteSection.Platform, RouteGroup.ModelManagement),
-	createRoute(
-		RouteName.PlatformModelMultiplier,
-		RouteSection.Platform,
-		RouteGroup.ModelManagement,
-	),
 	createRoute(RouteName.PlatformOfficialMarketplace, RouteSection.Platform, RouteGroup.AgentManagement),
 	createRoute(RouteName.PlatformTenantCredits, RouteSection.Platform, RouteGroup.TenantManagement),
-	createRoute(RouteName.PlatformMaintenance, RouteSection.Platform, RouteGroup.OperationsSettings),
 	createRoute(RouteName.PlatformProxyServer, RouteSection.Platform, RouteGroup.OperationsSettings),
-	createRoute(
-		RouteName.PlatformCustomProviderLicense,
-		RouteSection.Platform,
-		RouteGroup.OperationsSettings,
-	),
-	createRoute(RouteName.PlatformAiWatermark, RouteSection.Platform, RouteGroup.OperationsSettings),
 	createRoute(
 		RouteName.PlatformAiContentReview,
 		RouteSection.Platform,
@@ -89,7 +76,6 @@ describe("navigation order", () => {
 			[
 				RouteGroup.CustomModels,
 				RouteGroup.GovernancePolicies,
-				RouteGroup.PublishReview,
 				RouteGroup.ApplicationManagement,
 			],
 		)
@@ -113,13 +99,7 @@ describe("navigation order", () => {
 		)
 		assert.deepEqual(
 			operations?.items.map((item) => item.titleKey),
-			[
-				RouteName.PlatformAiContentReview,
-				RouteName.PlatformAiWatermark,
-				RouteName.PlatformCustomProviderLicense,
-				RouteName.PlatformProxyServer,
-				RouteName.PlatformMaintenance,
-			],
+			[RouteName.PlatformAiContentReview, RouteName.PlatformProxyServer],
 		)
 	})
 })

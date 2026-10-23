@@ -4,7 +4,6 @@ import { Navigate } from "react-router-dom"
 import { withAccessibleIndexRedirect } from "@admin/routes/FirstAccessibleRedirect"
 import { RouteName, RoutePath } from "@admin/const/routes"
 
-import AiManageRoutes from "../pages/AiManage/routes"
 import PlatformPackageRoutes from "../pages/PlatformPackage/routes"
 
 const BaseLayout = lazy(() => import("@admin/layouts/BaseLayout"))
@@ -51,7 +50,6 @@ export const routes: Route[] = withAccessibleIndexRedirect<Route>([
 				element: <Navigate to={RoutePath.Platform} replace />,
 			},
 			PlatformPackageRoutes,
-			AiManageRoutes,
 			...otherRoutes,
 		],
 	},

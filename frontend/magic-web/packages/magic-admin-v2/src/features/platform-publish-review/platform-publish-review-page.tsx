@@ -13,7 +13,6 @@ import type {
 	AgentReviewListParams,
 	PublishReviewFilterDraft,
 	PublishReviewKind,
-	PublishReviewVariant,
 	SkillReviewListParams,
 } from "@magic-admin-v2/features/platform-publish-review/types"
 import { useRights } from "@magic-admin-v2/hooks/use-rights"
@@ -25,32 +24,16 @@ import {
 } from "@magic-admin-v2/features/platform-publish-review/params"
 import { cn } from "@magic-admin-v2/utils/cn"
 
-export default function PlatformPublishReviewPage({
-	variant = "platform",
-}: {
-	variant?: PublishReviewVariant
-}) {
+export default function PlatformPublishReviewPage() {
 	const { t } = useTranslation()
-	const hasPlatformEmployeeReviewAccess = useRights([
+	const canViewEmployeeReview = useRights([
 		PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_QUERY,
 		PERMISSION_KEY_MAP.PLATFORM_EMPLOYEE_REVIEW_EDIT,
 	])
-	const hasPlatformSkillReviewAccess = useRights([
+	const canViewSkillReview = useRights([
 		PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_QUERY,
 		PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_EDIT,
 	])
-	const hasInternalEmployeeReviewAccess = useRights([
-		PERMISSION_KEY_MAP.AGENT_REVIEW_QUERY,
-		PERMISSION_KEY_MAP.AGENT_REVIEW_EDIT,
-	])
-	const hasInternalSkillReviewAccess = useRights([
-		PERMISSION_KEY_MAP.SKILL_REVIEW_QUERY,
-		PERMISSION_KEY_MAP.SKILL_REVIEW_EDIT,
-	])
-	const canViewEmployeeReview =
-		variant === "platform" ? hasPlatformEmployeeReviewAccess : hasInternalEmployeeReviewAccess
-	const canViewSkillReview =
-		variant === "platform" ? hasPlatformSkillReviewAccess : hasInternalSkillReviewAccess
 	const [activeTab, setActiveTab] = useState<PublishReviewKind>("employee")
 	const [activeTabFetching, setActiveTabFetching] = useState(false)
 	const [refreshToken, setRefreshToken] = useState(0)
@@ -64,12 +47,12 @@ export default function PlatformPublishReviewPage({
 	}, [])
 	const employeeQueryState = useListQueryParams<PublishReviewFilterDraft, AgentReviewListParams>({
 		debounceFields: ["name_i18n", "organization_code", "version"],
-		initialDraft: () => createDefaultFilterDraft("employee", variant),
+		initialDraft: () => createDefaultFilterDraft("employee", "platform"),
 		toParams: toAgentReviewParams,
 	})
 	const skillQueryState = useListQueryParams<PublishReviewFilterDraft, SkillReviewListParams>({
 		debounceFields: ["package_name", "skill_name", "version"],
-		initialDraft: () => createDefaultFilterDraft("skill", variant),
+		initialDraft: () => createDefaultFilterDraft("skill", "platform"),
 		toParams: toSkillReviewParams,
 	})
 
@@ -116,14 +99,8 @@ export default function PlatformPublishReviewPage({
 					</PageHeaderActionButton>
 				</>
 			}
-			description={t(
-				variant === "internal"
-					? "internalPublishReview.description"
-					: "publishReview.description",
-			)}
-			title={t(
-				variant === "internal" ? "internalPublishReview.title" : "publishReview.title",
-			)}
+			description={t("publishReview.description")}
+			title={t("publishReview.title")}
 		>
 			<Tabs value={activeTab} onValueChange={handleTabChange}>
 				<TabsList>
@@ -147,7 +124,7 @@ export default function PlatformPublishReviewPage({
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							mobileFilterOpen={mobileFilterOpen}
 							refreshToken={refreshToken}
-							variant={variant}
+							variant="platform"
 						/>
 					</TabsContent>
 				) : null}
@@ -160,7 +137,7 @@ export default function PlatformPublishReviewPage({
 							onMobileFilterOpenChange={setMobileFilterOpen}
 							mobileFilterOpen={mobileFilterOpen}
 							refreshToken={refreshToken}
-							variant={variant}
+							variant="platform"
 						/>
 					</TabsContent>
 				) : null}

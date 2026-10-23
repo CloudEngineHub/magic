@@ -36,6 +36,7 @@ import {
 import { ReviewActionDialogs } from "@magic-admin-v2/features/platform-publish-review/components/review-action-dialogs"
 import { ReviewListPanel } from "@magic-admin-v2/features/platform-publish-review/components/review-list-panel"
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
+import { useInternalSkillReviewEditRight } from "@magic-admin-v2/features/platform-publish-review/internal-review-rights"
 
 export function SkillReviewPanel({
 	isActive,
@@ -57,7 +58,7 @@ export function SkillReviewPanel({
 	const { t } = useTranslation()
 	const { language } = useI18n()
 	const hasPlatformEditRight = useRights(PERMISSION_KEY_MAP.PLATFORM_SKILL_REVIEW_EDIT)
-	const hasInternalEditRight = useRights(PERMISSION_KEY_MAP.SKILL_REVIEW_EDIT)
+	const hasInternalEditRight = useInternalSkillReviewEditRight()
 	const hasEditRight = variant === "platform" ? hasPlatformEditRight : hasInternalEditRight
 	const { filterDraft, page, pageSize, params, setFilterDraft, setPage, setPageSize } = queryState
 	const [reviewDialog, setReviewDialog] =
