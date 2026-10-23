@@ -13,6 +13,7 @@ use App\Domain\Chat\Entity\ValueObject\FriendStatus;
 use App\Domain\Contact\DTO\FriendQueryDTO;
 use App\Domain\Contact\Entity\AccountEntity;
 use App\Domain\Contact\Entity\MagicUserEntity;
+use App\Domain\Contact\Entity\ValueObject\AccountStatus;
 use App\Domain\Contact\Entity\ValueObject\DataIsolation;
 use App\Domain\Contact\Entity\ValueObject\PlatformType;
 use App\Domain\Contact\Entity\ValueObject\UserOption;
@@ -451,6 +452,11 @@ class MagicUserDomainService extends AbstractContactDomainService
 
             $magicId = $magicUserToken->getTypeRelationValue();
 
+            $account = $this->accountRepository->getAccountInfoByMagicId($magicId);
+            if ($account->getStatus() !== AccountStatus::Normal) {
+                ExceptionBuilder::throw(ChatErrorCode::AUTHORIZATION_INVALID);
+            }
+
             // 查询用户并处理组织关系，查询麦吉用户
             $magicUserEntities = $this->userRepository->getUserByMagicIds([$magicId]);
             if (empty($magicUserEntities)) {
@@ -598,6 +604,16 @@ class MagicUserDomainService extends AbstractContactDomainService
     {
         $magicId = $this->getAccountMagicIdByAuthorization($authorization);
 
+        // Authorization can be supplied directly to this cross-organization
+        // endpoint, so validate the account status before either query path.
+        $accountEntity = $this->accountRepository->getAccountInfoByMagicId($magicId);
+        if ($accountEntity === null) {
+            return [];
+        }
+        if ($accountEntity->getStatus() !== AccountStatus::Normal) {
+            ExceptionBuilder::throw(ChatErrorCode::AUTHORIZATION_INVALID);
+        }
+
         if (app_env() === 'saas-pre') {
             $this->assertAccountUsersOrganizationAllowed($magicId);
         }
@@ -612,12 +628,6 @@ class MagicUserDomainService extends AbstractContactDomainService
         }
 
         if (empty($magicUserEntities)) {
-            return [];
-        }
-
-        // Get account information
-        $accountEntity = $this->accountRepository->getAccountInfoByMagicId($magicId);
-        if ($accountEntity === null) {
             return [];
         }
 

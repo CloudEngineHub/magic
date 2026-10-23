@@ -63,6 +63,9 @@ return [
         'not_create_account' => 'User has not created an account',
         'sync_failed' => 'User sync failed',
     ],
+    'account' => [
+        'disabled' => 'This account has been disabled and cannot log in.',
+    ],
     'data' => [
         'write_failed' => 'Data write failed',
     ],

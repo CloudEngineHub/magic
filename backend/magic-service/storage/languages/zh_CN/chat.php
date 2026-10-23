@@ -54,6 +54,9 @@ return [
         'not_create_account' => '用户尚未创建账号',
         'sync_failed' => '用户同步失败',
     ],
+    'account' => [
+        'disabled' => '该账号已被禁用，无法登录。',
+    ],
     'data' => [
         'write_failed' => '数据写入失败',
     ],
