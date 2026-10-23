@@ -12,18 +12,32 @@ const ICON_BY_TYPE: Record<string, InboxIconName> = {
 	skill_approved: "spark",
 	agent_approved: "robot",
 	project_invitation: "users",
+	project_access_revoked: "project",
 	agent_invitation: "robot",
+	agent_access_revoked: "robot",
 	skill_invitation: "spark",
+	skill_access_revoked: "spark",
 	micro_app_invitation: "microApp",
 	micro_app_access_revoked: "microApp",
 }
 
+const ICON_BY_RESOURCE_TYPE: Record<string, InboxIconName> = {
+	project: "project",
+	skill: "spark",
+	agent: "robot",
+	file: "file",
+	micro_app: "microApp",
+	mcp: "connector",
+	connector: "connector",
+}
+
 export function inboxIconForType(type: string, resourceType?: unknown): InboxIconName {
-	const icon = ICON_BY_TYPE[type]
-	if (icon) return icon
-	// Resource identity also covers connector events without a dedicated notification type.
-	if (resourceType === "micro_app") return "microApp"
-	if (resourceType === "mcp" || resourceType === "connector") return "connector"
+	if (Object.prototype.hasOwnProperty.call(ICON_BY_TYPE, type)) return ICON_BY_TYPE[type]
+	// Keep resource artwork for events without a dedicated mapping, including future event types.
+	const normalizedResourceType =
+		typeof resourceType === "string" ? resourceType.trim().toLowerCase() : ""
+	if (Object.prototype.hasOwnProperty.call(ICON_BY_RESOURCE_TYPE, normalizedResourceType))
+		return ICON_BY_RESOURCE_TYPE[normalizedResourceType]
 	return "share"
 }
 
