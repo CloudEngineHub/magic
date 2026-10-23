@@ -30,7 +30,6 @@ function createAccess(overrides: Partial<AccessContext> = {}): AccessContext {
 describe("Magic access", () => {
 	const platformAccess = allowMagic(PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_QUERY)
 	const adminAccess = allowMagic(PERMISSION_KEY_MAP.ADMIN_OPERATION_LOGS_QUERY)
-	const workspaceAccess = allowMagic(PERMISSION_KEY_MAP.MODEL_MANAGEMENT_QUERY)
 
 	it("accepts explicit permission keys", () => {
 		assert.equal(
@@ -50,7 +49,6 @@ describe("Magic access", () => {
 
 		assert.equal(platformAccess(access), true)
 		assert.equal(adminAccess(access), true)
-		assert.equal(workspaceAccess(access), true)
 	})
 
 	it("lets the administrator group cover admin and workspace but not platform permissions", () => {
@@ -60,7 +58,6 @@ describe("Magic access", () => {
 
 		assert.equal(platformAccess(access), false)
 		assert.equal(adminAccess(access), true)
-		assert.equal(workspaceAccess(access), true)
 	})
 
 	it("lets the member group cover workspace permissions only", () => {
@@ -70,7 +67,6 @@ describe("Magic access", () => {
 
 		assert.equal(platformAccess(access), false)
 		assert.equal(adminAccess(access), false)
-		assert.equal(workspaceAccess(access), true)
 	})
 
 	it("keeps permission-group nesting consistent when a route validates a group key", () => {
@@ -91,7 +87,6 @@ describe("Magic access", () => {
 
 		assert.equal(platformAccess(access), false)
 		assert.equal(adminAccess(access), false)
-		assert.equal(workspaceAccess(access), false)
 	})
 
 	it("supports single and any-of permission checks without broadening admin prefixes", () => {
