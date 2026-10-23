@@ -18,6 +18,7 @@
 	"hi": "👋 Hi, my friend",
 	"login": "Log in",
 	"magicOrganizationSyncStep": {
+		"accountDisabled": "This account has been disabled and cannot sign in.",
 		"pleaseBindExistingAccount": "Please bind an existing account"
 	},
 	"password": {

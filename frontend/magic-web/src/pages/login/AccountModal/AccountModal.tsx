@@ -15,6 +15,7 @@ import { useLoginServiceContext } from "../../../layouts/SSOLayout/providers/Log
 import type { LoginService } from "@/services/user/LoginService"
 import type { UserService } from "@/services/user/UserService"
 import { BUSINESS_API_ERROR_CODE } from "@/constants/api"
+import { isAccountDisabledError } from "@/services/auth/AuthFailureClassifier"
 import { history } from "@/routes"
 import { routesMatch } from "@/routes/history/helpers"
 import { appService } from "@/services/app/AppService"
@@ -173,6 +174,11 @@ function AccountModal(props: AccountModalProps) {
 				 * rest of the session.
 				 */
 				releaseHomeOnboardingPrelude("account-context-switch")
+				if (isAccountDisabledError(error)) {
+					// 账号被平台禁用（3109）：登录首跳即失败，提示后终止，不再发起后续同步请求。
+					magicToast.error(t("magicOrganizationSyncStep.accountDisabled"))
+					return
+				}
 				if (
 					error &&
 					typeof error === "object" &&

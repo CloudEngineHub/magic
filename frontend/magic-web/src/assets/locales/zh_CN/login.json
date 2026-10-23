@@ -18,6 +18,7 @@
 	"hi": "👋 嗨，我的朋友",
 	"login": "登录",
 	"magicOrganizationSyncStep": {
+		"accountDisabled": "该账号已被禁用，无法登录。",
 		"pleaseBindExistingAccount": "请绑定已有账号"
 	},
 	"password": {

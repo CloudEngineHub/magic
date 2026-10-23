@@ -66,6 +66,8 @@ export const RouteName = {
 	PlatformTenantList: "platform-tenant-list",
 	/** 租户积分。 */
 	PlatformTenantCredits: "platform-tenant-credits",
+	/** 平台账号列表（账号维度封禁）。 */
+	PlatformAccountList: "platform-account-list",
 
 	/* ---------- AI 管理 ---------- */
 
@@ -348,6 +350,8 @@ export const RoutePath = {
 	PlatformTenantList: "platform/tenants/tenant-list",
 	/** 租户积分。 */
 	PlatformTenantCredits: "platform/tenants/tenant-credits",
+	/** 平台账号列表。 */
+	PlatformAccountList: "platform/tenants/account-list",
 
 	/* ---------- AI 管理 ---------- */
 
