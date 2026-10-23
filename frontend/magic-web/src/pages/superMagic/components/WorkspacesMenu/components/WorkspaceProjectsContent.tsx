@@ -226,9 +226,12 @@ export default function WorkspaceProjectsContent({
 				loading={loading}
 				viewMode={viewMode}
 				renderItem={(props) => {
-					const resourceType = workspace
-						? getResourceProjectType(props.project)
-						: undefined
+					// 只有资源接口返回的条目（带 resourceId）才用资源样式；普通工作区里的
+					// agent/skill 模式项目来自项目列表，与其他项目共用 ProjectItem 样式和点击逻辑。
+					const resourceType =
+						workspace && (props.project as ResourceProject).resourceId
+							? getResourceProjectType(props.project)
+							: undefined
 					if (resourceType) {
 						const resourceProject: ResourceProject = {
 							...props.project,
