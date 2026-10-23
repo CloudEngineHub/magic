@@ -19,7 +19,58 @@ use PHPUnit\Framework\TestCase;
 /** @internal */
 final class ShareNotificationAppServiceTest extends TestCase
 {
-    public function testAllTeamSharePublishesOnlyFirstRecipientSet(): void
+    public function testAllTeamSharesNeverEnumerateOrNotifyOrganizationMembers(): void
+    {
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::never())->method('publish');
+        $users = $this->createMock(MagicUserDomainService::class);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->expects(self::never())->method('getActiveUsersByIds');
+        $service = new ShareNotificationAppService($publisher, $users, new MagicDepartmentUserDomainService(
+            $this->createMock(MagicDepartmentUserRepositoryInterface::class)
+        ));
+
+        foreach ([12, 13, 15] as $type) {
+            $share = $this->share('resource-1', $type, 'Resource', 'all');
+            $service->publishRecipientsAdded(null, $share);
+            self::assertSame([], $share->getExtra()['notification_recipient_user_ids']);
+
+            $before = $this->share('resource-1', $type, 'Resource', 'designated');
+            $before->setExtra(['notification_recipient_user_ids' => ['user-a']]);
+            $service->publishRecipientsAdded($before, $share);
+            self::assertSame(['user-a'], $share->getExtra()['notification_recipient_user_ids']);
+        }
+    }
+
+    public function testAllToDesignatedRechecksSelectedRecipientsAndWithdrawsOthers(): void
+    {
+        $published = [];
+        $publisher = $this->createMock(NotificationEventPublisherInterface::class);
+        $publisher->expects(self::exactly(2))->method('publish')->willReturnCallback(
+            function (array|EventEnvelope $envelope) use (&$published): array {
+                $published[] = $envelope;
+                return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
+            }
+        );
+        $users = $this->createMock(MagicUserDomainService::class);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
+        $service = new ShareNotificationAppService($publisher, $users, new MagicDepartmentUserDomainService(
+            $this->createMock(MagicDepartmentUserRepositoryInterface::class)
+        ));
+        $before = $this->share('project-1', 12, 'Project', 'all');
+        $before->setExtra(['notification_recipient_user_ids' => ['user-a', 'user-b']]);
+        $after = $this->share('project-1', 12, 'Project', 'designated');
+        $service->publishRecipientsAdded($before, $after);
+
+        self::assertSame('share.project.withdrawn', $published[0]->eventType);
+        self::assertSame('user-b', $published[0]->recipients[0]->userId);
+        self::assertSame('share.project.recipients_added', $published[1]->eventType);
+        self::assertSame('user-a', $published[1]->recipients[0]->userId);
+        self::assertSame(['user-a'], $after->getExtra()['notification_recipient_user_ids']);
+    }
+
+    public function testDesignatedSharePublishesOnlyFirstRecipientSet(): void
     {
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
@@ -32,14 +83,14 @@ final class ShareNotificationAppServiceTest extends TestCase
             });
 
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturn(['user-a', 'user-b']);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null, 'user-b' => null]);
         $departments = new MagicDepartmentUserDomainService(
             $this->createMock(MagicDepartmentUserRepositoryInterface::class)
         );
         $service = new ShareNotificationAppService($publisher, $users, $departments);
 
-        $share = $this->share('project-1', 12, 'Project 1', 'all');
+        $share = $this->share('project-1', 12, 'Project 1', 'designated');
         $share->setShareCode('project-share-code');
         $service->publishRecipientsAdded(null, $share);
         $service->publishRecipientsAdded($share, $share);
@@ -63,17 +114,17 @@ final class ShareNotificationAppServiceTest extends TestCase
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
         $publisher->expects(self::never())->method('publish');
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $before = $this->share('file-1', 15, 'File 1', 'all');
+        $before = $this->share('file-1', 15, 'File 1', 'designated');
         $before->setExtra(['notification_recipient_user_ids' => ['user-a']]);
-        $after = $this->share('file-1', 15, 'File 1', 'all');
+        $after = $this->share('file-1', 15, 'File 1', 'designated');
         $after->setExtra(['notification_recipient_user_ids' => ['user-a']]);
 
         $service->publishRecipientsAdded($before, $after);
@@ -92,17 +143,17 @@ final class ShareNotificationAppServiceTest extends TestCase
                 return ['event_id' => $envelope->eventId, 'status' => 'pending', 'accepted' => true, 'duplicate' => false];
             });
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $before = $this->share('project-1', 12, 'Project 1', 'all');
+        $before = $this->share('project-1', 12, 'Project 1', 'designated');
         $before->setExtra(['notification_recipient_user_ids' => ['user-a', 'user-b']]);
-        $after = $this->share('project-1', 12, 'Project 1', 'all');
+        $after = $this->share('project-1', 12, 'Project 1', 'designated');
 
         $service->publishRecipientsAdded($before, $after);
 
@@ -131,7 +182,7 @@ final class ShareNotificationAppServiceTest extends TestCase
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $share = $this->share('project-1', 12, 'Project 1', 'all');
+        $share = $this->share('project-1', 12, 'Project 1', 'designated');
         $share->setExtra(['notification_recipient_user_ids' => ['user-a']]);
         $service->publishWithdrawn($share);
 
@@ -159,7 +210,7 @@ final class ShareNotificationAppServiceTest extends TestCase
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $service->publishWithdrawn($this->share('project-1', 12, 'Project 1', 'all'));
+        $service->publishWithdrawn($this->share('project-1', 12, 'Project 1', 'designated'));
 
         self::assertSame('share.project.withdrawn', $published[0]->eventType);
         self::assertSame([], $published[0]->recipients);
@@ -178,18 +229,18 @@ final class ShareNotificationAppServiceTest extends TestCase
             });
 
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturn(['user-a']);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $before = $this->share('project-1', 12, 'Project 1', 'all');
+        $before = $this->share('project-1', 12, 'Project 1', 'designated');
         $before->setExtra(['notification_recipient_user_ids' => ['user-a']]);
         $before->setDeletedAt('2026-10-16 10:00:00');
-        $after = $this->share('project-1', 12, 'Project 1', 'all');
+        $after = $this->share('project-1', 12, 'Project 1', 'designated');
 
         $service->publishRecipientsAdded($before, $after);
 
@@ -213,15 +264,15 @@ final class ShareNotificationAppServiceTest extends TestCase
             }
         );
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $service->publishRecipientsAdded(null, $this->share('project-1', 12, '', 'all'));
+        $service->publishRecipientsAdded(null, $this->share('project-1', 12, '', 'designated'));
 
         self::assertSame('project-1', $published[0]->payload['resource_name']);
         self::assertNotSame('', $published[0]->payload['sharer_name']);
@@ -239,15 +290,15 @@ final class ShareNotificationAppServiceTest extends TestCase
             }
         );
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $share = $this->share('file-resource-id', 15, 'File 1', 'all');
+        $share = $this->share('file-resource-id', 15, 'File 1', 'designated');
         $share->setShareCode('file-share-code');
         $service->publishRecipientsAdded(null, $share);
 
@@ -268,22 +319,22 @@ final class ShareNotificationAppServiceTest extends TestCase
             }
         );
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls(['user-a'], []);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(['user-a' => null]);
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $share = $this->share('file-resource-id', 15, 'File 1', 'all');
+        $share = $this->share('file-resource-id', 15, 'File 1', 'designated');
         $share->setShareCode('');
         $service->publishRecipientsAdded(null, $share);
 
         self::assertArrayNotHasKey('share_code', $published[0]->payload);
     }
 
-    public function testAllTeamShareSplitsLargeRecipientSetsIntoBoundedEvents(): void
+    public function testDesignatedShareSplitsLargeRecipientSetsIntoBoundedEvents(): void
     {
         $published = [];
         $publisher = $this->createMock(NotificationEventPublisherInterface::class);
@@ -298,15 +349,16 @@ final class ShareNotificationAppServiceTest extends TestCase
         $firstBatch = array_map(static fn (int $id): string => 'user-' . $id, range(1, 500));
         $secondBatch = ['user-501'];
         $users = $this->createMock(MagicUserDomainService::class);
-        $users->method('getActiveUserIdsByOrganization')->willReturnOnConsecutiveCalls($firstBatch, $secondBatch, []);
-        $users->method('getActiveUsersByIds')->willReturn([]);
+        $users->expects(self::never())->method('getActiveUserIdsByOrganization');
+        $users->method('getActiveUsersByIds')->willReturn(array_fill_keys(array_merge($firstBatch, $secondBatch), null));
         $service = new ShareNotificationAppService(
             $publisher,
             $users,
             new MagicDepartmentUserDomainService($this->createMock(MagicDepartmentUserRepositoryInterface::class))
         );
 
-        $share = $this->share('project-1', 12, 'Project 1', 'all');
+        $share = $this->share('project-1', 12, 'Project 1', 'designated');
+        $share->setTargetIdsArray(array_map(static fn (string $id): array => ['target_type' => 'User', 'target_id' => $id], array_merge($firstBatch, $secondBatch)));
         $service->publishRecipientsAdded(null, $share);
 
         self::assertCount(2, $published);
@@ -326,6 +378,7 @@ final class ShareNotificationAppServiceTest extends TestCase
             'created_uid' => 'owner',
             'share_type' => 2,
             'share_range' => $range,
+            'target_ids' => json_encode([['target_type' => 'User', 'target_id' => 'user-a'], ['target_type' => 'User', 'target_id' => 'user-b']], JSON_THROW_ON_ERROR),
         ]);
     }
 }
