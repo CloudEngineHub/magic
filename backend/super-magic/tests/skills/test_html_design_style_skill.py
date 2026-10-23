@@ -1,11 +1,9 @@
 """html-design-style Skill 的静态契约测试。"""
 
-import re
 from pathlib import Path
 
 SKILL_ROOT = Path(__file__).parents[2] / "agents" / "skills" / "html-design-style"
 SKILL_PATH = SKILL_ROOT / "SKILL.md"
-SCRIPT_PATH = SKILL_ROOT / "scripts" / "get_design_style_source.py"
 
 
 def test_skill_has_no_local_design_md_copy() -> None:
@@ -14,25 +12,16 @@ def test_skill_has_no_local_design_md_copy() -> None:
     assert not list(SKILL_ROOT.rglob("DESIGN.md"))
 
 
-def test_skill_fetches_source_through_magic_service_script() -> None:
-    """Skill 必须通过脚本调用 Magic Service，而不是读取本地文件。"""
+def test_skill_fetches_source_through_code_mode_tool() -> None:
+    """Skill 必须通过 Code Mode 工具调用 Magic Service，而不是读取本地文件或另起 python 进程。"""
     content = SKILL_PATH.read_text(encoding="utf-8")
 
-    assert "get_design_style_source.py" in content
+    assert 'tool.call("get_html_design_style_source"' in content
+    assert "get_design_style_source.py" not in content
+    assert not (SKILL_ROOT / "scripts").exists()
     assert "references/styles" not in content
     assert "Magic Service" in content
     assert "Do not reconstruct the design system from a catalog" in content
-
-
-def test_source_script_validates_style_code_and_uses_sdk() -> None:
-    """脚本必须先校验 style_code，再通过 SDK 请求源文。"""
-    content = SCRIPT_PATH.read_text(encoding="utf-8")
-
-    assert "STYLE_CODE_PATTERN" in content
-    assert "invalid_style_code" in content
-    assert "html_design_style.get_source" in content
-    assert "GetHtmlDesignStyleSourceParameter" in content
-    assert "open(" not in content
 
 
 def test_skill_preserves_content_and_reports_failure() -> None:
