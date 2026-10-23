@@ -226,9 +226,12 @@ export default function WorkspaceProjectsContent({
 				loading={loading}
 				viewMode={viewMode}
 				renderItem={(props) => {
-					const resourceType = workspace
-						? getResourceProjectType(props.project)
-						: undefined
+					// 只有资源接口返回的条目（带 resourceId）才用资源样式；普通工作区里的
+					// agent/skill 模式项目来自项目列表，与其他项目共用 ProjectItem 样式和点击逻辑。
+					const resourceType =
+						workspace && (props.project as ResourceProject).resourceId
+							? getResourceProjectType(props.project)
+							: undefined
 					if (resourceType) {
 						const resourceProject: ResourceProject = {
 							...props.project,
@@ -239,10 +242,7 @@ export default function WorkspaceProjectsContent({
 								project={resourceProject}
 								viewMode={props.viewMode}
 								onClick={(project) => {
-									// 只有资源接口返回的条目（带 resourceId）才可能缺少关联项目；
-									// 普通工作区里的 agent/skill 模式项目来自项目列表，没有 project_id 字段，
-									// 其项目 id 即 id，不能因此拦截点击。
-									if (project.resourceId && !project.project_id) {
+									if (!project.project_id) {
 										magicToast.info(t("fileManager.locateUnavailable"))
 										return
 									}
