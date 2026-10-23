@@ -590,6 +590,8 @@ export namespace AiManage {
 			support_multi_modal: boolean
 			/* 支持深度思考 */
 			support_deep_think: boolean
+			/* 支持嵌入 */
+			support_embedding?: boolean
 			/** 后端返回已补齐历史默认值的可选档位。 */
 			reasoning_effort_levels?: AiModel.ReasoningEffort[]
 			/** 空值表示服务商默认，none 表示明确关闭。 */

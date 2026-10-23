@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { PERMISSION_KEY_MAP } from "../../../src/constants/permissions"
-import { RouteGroup, RouteName, RouteSection } from "../../../src/constants/routes"
+import { RouteName, RouteSection } from "../../../src/constants/routes"
 import { RuntimeMode } from "../../../src/constants/runtime"
 import type { AccessContext } from "../../../src/runtime/types"
 import { createNavigation } from "../../../src/routes/menu"
@@ -60,75 +60,25 @@ function platformMenuItems(access: AccessContext, routes = embeddedRoutes) {
 		.map((item) => item.titleKey)
 }
 
+const removedRouteNames = [
+	"platform-ai-watermark",
+	"platform-custom-provider-license",
+	"platform-maintenance",
+	"platform-resource-alerts",
+	"platform-package-list",
+	"platform-package-detail",
+	"platform-order-list",
+	"internal-publish-review",
+	"platform-model-identifier-mapping",
+	"platform-model-multiplier",
+]
+
 describe("platform route access", () => {
-	it("倍率权限独立授权，查询和编辑均可进入官方组织的倍率页", () => {
-		for (const key of [
-			PERMISSION_KEY_MAP.MODEL_MULTIPLIER_QUERY,
-			PERMISSION_KEY_MAP.MODEL_MULTIPLIER_EDIT,
-		]) {
-			const access = createAccess({
-				isOfficialOrganization: true,
-				magicPermissionKeys: [key],
-			})
-			for (const routes of [embeddedRoutes, standaloneRoutes]) {
-				assert.equal(canAccess(RouteName.PlatformModelMultiplier, access, routes), true)
-				assert.deepEqual(platformMenuItems(access, routes), ["nav.item.modelMultiplier"])
-				assert.equal(canAccess(RouteName.PlatformInfo, access, routes), false)
-			}
-			assert.equal(
-				canAccess(RouteName.PlatformModelMultiplier, {
-					...access,
-					isOfficialOrganization: false,
-				}),
-				false,
-			)
+	it("does not register commercial pages in embedded or standalone routes", () => {
+		for (const name of removedRouteNames) {
+			assert.equal(getRoute(name, embeddedRoutes), undefined)
+			assert.equal(getRoute(name, standaloneRoutes), undefined)
 		}
-	})
-
-	it("平台信息和模型管理权限不开放倍率页，平台超级管理员保持可访问", () => {
-		for (const key of [
-			PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT,
-			PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_EDIT,
-		]) {
-			assert.equal(
-				canAccess(
-					RouteName.PlatformModelMultiplier,
-					createAccess({ isOfficialOrganization: true, magicPermissionKeys: [key] }),
-				),
-				false,
-			)
-		}
-		assert.equal(
-			canAccess(
-				RouteName.PlatformModelMultiplier,
-				createAccess({
-					isOfficialOrganization: true,
-					magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS],
-				}),
-			),
-			true,
-		)
-	})
-
-	it("registers custom provider license in host and standalone modes", () => {
-		const access = createAccess({
-			isOfficialOrganization: true,
-			magicPermissionKeys: [PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_QUERY],
-		})
-
-		assert.ok(getRoute(RouteName.PlatformCustomProviderLicense, embeddedRoutes))
-		assert.equal(getRoute(RouteName.PlatformAiWatermark, embeddedRoutes), undefined)
-		assert.ok(getRoute(RouteName.PlatformCustomProviderLicense, standaloneRoutes))
-		assert.ok(getRoute(RouteName.PlatformAiWatermark, standaloneRoutes))
-		assert.deepEqual(platformMenuItems(access, embeddedRoutes), [
-			"nav.item.platformInfo",
-			"nav.item.customServiceProviderLicense",
-		])
-		assert.deepEqual(platformMenuItems(access, standaloneRoutes), [
-			"nav.item.platformInfo",
-			"nav.item.aiWatermark",
-			"nav.item.customServiceProviderLicense",
-		])
 	})
 
 	it("uses page-level platform information permissions for settings pages", () => {
@@ -138,41 +88,8 @@ describe("platform route access", () => {
 		})
 
 		assert.equal(canAccess(RouteName.PlatformInfo, access), true)
-		assert.equal(canAccess(RouteName.PlatformCustomProviderLicense, access), true)
-		assert.equal(canAccess(RouteName.PlatformAiWatermark, access, standaloneRoutes), true)
-		assert.equal(canAccess(RouteName.PlatformMaintenance, access), false)
-		assert.deepEqual(platformMenuItems(access), [
-			"nav.item.platformInfo",
-			"nav.item.customServiceProviderLicense",
-		])
-	})
-
-	it("places model multiplier under the model management navigation group", () => {
-		const access = createAccess({
-			isOfficialOrganization: true,
-			magicPermissionKeys: [PERMISSION_KEY_MAP.MODEL_MULTIPLIER_QUERY],
-		})
-
-		assert.equal(canAccess(RouteName.PlatformModelMultiplier, access), true)
-		assert.equal(
-			getRoute(RouteName.PlatformModelMultiplier)?.meta?.group,
-			RouteGroup.ModelManagement,
-		)
-	})
-
-	it("does not expose unrelated platform menus for a page-specific permission", () => {
-		const access = createAccess({
-			isOfficialOrganization: true,
-			magicPermissionKeys: [PERMISSION_KEY_MAP.INFO_MANAGEMENT_QUERY],
-		})
-
-		assert.equal(canAccess(RouteName.PlatformMaintenance, access), true)
-		assert.equal(canAccess(RouteName.PlatformInfo, access), false)
-		assert.equal(canAccess(RouteName.PlatformCustomProviderLicense, access), false)
-		assert.equal(canAccess(RouteName.PlatformAiWatermark, access, standaloneRoutes), false)
-		assert.deepEqual(platformMenuItems(access, standaloneRoutes), [
-			"nav.item.platformMaintenance",
-		])
+		assert.deepEqual(platformMenuItems(access), ["nav.item.platformInfo"])
+		assert.deepEqual(platformMenuItems(access, standaloneRoutes), ["nav.item.platformInfo"])
 	})
 
 	it("does not let the broad Magic administrator group enter platform pages", () => {
@@ -181,8 +98,7 @@ describe("platform route access", () => {
 			magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_ALL_PERMISSIONS],
 		})
 
-		assert.equal(canAccess(RouteName.PlatformCustomProviderLicense, access), false)
-		assert.equal(canAccess(RouteName.PlatformAiWatermark, access, standaloneRoutes), false)
+		assert.equal(canAccess(RouteName.PlatformInfo, access), false)
 		assert.deepEqual(platformMenuItems(access, standaloneRoutes), [])
 	})
 
@@ -193,8 +109,6 @@ describe("platform route access", () => {
 		})
 
 		assert.equal(canAccess(RouteName.PlatformInfo, access), false)
-		assert.equal(canAccess(RouteName.PlatformCustomProviderLicense, access), false)
-		assert.equal(canAccess(RouteName.PlatformAiWatermark, access, standaloneRoutes), false)
 		assert.deepEqual(platformMenuItems(access, standaloneRoutes), [])
 	})
 
@@ -204,8 +118,7 @@ describe("platform route access", () => {
 			magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS],
 		})
 
-		assert.equal(canAccess(RouteName.PlatformCustomProviderLicense, access), true)
-		assert.equal(canAccess(RouteName.PlatformAiWatermark, access, standaloneRoutes), true)
+		assert.equal(canAccess(RouteName.PlatformInfo, access), true)
 	})
 
 	it("shows PPT templates for either legacy permission and keeps personal orgs hidden", () => {

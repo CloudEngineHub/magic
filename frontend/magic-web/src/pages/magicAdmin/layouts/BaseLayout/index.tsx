@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate as useBaseNavigate } from "react-router-dom"
 import { memo, useMemo } from "react"
-import { IconStack2, IconWand } from "@tabler/icons-react"
+import { IconStack2 } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { Flex } from "antd"
 import { TopMenu, AdminAuthContentLoading } from "@dtyq/magic-admin/components"
@@ -11,7 +11,6 @@ import {
 	RouteName,
 	RoutePath,
 	PLATFORM_MANAGEMENT,
-	AI_MANAGEMENT,
 } from "@dtyq/magic-admin"
 import { useStyles } from "./styles"
 import MagicAdminProvider from "@/pages/magicAdmin"
@@ -56,12 +55,6 @@ const BaseLayoutPc = ({ authLoading }: { authLoading?: boolean }) => {
 					!userPermissions.some((permission: string) =>
 						PLATFORM_MANAGEMENT.includes(permission),
 					),
-			},
-			{
-				key: RoutePath.AI,
-				label: t("nav.ai"),
-				icon: <IconWand size={20} />,
-				hidden: !userPermissions.some((permission) => AI_MANAGEMENT.includes(permission)),
 			},
 		],
 		// eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom"
 import { useMemo, useEffect, memo } from "react"
-import { IconStack2, IconWand } from "@tabler/icons-react"
+import { IconStack2 } from "@tabler/icons-react"
 import { useTranslation } from "react-i18next"
 import { Flex, Segmented } from "antd"
 import { MagicSelect, ThemeType, TopMenu, AdminAuthContentLoading } from "@admin-components"
@@ -8,7 +8,7 @@ import AtLogo from "@admin/assets/logos/favicon.svg"
 import { RoutePath } from "@admin/const/routes"
 import { useAdminStore } from "@admin/stores/admin"
 import { useUserStore } from "@admin/stores/user"
-import { PLATFORM_MANAGEMENT, AI_MANAGEMENT } from "@admin/const/common"
+import { PLATFORM_MANAGEMENT } from "@admin/const/common"
 import { useStyles } from "./styles"
 import { withAuthMiddleware, type AuthMiddlewareInjectedProps } from "./components/AuthMiddleware"
 import { languageOptions, organizationOptions, themeOptions } from "./const"
@@ -40,12 +40,6 @@ function BaseLayoutPc({ authLoading }: AuthMiddlewareInjectedProps) {
 					!userPermissions.some((permission: string) =>
 						PLATFORM_MANAGEMENT.includes(permission),
 					),
-			},
-			{
-				key: RoutePath.AI,
-				label: t("nav.ai"),
-				icon: <IconWand size={20} />,
-				hidden: !userPermissions.some((permission) => AI_MANAGEMENT.includes(permission)),
 			},
 		],
 

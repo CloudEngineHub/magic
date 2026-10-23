@@ -42,7 +42,6 @@ export const useUpload = <F extends FileUploadData>({
 	// onFail,
 	onInit,
 	storageType = "private",
-	businessCode,
 	sts = true,
 	body,
 	url,
@@ -55,13 +54,6 @@ export const useUpload = <F extends FileUploadData>({
 	const { FileApi } = useApis()
 
 	const [uploading, setUploading] = useState(false)
-
-	const uploadCredentialPath =
-		businessCode === "skill"
-			? storageType === "public"
-				? RequestUrl.getPublicBusinessUploadToken
-				: RequestUrl.getPrivateBusinessUploadToken
-			: RequestUrl.getUploadCredentials
 
 	const headers = useMemo(
 		() => ({
@@ -112,7 +104,7 @@ export const useUpload = <F extends FileUploadData>({
 					 * 保证切换组织后，能正确获取鉴权信息
 					 */
 					const uploadUrl = `${
-						url ?? env.MAGIC_BASE_URL + uploadCredentialPath
+						url ?? env.MAGIC_BASE_URL + RequestUrl.getUploadCredentials
 					}?organization_code=${organizationCode}`
 
 					const file = new File([fileData.file], "file", {
@@ -133,14 +125,11 @@ export const useUpload = <F extends FileUploadData>({
 						customCredentials,
 						...customOption,
 						body: JSON.stringify(
-							body ??
-								(businessCode === "skill"
-									? { business_code: businessCode }
-									: {
-											storage: storageType,
-											sts,
-											content_type: fileData.file.type,
-										}),
+							body ?? {
+								storage: storageType,
+								sts,
+								content_type: fileData.file.type,
+							},
 						),
 					})
 

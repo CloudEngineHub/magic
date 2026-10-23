@@ -1,10 +1,10 @@
-# Magic Admin V2 开源开发规范
+# Magic Admin V2 页面开发规范
 
 > 适用范围：`frontend/magic-web/packages/magic-admin-v2` 下的所有 React、TypeScript、路由、API、国际化、测试和样式代码。
 >
 > 规范性质：本文件负责架构、目录、代码组织、数据流、权限、版本 Overlay、测试和交付流程。新页面的快速执行入口是 [`AI-PAGE-DEVELOPMENT.md`](./AI-PAGE-DEVELOPMENT.md)，视觉细则见 [`UI-DESIGN.md`](./UI-DESIGN.md)。三者冲突时，以当前共享组件实现、具体页面需求、设计稿和产品确认结果为准，并在 PR 中说明偏差。
 
-## 目录与分层
+## 1. 开发前必须遵守的原则
 
 1. **先找同类页面，再写新代码。** 优先参考已经上线的同类业务模块；`src/features/ui-examples` 仅用于查看示例，不覆盖当前共享组件规范，不要从空白页面自行发明布局、筛选、分页或弹窗交互。
 2. **页面按 feature 组织。** 一个业务域的页面、组件、API、Query、Mutation、类型和工具函数放在同一个 `features/<feature-name>/` 目录；只有跨业务复用的能力才放入 `src/components`、`src/hooks`、`src/api` 或 `src/utils`。
@@ -16,7 +16,9 @@
 8. **所有异步状态都要有设计。** 至少考虑 loading、fetching、empty、error、permission denied、not found、success、disabled；首屏骨架只覆盖动态内容，不能让标题和静态筛选区域闪烁。
 9. **先保证类型安全，再补样式。** 使用严格 TypeScript，API 入参、出参、表单值、枚举映射和组件 Props 都要有明确类型；禁止为了过编译使用 `any`、无意义断言或 `@ts-ignore`。
 
-## 必须遵守
+
+
+### 必须遵守
 
 - 用户可见文案使用静态 i18n key，并同步更新 `zh_CN` 与 `en_US`。
 - 路由入口使用 `validate`，页面内写操作使用 `useRights`。
@@ -62,7 +64,7 @@ packages/magic-admin-v2/
 ├── src/                         # 公共实现、开源版 baseline
 │   ├── api/                     # API 工厂、公共 API 类型和 URL
 │   ├── components/              # 跨 feature 复用的页面壳、业务组件、ui 组件
-│   ├── constants/               # 路由、权限、运行模式等公共常量
+│   ├── constants/               # 开源路由/权限、合并入口和运行模式
 │   ├── features/                # 按业务域组织的页面和模块
 │   ├── hooks/                   # 跨 feature 复用的 Hook
 │   ├── i18n/                    # i18n provider、loader、消息目录
@@ -264,13 +266,13 @@ export function useExampleListQuery(params: ExampleListParams) {
 
 新增可导航页面必须同时完成以下事项：
 
-1. 在 `src/constants/routes.ts` 增加稳定的 `RouteName`、`RoutePath`。
+1. 开源路由加在 `src/constants/route-keys.ts`，企业路由加在 `enterprise/src/constants/edition-routes.ts`。`src/constants/routes.ts` 只负责合并，调用方继续从这里取值。
 2. 在正确的公共 `src/routes/routes.tsx` 或企业 `enterprise/src/routes/edition.tsx` 注册路由，并使用 `lazy` 加载页面。
 3. 设置 `titleKey`、`meta.section`、`meta.group`；详情、编辑、内部跳转等不显示菜单的路由使用 `meta.menuVisible: false`。
-4. 在 `src/routes/menu.ts` 的 icon 映射和排序中检查是否需要新增/调整入口。Sidebar icon 必须全局唯一。
-5. 在 `src/routes/route-access.ts` 增加路由访问表达式；页面内使用 `useRights` 控制细粒度操作。
+4. 开源菜单图标和排序留在 `src/routes/menu.ts`；企业菜单加在 `enterprise/src/routes/edition-menu.ts`。Sidebar icon 必须全局唯一。
+5. 开源访问表达式加在 `src/routes/route-access.ts`，企业访问表达式加在 `enterprise/src/routes/route-access.ts`；页面内使用 `useRights` 控制细粒度操作。
 6. 在对应 i18n `nav.json` 中同时增加导航名称和描述。
-7. 如果是企业功能，权限和 API 都放到 `enterprise/src`，开源构建不能依赖企业代码。
+7. 企业权限 key 加在 `enterprise/src/constants/edition-permissions.ts`，企业 API 放在 `enterprise/src`。不要把企业 key、路由或菜单写回 `src`。
 
 访问控制建议：
 
@@ -354,12 +356,13 @@ export const exampleAccess = and(
 提交前按改动范围运行：
 
 ```bash
-pnpm types:opensource
+cd frontend/magic-web/packages/magic-admin-v2
 pnpm lint
+pnpm types:enterprise       # 企业版改动
+pnpm types:opensource       # 公共/开源版改动
 pnpm test:unit
-pnpm test:components
-pnpm test:integration
-pnpm build:opensource
+pnpm test:components        # 涉及 React 组件时
+pnpm test:integration       # 涉及页面数据流时
 ```
 
 如果完整命令因环境或已有问题无法执行，必须在 PR/交付说明中写清楚未执行项和替代验证方式。

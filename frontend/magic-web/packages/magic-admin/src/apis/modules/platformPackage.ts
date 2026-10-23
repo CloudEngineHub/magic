@@ -255,13 +255,5 @@ export const generatePlatformPackageApi = (client: HttpClient) => {
 				data,
 			)
 		},
-
-		getGlobalConfig() {
-			return client.get<PlatformPackage.GlobalConfig>(RequestUrl.getGlobalConfig)
-		},
-
-		updateGlobalConfig(data: PlatformPackage.GlobalConfig) {
-			return client.put(genRequestUrl(RequestUrl.getGlobalConfig), data)
-		},
 	}
 }

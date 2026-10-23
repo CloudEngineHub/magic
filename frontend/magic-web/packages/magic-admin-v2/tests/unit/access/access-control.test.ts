@@ -29,48 +29,29 @@ function createAccess(overrides: Partial<AccessContext> = {}): AccessContext {
 
 describe("Magic access", () => {
 	const platformAccess = allowMagic(PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_QUERY)
-	const adminAccess = allowMagic(PERMISSION_KEY_MAP.ADMIN_OPERATION_LOGS_QUERY)
-	const workspaceAccess = allowMagic(PERMISSION_KEY_MAP.MODEL_MANAGEMENT_QUERY)
 
-	it("accepts explicit permission keys", () => {
-		assert.equal(
-			adminAccess(
-				createAccess({
-					magicPermissionKeys: [PERMISSION_KEY_MAP.ADMIN_OPERATION_LOGS_QUERY],
-				}),
-			),
-			true,
-		)
-	})
-
-	it("lets the platform group cover platform, admin, and workspace permissions", () => {
+	it("lets the platform group cover platform permissions", () => {
 		const access = createAccess({
 			magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS],
 		})
 
 		assert.equal(platformAccess(access), true)
-		assert.equal(adminAccess(access), true)
-		assert.equal(workspaceAccess(access), true)
 	})
 
-	it("lets the administrator group cover admin and workspace but not platform permissions", () => {
+	it("does not let the administrator group cover platform permissions", () => {
 		const access = createAccess({
 			magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_ALL_PERMISSIONS],
 		})
 
 		assert.equal(platformAccess(access), false)
-		assert.equal(adminAccess(access), true)
-		assert.equal(workspaceAccess(access), true)
 	})
 
-	it("lets the member group cover workspace permissions only", () => {
+	it("does not let the member group cover platform permissions", () => {
 		const access = createAccess({
 			magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_PERSON_PERMISSIONS],
 		})
 
 		assert.equal(platformAccess(access), false)
-		assert.equal(adminAccess(access), false)
-		assert.equal(workspaceAccess(access), true)
 	})
 
 	it("keeps permission-group nesting consistent when a route validates a group key", () => {
@@ -90,8 +71,6 @@ describe("Magic access", () => {
 		const access = createAccess({ hasTeamshareAllPermissions: true })
 
 		assert.equal(platformAccess(access), false)
-		assert.equal(adminAccess(access), false)
-		assert.equal(workspaceAccess(access), false)
 	})
 
 	it("supports single and any-of permission checks without broadening admin prefixes", () => {
@@ -112,20 +91,9 @@ describe("Magic access", () => {
 })
 
 describe("Teamshare access", () => {
-	const organizationAccess = allowTeamshare(PERMISSION_KEY_MAP.ORGANIZATION_READ)
-
-	it("accepts explicit sub-admin permissions", () => {
-		assert.equal(
-			organizationAccess(
-				createAccess({
-					teamsharePermissionKeys: [PERMISSION_KEY_MAP.ORGANIZATION_READ],
-				}),
-			),
-			true,
-		)
-	})
-
 	it("accepts Teamshare super administrators and organization owners", () => {
+		const organizationAccess = allowTeamshare()
+
 		assert.equal(organizationAccess(createAccess({ hasTeamshareAllPermissions: true })), true)
 		assert.equal(
 			organizationAccess(
@@ -143,7 +111,7 @@ describe("Teamshare access", () => {
 
 	it("does not let Magic permission groups unlock Teamshare permissions", () => {
 		assert.equal(
-			organizationAccess(
+			allowTeamshare()(
 				createAccess({
 					magicPermissionKeys: [PERMISSION_KEY_MAP.MAGIC_PLATFORM_PERMISSIONS],
 				}),

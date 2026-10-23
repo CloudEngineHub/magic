@@ -26,7 +26,7 @@ export function StaffIconUploadField({
 			disabled={disabled}
 			id={id}
 			fallbackText={name}
-			hint={t("modelList.editor.iconUploadHint")}
+			hint={t("officialStaff.editor.iconUploadHint")}
 			imageClassName="object-contain"
 			layout="conditional"
 			name={name}

@@ -14,8 +14,6 @@ packages:
 overrides:
   "@dtyq/magic-flow>react": 18.3.1
   "@dtyq/magic-flow>react-dom": 18.3.1
-  "@feb/editor-tiptap>@tiptap/extension-list": 3.11.1
-  "@feb/editor-tiptap>@tiptap/extensions": 3.11.1
   # Tiptap's official v3 packages share runtime APIs and must stay on one
   # release. Keep this list explicit: @tiptap/y-tiptap is also official but
   # has an independent version line, while non-@tiptap editor packages are

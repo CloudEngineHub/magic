@@ -3,8 +3,11 @@ import { getCategoryModels, isDynamicModel, isDynamicModelOption, type DropTarge
 
 export { getCategoryModels, isDynamicModel, isDynamicModelOption } from "@magic-admin-v2/features/platform-official-staff/utils/assignment-dnd";
 
-export const dynamicModelIcon =
-  "";
+// Same bundled SVG as old admin. Keep it local so icons are not tenant-private object-storage URLs.
+export const dynamicModelIcon = new URL(
+  "../../../assets/logos/dynamic-model-logo.svg",
+  import.meta.url,
+).href;
 
 export type AddModelTarget = {
   beforeModelId?: string;

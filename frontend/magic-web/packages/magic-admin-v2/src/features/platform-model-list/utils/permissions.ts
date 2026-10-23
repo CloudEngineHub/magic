@@ -1,5 +1,6 @@
 import { PERMISSION_KEY_MAP } from "@magic-admin-v2/constants/permissions"
 import type { ProviderModelPermissionScope } from "@magic-admin-v2/features/platform-model-list/utils/data-source"
+import { editionProviderModelPermissions } from "@magic-admin-v2/features/platform-model-list/utils/edition-permissions"
 import {
 	providerModelCategory,
 	providerModelType,
@@ -26,24 +27,24 @@ export const providerModelCategoryOrder = [
 	providerModelCategory.embedding,
 ] as const satisfies readonly ProviderModelCategory[]
 
-const providerModelPermissions = {
-	platform: {
-		query: PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_QUERY,
-		edit: PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_EDIT,
-	},
-	workspace: {
-		query: PERMISSION_KEY_MAP.MODEL_MANAGEMENT_QUERY,
-		edit: PERMISSION_KEY_MAP.MODEL_MANAGEMENT_EDIT,
-	},
-} as const satisfies Record<ProviderModelPermissionScope, { edit: string; query: string }>
+const platformProviderModelPermissions = {
+	query: PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_QUERY,
+	edit: PERMISSION_KEY_MAP.PLATFORM_MODEL_MANAGEMENT_EDIT,
+}
+
+function getProviderModelPermissions(scope: ProviderModelPermissionScope) {
+	if (scope === "platform") return platformProviderModelPermissions
+	return editionProviderModelPermissions[scope]
+}
 
 export function getProviderModelCategoryAccess(
 	access: AccessContext | null | undefined,
 	scope: ProviderModelPermissionScope,
 ): ProviderModelCategoryAccessMap {
-	const permissions = providerModelPermissions[scope]
-	const canEdit = access ? hasMagicRights(access, [permissions.edit]) : false
-	const canView = canEdit || (access ? hasMagicRights(access, [permissions.query]) : false)
+	const permissions = getProviderModelPermissions(scope)
+	const canEdit = Boolean(access && permissions && hasMagicRights(access, [permissions.edit]))
+	const canView =
+		canEdit || Boolean(access && permissions && hasMagicRights(access, [permissions.query]))
 
 	return Object.fromEntries(
 		providerModelCategoryOrder.map((category) => [category, { canEdit, canView }]),

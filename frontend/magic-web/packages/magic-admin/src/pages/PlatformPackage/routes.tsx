@@ -10,7 +10,6 @@ import {
 } from "@admin/const/common"
 
 const PlatformPackageLayout = lazy(() => import("./index.layout"))
-const InfoManagementPage = lazy(() => import("./InfoManagement/index.page"))
 const ModeManagementPage = lazy(() => import("./ModeManagement/index.page"))
 const ModelPage = lazy(() => import("./Model/index.page"))
 const ModelDetailPage = lazy(() => import("./ModelDetail/index.page"))
@@ -26,7 +25,6 @@ const EmployeeReviewPage = lazy(() => import("./EmployeeReview/index.page"))
 const SkillMarketPage = lazy(() => import("./SkillMarket/index.page"))
 const EmployeeMarketPage = lazy(() => import("./EmployeeMarket/index.page"))
 const AppMenuPage = lazy(() => import("./AppMenu/index.page"))
-const ProviderAccessPage = lazy(() => import("./ProviderAccess/index.page"))
 const SlidesTemplatePage = lazy(() => import("./SlidesTemplate/index.page"))
 
 export default {
@@ -320,35 +318,6 @@ export default {
 							isSuperAdmin ||
 							permissions.includes(PERMISSION_KEY_MAP.APP_MENU_QUERY) ||
 							permissions.includes(PERMISSION_KEY_MAP.APP_MENU_EDIT)
-						)
-					},
-				},
-				{
-					name: RouteName.AdminPlatformMaintenance,
-					path: RoutePath.PlatformMaintenance,
-					title: "nav.platformSubMenu.platformMaintenance",
-					element: <InfoManagementPage />,
-					validate: (permissions: string[], isSuperAdmin?: boolean) => {
-						return (
-							isSuperAdmin ||
-							permissions.includes(PERMISSION_KEY_MAP.INFO_MANAGEMENT_QUERY) ||
-							permissions.includes(PERMISSION_KEY_MAP.INFO_MANAGEMENT_EDIT)
-						)
-					},
-				},
-				{
-					name: RouteName.AdminPlatformProviderAccess,
-					path: RoutePath.PlatformProviderAccess,
-					validateEnvironment: (env) => env.MAGIC_APP_ENV?.startsWith("saas") ?? false,
-					title: "nav.platformSubMenu.providerAccess",
-					element: <ProviderAccessPage />,
-					validate: (permissions: string[], isSuperAdmin?: boolean) => {
-						return (
-							isSuperAdmin ||
-							permissions.includes(
-								PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_QUERY,
-							) ||
-							permissions.includes(PERMISSION_KEY_MAP.PLATFORM_INFO_MANAGEMENT_EDIT)
 						)
 					},
 				},
