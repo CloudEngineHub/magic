@@ -4,7 +4,6 @@ import {
 	PlatformPackageRoutes,
 	otherRoutes,
 	RouteName,
-	AiManageRoutes,
 	withAccessibleIndexRedirect,
 } from "@dtyq/magic-admin"
 import { RoutePath } from "@/constants/routes"
@@ -35,7 +34,6 @@ const routes: Route[] = withAccessibleIndexRedirect<Route>([
 				element: <Navigate name={RouteName.AdminPlatformAIModel} replace />,
 			},
 			PlatformPackageRoutes,
-			AiManageRoutes,
 			...otherRoutes,
 		],
 	},

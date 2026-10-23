@@ -106,27 +106,15 @@ const ServiceProviderList = ({ category, className, style }: TabListProps) => {
 	}
 
 	const getDetailRouteName = (): RouteName => {
-		if (isOfficialOrg) {
-			switch (category) {
-				case AiModel.ServiceProviderCategory.LLM:
-					return RouteName.AdminPlatformAIModelDetails
-				case AiModel.ServiceProviderCategory.VLM:
-					return RouteName.AdminPlatformAIDrawingDetails
-				case AiModel.ServiceProviderCategory.VGM:
-					return RouteName.AdminPlatformVideoModelDetails
-				default:
-					return RouteName.AdminPlatformAIModelDetails
-			}
-		}
 		switch (category) {
 			case AiModel.ServiceProviderCategory.LLM:
-				return RouteName.AdminAIModelDetails
+				return RouteName.AdminPlatformAIModelDetails
 			case AiModel.ServiceProviderCategory.VLM:
-				return RouteName.AdminAIDrawingDetails
+				return RouteName.AdminPlatformAIDrawingDetails
 			case AiModel.ServiceProviderCategory.VGM:
-				return RouteName.AdminAIVideoDetails
+				return RouteName.AdminPlatformVideoModelDetails
 			default:
-				return RouteName.AdminAIModelDetails
+				return RouteName.AdminPlatformAIModelDetails
 		}
 	}
 

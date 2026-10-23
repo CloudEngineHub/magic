@@ -1,7 +1,6 @@
 /* magic-admin 包导出 */
 
 // 2. 导出路由配置
-export { default as AiManageRoutes } from "@admin/pages/AiManage/routes"
 export { default as PlatformPackageRoutes } from "@admin/pages/PlatformPackage/routes"
 export { otherRoutes } from "@admin/routes"
 export { withAccessibleIndexRedirect } from "@admin/routes/FirstAccessibleRedirect"
