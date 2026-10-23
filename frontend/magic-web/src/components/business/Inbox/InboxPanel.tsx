@@ -36,7 +36,7 @@ const InboxPanel = observer(function InboxPanel() {
 			>
 				<SheetTitle className="sr-only">{t("footer.inbox")}</SheetTitle>
 				<header className="flex shrink-0 items-center justify-between gap-3 px-[22px] pb-3.5 pt-[22px]">
-					<h2 className="text-xl font-semibold text-foreground">{t("footer.inbox")}</h2>
+					<h2 className="text-lg font-medium text-foreground">{t("footer.inbox")}</h2>
 					<div className="flex items-center gap-1">
 						<Button
 							variant="ghost"

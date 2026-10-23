@@ -14,10 +14,17 @@ const ICON_BY_TYPE: Record<string, InboxIconName> = {
 	project_invitation: "users",
 	agent_invitation: "robot",
 	skill_invitation: "spark",
+	micro_app_invitation: "microApp",
+	micro_app_access_revoked: "microApp",
 }
 
-export function inboxIconForType(type: string): InboxIconName {
-	return ICON_BY_TYPE[type] ?? "share"
+export function inboxIconForType(type: string, resourceType?: unknown): InboxIconName {
+	const icon = ICON_BY_TYPE[type]
+	if (icon) return icon
+	// Resource identity also covers connector events without a dedicated notification type.
+	if (resourceType === "micro_app") return "microApp"
+	if (resourceType === "mcp" || resourceType === "connector") return "connector"
+	return "share"
 }
 
 export function mapNotificationItem(item: NotificationListItem): InboxMessage {
@@ -32,6 +39,7 @@ export function mapNotificationItem(item: NotificationListItem): InboxMessage {
 		template_version: item.template_version,
 		payload: item.payload ?? {},
 		created_at: item.created_at,
+		message_status: item.message_status,
 		is_unread: item.read_status === "unread" && !isHandledAuthorization,
 		auth_status:
 			item.action_status === "pending" ||

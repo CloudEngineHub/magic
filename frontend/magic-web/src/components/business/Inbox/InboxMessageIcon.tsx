@@ -1,57 +1,58 @@
-import type { LucideIcon } from "lucide-react"
-import {
-	AlertCircle,
-	Bot,
-	Box,
-	CheckCircle2,
-	CirclePlus,
-	CreditCard,
-	FileText,
-	Sparkles,
-	Share2,
-	Users,
-} from "lucide-react"
-import type { InboxIconName } from "./types"
+import folderIcon from "@/pages/superMagic/assets/svg/file-folder.svg"
+import magicAvatar from "@/assets/logos/magic-avatar.svg"
+import projectIcon from "@/pages/superMagic/assets/svg/project_icon.svg"
+import SkillIcon from "@/components/business/MentionPanel/components/icons/SkillIcon"
+import BotIcon from "@/components/business/MentionPanel/components/icons/BotIcon"
+import MicroAppIcon from "@/components/business/MentionPanel/components/icons/MicroAppIcon"
+import PlugIcon from "@/components/business/MentionPanel/components/icons/PlugIcon"
+import successIcon from "@/pages/superMagic/assets/svg/topic-status-success.svg"
+import alertIcon from "@/pages/superMagic/assets/svg/interrupt.svg"
 import { cn } from "@/utils/cn"
+import type { InboxIconName } from "./types"
 
-const INBOX_ICONS: Record<InboxIconName, LucideIcon> = {
-	users: Users,
-	share: Share2,
-	project: Box,
-	file: FileText,
-	alert: AlertCircle,
-	spark: Sparkles,
-	points: CirclePlus,
-	payment: CreditCard,
-	success: CheckCircle2,
-	robot: Bot,
-}
-
-const INBOX_ICON_TONE: Record<InboxIconName, string> = {
-	users: "bg-[#f0f2ff] text-[#5364d7] dark:bg-indigo-500/10 dark:text-indigo-400",
-	share: "bg-[#f0f2ff] text-[#5364d7] dark:bg-indigo-500/10 dark:text-indigo-400",
-	project: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
-	file: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
-	alert: "bg-[#fff0ef] text-[#ca5d63] dark:bg-destructive/10 dark:text-destructive",
-	spark: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
-	points: "bg-[#edf8f3] text-[#2c8466] dark:bg-emerald-500/10 dark:text-emerald-400",
-	payment: "bg-[#edf8f3] text-[#2c8466] dark:bg-emerald-500/10 dark:text-emerald-400",
-	success: "bg-[#edf8f3] text-[#2c8466] dark:bg-emerald-500/10 dark:text-emerald-400",
-	robot: "bg-[#f1f3ff] text-[#5564d9] dark:bg-indigo-500/10 dark:text-indigo-400",
+// Reuse existing product artwork for notification categories.
+const INBOX_IMAGES: Record<
+	Exclude<InboxIconName, "spark" | "robot" | "microApp" | "connector">,
+	string
+> = {
+	file: folderIcon,
+	users: projectIcon,
+	share: magicAvatar,
+	project: projectIcon,
+	alert: alertIcon,
+	points: magicAvatar,
+	payment: magicAvatar,
+	success: successIcon,
 }
 
 function InboxMessageIcon({ name, mobile = false }: { name: InboxIconName; mobile?: boolean }) {
-	const Icon = INBOX_ICONS[name]
+	const size = mobile ? 40 : 32
 	return (
 		<div
 			className={cn(
 				"flex shrink-0 items-center justify-center",
-				mobile ? "size-10 rounded-[12px]" : "size-[34px] rounded-[10px]",
-				INBOX_ICON_TONE[name],
+				mobile ? "size-10" : "size-8",
 			)}
 			aria-hidden
 		>
-			<Icon className="size-4" />
+			{/* Reuse the default icons rendered by @ panel list items, rather than category artwork. */}
+			{name === "spark" ? (
+				<SkillIcon size={size} />
+			) : name === "robot" ? (
+				<BotIcon size={size} />
+			) : name === "microApp" ? (
+				<MicroAppIcon size={size} />
+			) : name === "connector" ? (
+				<PlugIcon size={size} />
+			) : (
+				<img
+					src={INBOX_IMAGES[name]}
+					alt=""
+					width={size}
+					height={size}
+					className={cn("object-contain", mobile ? "size-10" : "size-8")}
+				/>
+			)}
 		</div>
 	)
 }

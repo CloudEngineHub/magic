@@ -13,6 +13,8 @@ export type InboxIconName =
 	| "payment"
 	| "success"
 	| "robot"
+	| "microApp"
+	| "connector"
 
 export type InboxMessageId = string
 
@@ -23,6 +25,7 @@ export interface InboxMessage {
 	template_version: number
 	payload: Record<string, unknown>
 	created_at: string
+	message_status?: "active" | "withdrawn"
 	is_unread: boolean
 	auth_status?: InboxAuthStatus
 	business_result?: "applied" | "expired"

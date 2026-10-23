@@ -7,7 +7,7 @@ import { inboxStore } from "./store"
 import type { InboxTab } from "./types"
 
 const TAB_TRIGGER_CLASS =
-	"relative h-12 flex-none rounded-none border-0 px-0 text-[15px] font-normal text-[#818899] shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full dark:text-muted-foreground data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-[#5f6de2] dark:data-[state=active]:bg-transparent"
+	"relative h-12 flex-none rounded-none border-0 px-0 text-sm font-normal text-muted-foreground shadow-none after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full dark:text-muted-foreground data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-foreground data-[state=active]:shadow-none data-[state=active]:after:bg-primary dark:data-[state=active]:bg-transparent"
 
 const InboxTabs = observer(function InboxTabs({ mobile = false }: { mobile?: boolean }) {
 	const { t } = useTranslation("sidebar")
@@ -20,10 +20,7 @@ const InboxTabs = observer(function InboxTabs({ mobile = false }: { mobile?: boo
 					void inboxStore.setActiveTab(nextValue)
 				}
 			}}
-			className={cn(
-				"min-w-0 border-b border-[#eceef2] dark:border-border",
-				mobile ? "px-3" : "px-[22px]",
-			)}
+			className={cn("min-w-0 border-b border-border", mobile ? "px-3" : "px-[22px]")}
 		>
 			<TabsList
 				className={cn(

@@ -136,7 +136,6 @@ function resolvePathByNotificationType(message: InboxMessage) {
 			if (projectId && topicId) return taskTopicRoute(projectId, topicId)
 			return undefined
 		case "skill_invitation":
-		case "skill_access_revoked":
 			if (code) {
 				return {
 					path: buildRoute(RouteName.SkillEdit, { code }),
@@ -145,7 +144,6 @@ function resolvePathByNotificationType(message: InboxMessage) {
 			}
 			return undefined
 		case "agent_invitation":
-		case "agent_access_revoked":
 			if (code) {
 				return {
 					path: buildRoute(RouteName.CrewConversation, { code }),
@@ -154,7 +152,6 @@ function resolvePathByNotificationType(message: InboxMessage) {
 			}
 			return undefined
 		case "micro_app_invitation":
-		case "micro_app_access_revoked":
 			if (id) {
 				return {
 					path: buildRoute(RouteName.MicroApp, { appId: id }),
@@ -163,7 +160,6 @@ function resolvePathByNotificationType(message: InboxMessage) {
 			}
 			return undefined
 		case "project_invitation":
-		case "project_access_revoked":
 			if (id) return projectWorkspaceRoute(payload, id)
 			return undefined
 		case "project_shared":
@@ -189,6 +185,16 @@ function resolveLegacyPath(message: InboxMessage) {
 }
 
 export function getInboxResourceRoute(message: InboxMessage) {
+	// Only an accepted, still-valid invitation grants entry. Revocation notices
+	// describe lost access and must never offer a link back to the resource.
+	if (
+		message.message_status === "withdrawn" ||
+		message.type.endsWith("_access_revoked") ||
+		((message.category === "auth" || message.type.endsWith("_invitation")) &&
+			(message.auth_status !== "accepted" || message.business_result === "expired"))
+	) {
+		return undefined
+	}
 	const resolved = resolvePathByNotificationType(message) ?? resolveLegacyPath(message)
 	if (!resolved) {
 		logger.warn({

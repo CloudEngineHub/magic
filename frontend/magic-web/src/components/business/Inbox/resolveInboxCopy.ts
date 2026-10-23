@@ -69,7 +69,7 @@ export function resolveInboxCopy(
 			body: i18next.t("inbox.templateUnavailable", { ns: "sidebar" }),
 			bodyParts: undefined,
 			unavailable: true,
-			icon: inboxIconForType(message.type),
+			icon: inboxIconForType(message.type, message.payload.resource_type),
 			payload,
 		}
 	}
@@ -79,7 +79,7 @@ export function resolveInboxCopy(
 		body: bodyParts.map((part) => part.text).join(""),
 		bodyParts,
 		unavailable: false,
-		icon: inboxIconForType(message.type),
+		icon: inboxIconForType(message.type, message.payload.resource_type),
 		payload,
 	}
 }

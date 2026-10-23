@@ -1,19 +1,8 @@
-import {
-	Building2,
-	ChevronDown,
-	ChevronRight,
-	ChevronUp,
-	Globe,
-	Lock,
-	RefreshCw,
-	Users,
-	X,
-} from "lucide-react"
+import { ChevronDown, ChevronRight, ChevronUp, Globe, Lock, RefreshCw, Users } from "lucide-react"
 import type { ReactNode } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo } from "react"
 import { useTranslation } from "react-i18next"
-import { NodeType, type TreeNode } from "@dtyq/user-selector"
-import MemberDepartmentSelector from "@/components/business/MemberDepartmentSelector"
+import { ShareRangeField } from "@/pages/superMagic/components/Share/ShareFields"
 import { Input } from "@/components/shadcn-ui/input"
 import { Switch } from "@/components/shadcn-ui/switch"
 import { cn } from "@/utils/cn"
@@ -180,46 +169,6 @@ function AdvancedSwitchRow({
 			</div>
 			{showDivider ? <div className="mx-3.5 h-px bg-border" /> : null}
 		</>
-	)
-}
-
-/**
- * Staged member and department picker for mobile share forms.
- * Maintains uncommitted selections while the modal is open, so dismissing or cancelling
- * the picker does not overwrite the confirmed members chosen in previous saves.
- */
-function ProjectShareMemberSelector({
-	open,
-	selectedMemberNodes,
-	onClose,
-	onConfirm,
-}: {
-	open: boolean
-	selectedMemberNodes: TreeNode[]
-	onClose: () => void
-	onConfirm: (selected: TreeNode[]) => void
-}) {
-	const { t } = useTranslation("super")
-	const [stagedMemberNodes, setStagedMemberNodes] = useState(selectedMemberNodes)
-
-	// Sync staged nodes with confirmed members whenever the selector becomes visible.
-	useEffect(() => {
-		if (open) {
-			setStagedMemberNodes(selectedMemberNodes)
-		}
-	}, [open, selectedMemberNodes])
-
-	return (
-		<MemberDepartmentSelector
-			open={open}
-			title={t("projectShare.selectMembers")}
-			selectedValues={stagedMemberNodes}
-			onSelectChange={setStagedMemberNodes}
-			onCancel={onClose}
-			onOk={(selected: TreeNode[]) => {
-				onConfirm(selected)
-			}}
-		/>
 	)
 }
 
@@ -413,67 +362,24 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 					) : null}
 
 					{formState.shareType === ShareType.Organization ? (
-						<div className="space-y-2">
-							<SectionLabel>
-								{t("projectShare.organizationMembersLabel")}
-							</SectionLabel>
-							<CardGroup>
-								<button
-									type="button"
-									onClick={controller.openMemberSelector}
-									className="flex h-12 w-full items-center justify-between px-3.5 active:opacity-75"
-									data-testid="project-share-sheet-member-selector-trigger"
-								>
-									<span className="text-[16px] leading-5 text-foreground">
-										{controller.selectedMemberNodes.length > 0
-											? t("projectShare.selectedMembersCount", {
-													count: controller.selectedMemberNodes.length,
-												})
-											: t("projectShare.selectMembers")}
-									</span>
-									<ChevronRight className="h-[18px] w-[18px] text-[#8A8A8A]" />
-								</button>
-								{controller.selectedMemberNodes.length > 0 ? (
-									<div className="border-t border-border px-3.5 py-2">
-										{controller.selectedMemberNodes.map((item, index) => (
-											<div key={`${item.id}-${index}`}>
-												{index > 0 ? (
-													<div className="h-px bg-border" />
-												) : null}
-												<div className="flex items-center gap-3 py-3">
-													<div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#F3F3F3]">
-														{item.dataType === NodeType.User ? (
-															<Users className="h-4 w-4 text-[#8A8A8A]" />
-														) : (
-															<Building2 className="h-4 w-4 text-[#8A8A8A]" />
-														)}
-													</div>
-													<div className="min-w-0 flex-1 truncate text-[16px] leading-6 text-foreground">
-														{item.name}
-													</div>
-													<button
-														type="button"
-														onClick={() => {
-															const nextNodes =
-																controller.selectedMemberNodes.filter(
-																	(member) =>
-																		member.id !== item.id,
-																)
-															controller.confirmMemberSelector(
-																nextNodes,
-															)
-														}}
-														className="flex h-7 w-7 items-center justify-center text-[#8A8A8A] active:opacity-70"
-														data-testid="project-share-sheet-member-remove-button"
-													>
-														<X className="h-4 w-4" />
-													</button>
-												</div>
-											</div>
-										))}
-									</div>
-								) : null}
-							</CardGroup>
+						<div
+							className="rounded-[14px] bg-white px-3.5 py-3"
+							data-testid="project-share-sheet-organization-range"
+						>
+							<ShareRangeField
+								value={formState.shareRange}
+								onChange={(range) => {
+									controller.setShareRange(range)
+									if (range === "all") {
+										controller.confirmMemberSelector([])
+									}
+								}}
+								targets={formState.shareTargets}
+								onTargetsChange={(targets) => {
+									controller.setShareTargets(targets)
+								}}
+								resourceId={controller.editResourceId}
+							/>
 						</div>
 					) : null}
 
@@ -596,15 +502,6 @@ export default function ProjectShareCreateView({ controller }: ProjectShareCreat
 				variant="single"
 				testId="project-share-sheet-create-floating-bar"
 			/>
-
-			{controller.memberSelectorOpen && (
-				<ProjectShareMemberSelector
-					open={controller.memberSelectorOpen}
-					selectedMemberNodes={controller.selectedMemberNodes}
-					onClose={controller.closeMemberSelector}
-					onConfirm={controller.confirmMemberSelector}
-				/>
-			)}
 		</div>
 	)
 }
