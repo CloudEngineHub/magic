@@ -148,7 +148,7 @@ export function createRoutes(
 					index: true,
 					element: <DefaultRouteRedirect />,
 				},
-				...createBaseFeatureRoutes(),
+				...createBaseFeatureRoutes(mode),
 				...editionRoutes,
 				...(mode === RuntimeMode.Standalone ? standaloneDevelopmentRoutes : []),
 				{
