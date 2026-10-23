@@ -242,6 +242,10 @@ export const PERMISSION_KEY_MAP = {
 	ORIENTATION_POINTS_ADD_POINTS: "platform.organization.point_manager.add_points",
 	/** 租户积分-绑定套餐。 */
 	ORIENTATION_POINTS_BIND_PACKAGE: "platform.organization.point_manager.bind_package",
+	/** 账号管理-查询（列表、详情、状态预览）。 */
+	ACCOUNT_MANAGEMENT_QUERY: "platform.organization.account_management.query",
+	/** 账号管理-编辑（禁用、启用）。 */
+	ACCOUNT_MANAGEMENT_EDIT: "platform.organization.account_management.edit",
 
 	/* ---------- 企业管理：安全管控 ---------- */
 

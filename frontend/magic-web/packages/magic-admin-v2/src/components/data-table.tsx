@@ -7,6 +7,7 @@ import {
 	type Column,
 	type OnChangeFn,
 	type Row,
+	type RowSelectionState,
 	type SortingState,
 	type VisibilityState,
 } from "@tanstack/react-table"
@@ -96,6 +97,12 @@ export type DataTableProps<TData, TValue> = {
 	columnVisibility?: VisibilityState
 	/** 当前排序状态。 */
 	sorting?: SortingState
+	/** 当前行选择状态；传入后由调用方持有选中行 ID，并驱动行高亮。 */
+	rowSelection?: RowSelectionState
+	/** 行选择变化回调；与 `rowSelection` 配合进入受控选择模式。 */
+	onRowSelectionChange?: OnChangeFn<RowSelectionState>
+	/** 是否允许行选择；未传时保持不可选择，选择列由调用方自行定义。 */
+	enableRowSelection?: boolean | ((row: Row<TData>) => boolean)
 	/** 移动端详情抽屉中需要高亮的行 ID。 */
 	selectedRowId?: string
 	/** 默认保持桌面端表头在页面或弹窗滚动区顶部；特殊场景可显式关闭。 */
@@ -112,6 +119,7 @@ export function DataTable<TData, TValue>({
 	containerTestId,
 	data,
 	emptyState,
+	enableRowSelection,
 	getRowId,
 	isLoading,
 	loadingTestId,
@@ -121,8 +129,10 @@ export function DataTable<TData, TValue>({
 	mobileDetailButtonTestId,
 	mobileDetailCloseButtonTestId,
 	onColumnVisibilityChange,
+	onRowSelectionChange,
 	onSortingChange,
 	columnVisibility,
+	rowSelection,
 	sorting,
 	rowTestId,
 	selectedRowId,
@@ -136,14 +146,17 @@ export function DataTable<TData, TValue>({
 	const tableState = {
 		...(columnVisibility === undefined ? {} : { columnVisibility }),
 		...(sorting === undefined ? {} : { sorting }),
+		...(rowSelection === undefined ? {} : { rowSelection }),
 	}
 	const tableChangeHandlers = {
 		...(onColumnVisibilityChange === undefined ? {} : { onColumnVisibilityChange }),
 		...(onSortingChange === undefined ? {} : { onSortingChange }),
+		...(onRowSelectionChange === undefined ? {} : { onRowSelectionChange }),
 	}
 	const table = useReactTable({
 		data,
 		columns,
+		enableRowSelection,
 		getCoreRowModel: getCoreRowModel(),
 		getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
 		getRowId,
