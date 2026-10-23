@@ -119,6 +119,30 @@ describe("useConversationInputHeight", () => {
 		expect(result.current.fillHeight).toBe(true)
 	})
 
+	it("follows a lower minimum bound without waiting for a content change", async () => {
+		containerHeight = 150
+		const { result, rerender } = renderHook(
+			({ minHeight }) =>
+				useConversationInputHeight({
+					scope: "lowered-floor-conversation",
+					enabled: true,
+					containerRef: { current: container } as RefObject<HTMLDivElement>,
+					availableRef: { current: available } as RefObject<HTMLDivElement>,
+					minHeight,
+				}),
+			{ initialProps: { minHeight: 182 } },
+		)
+
+		await waitFor(() => expect(result.current.maxHeight).toBe(400))
+		// A content measurement under the old floor clamps the automatic height up to it.
+		fireEvent.input(container)
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(182))
+
+		rerender({ minHeight: 177.2 })
+
+		await waitFor(() => expect(result.current.effectiveHeight).toBe(177.2))
+	})
+
 	it("lets manual Splitter resizing override automatic measurements until restored", async () => {
 		const { result } = renderHook(() =>
 			useConversationInputHeight({

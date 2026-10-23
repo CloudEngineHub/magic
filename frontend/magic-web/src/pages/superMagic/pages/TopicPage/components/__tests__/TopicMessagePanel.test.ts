@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
+	COMPOSER_SHELL_CHROME_HEIGHT,
+	ORDINARY_COMPOSER_CARD_HEIGHT,
 	PPT_COMPOSER_MIN_INPUT_HEIGHT,
 	SPECIALIZED_COMPOSER_MIN_INPUT_HEIGHT,
 	VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT,
@@ -45,5 +47,21 @@ describe("TopicMessagePanel input minimum height", () => {
 				isSpecializedMode: true,
 			}),
 		).toBe(VIDEO_PRODUCTION_COMPOSER_MIN_INPUT_HEIGHT)
+	})
+
+	it("keeps a locked-mode composer's card at the ordinary card height", () => {
+		const lockedMode = {
+			isPptMode: false,
+			isVideoProductionMode: false,
+			isSpecializedMode: false,
+			isLockedMode: true,
+		}
+		expect(resolveComposerMinInputHeight(lockedMode)).toBe(
+			ORDINARY_COMPOSER_CARD_HEIGHT + COMPOSER_SHELL_CHROME_HEIGHT.default,
+		)
+		// The AI canvas sits beside its canvas panel, so its composer uses the small size.
+		expect(resolveComposerMinInputHeight({ ...lockedMode, editorSize: "small" })).toBe(
+			ORDINARY_COMPOSER_CARD_HEIGHT + COMPOSER_SHELL_CHROME_HEIGHT.small,
+		)
 	})
 })
