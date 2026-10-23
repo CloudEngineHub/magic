@@ -269,6 +269,8 @@ function TopicMessagePanel({
 		</MessageListProvider>
 	)
 
+	// The composer shrinks beside an open detail panel; its minimum height follows the same size.
+	const composerSize = detailPanelVisible ? "small" : "default"
 	const inputNode = (
 		<ProjectPageInputContainer
 			className="mx-auto max-w-3xl rounded-2xl"
@@ -299,7 +301,7 @@ function TopicMessagePanel({
 			showModeToggle={isComposerModeLocked ? false : undefined}
 			getImplicitMentionItems={getImplicitMentionItems}
 			placeholder={placeholder}
-			size={detailPanelVisible ? "small" : "default"}
+			size={composerSize}
 		/>
 	)
 	// Keep extra-UI capability checks explicit so specialized composers cannot silently use a floor
@@ -317,6 +319,9 @@ function TopicMessagePanel({
 				topicMode: composerTopicMode,
 				agentCode: composerAgentCode,
 			}),
+		// A locked mode hides the mode switcher row (showModeToggle is false above).
+		isLockedMode: Boolean(lockedTopicMode),
+		editorSize: composerSize,
 	})
 
 	return (

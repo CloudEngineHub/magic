@@ -91,6 +91,7 @@ vi.mock("@/components/business/MentionPanel/builtin-store", () => ({
 
 vi.mock("../../../stores", () => ({
 	useOptionalSceneStateStore: () => null,
+	useOptionalScenePanelVariant: () => undefined,
 }))
 
 vi.mock("@/pages/superMagic/services/messageSendFlowService", () => ({

@@ -12,6 +12,7 @@ import {
 	createAiCanvasDocument,
 	findAiCanvasFolder,
 	getAiCanvasDefaultFolderName,
+	getRecentAiCanvasDocument,
 	resolveAiCanvasFolderName,
 } from "../utils/aiCanvas"
 
@@ -43,7 +44,9 @@ interface UseAiCanvasDocumentOptions {
  * rename is not retried in a loop). Projects without a name keep the default canvas name.
  *
  * Missing files are only judged after the project's complete request succeeded ("ready"):
- * partial snapshots may not contain the canvas yet and would otherwise create duplicates.
+ * partial snapshots may not contain the canvas yet and would otherwise create duplicates. A canvas
+ * created moments ago (e.g. by the AI canvas home) can also arrive before the backend marks it as
+ * a canvas; it is then registered as an optimistic canvas rather than created again.
  */
 export function useAiCanvasDocument({
 	enabled,
@@ -128,8 +131,32 @@ export function useAiCanvasDocument({
 	useEffect(() => {
 		if (!enabled || isReadOnly || !isFilesReady || canvasFolder || !projectId) return
 		if (attemptedProjectRef.current === projectId) return
+		attemptedProjectRef.current = projectId
+		const recent = getRecentAiCanvasDocument(projectId)
+		// Only a folder still in the tree counts: a canvas deleted since must be created again.
+		if (recent && attachments.some((item) => String(item.file_id) === recent.folderId)) {
+			// The folder exists but its display_config is still being written; the overlay
+			// shows it as a canvas until the server snapshot confirms it.
+			projectFilesStore.registerCreatedDesignProject({
+				projectId,
+				folderId: recent.folderId,
+				configFileId: recent.configFileId,
+				folderName: recent.folderName,
+				status: "confirmed",
+			})
+			return
+		}
 		void createCanvas()
-	}, [canvasFolder, createCanvas, enabled, isFilesReady, isReadOnly, projectId])
+	}, [
+		attachments,
+		canvasFolder,
+		createCanvas,
+		enabled,
+		isFilesReady,
+		isReadOnly,
+		projectFilesStore,
+		projectId,
+	])
 
 	const targetFolderName = resolveAiCanvasFolderName(projectName)
 	const canvasFolderId = canvasFolder?.file_id ? String(canvasFolder.file_id) : ""

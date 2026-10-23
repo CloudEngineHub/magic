@@ -389,6 +389,15 @@ export function useConversationInputHeight({
 		}
 	}, [availableRef, containerRef, enabled, heightMode, measurementReady, scheduleMeasure])
 
+	// Only content and layout changes re-measure, so a lower floor (e.g. the AI canvas composer
+	// switching to its small size once the canvas opens) would leave auto height at the old floor.
+	const previousMinHeightRef = useRef(minHeight)
+	useEffect(() => {
+		if (previousMinHeightRef.current === minHeight) return
+		previousMinHeightRef.current = minHeight
+		if (enabled && measurementReady && heightMode === "auto") scheduleMeasure("content")
+	}, [enabled, heightMode, measurementReady, minHeight, scheduleMeasure])
+
 	useEffect(() => {
 		if (enabled) return
 		// Read the live persisted preference so collapsing then reopening the panel

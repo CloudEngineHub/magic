@@ -31,7 +31,11 @@ function GeneralInputContainer({
 	const shouldFillHeight = Boolean(inputLayout?.fillHeight)
 	const editorPortalTarget = usePortalTarget({
 		portalId: inputContainerId ?? SCENE_INPUT_IDS.INPUT_CONTAINER,
-		resolveBeforePaint: variant === ScenePanelVariant.HomePage && !isMobile,
+		// Desktop home and project composers mount their portal target before this scene (the project
+		// page loads it lazily), so resolve it before paint instead of showing an empty composer.
+		resolveBeforePaint:
+			!isMobile &&
+			(variant === ScenePanelVariant.HomePage || variant === ScenePanelVariant.TopicPage),
 	})
 
 	const scenesSwitcherPortalTarget = usePortalTarget({
