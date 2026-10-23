@@ -70,9 +70,10 @@ class GetHtmlDesignStyleSource(BaseTool[GetHtmlDesignStyleSourceParams]):
             raise
         except Exception as exc:
             logger.exception("Failed to fetch HTML design style source")
+            # 只返回异常类型：SDK/HTTP 异常的 message 可能带内部地址，不能进入模型上下文，详情见上面的日志。
             return ToolResult.error(
                 f"Unable to fetch the DESIGN.md source for style_code '{params.style_code}'. "
-                f"Error: {type(exc).__name__}: {exc}",
+                f"Error: {type(exc).__name__}",
                 extra_info={
                     "user_error": i18n.translate("get_html_design_style_source.error", category="tool.messages")
                 },

@@ -48,13 +48,16 @@ async def test_execute_returns_full_source_in_content() -> None:
 
 @pytest.mark.asyncio
 async def test_execute_reports_service_failure() -> None:
-    get_source = AsyncMock(side_effect=RuntimeError("boom"))
+    get_source = AsyncMock(side_effect=RuntimeError("boom http://internal.example/secret"))
     with patch("app.tools.get_html_design_style_source.get_magic_service_sdk", return_value=_fake_sdk(get_source)):
         result = await GetHtmlDesignStyleSource().execute(None, GetHtmlDesignStyleSourceParams(style_code="apple"))
 
     assert not result.ok
     assert "apple" in result.content
-    assert "RuntimeError: boom" in result.content
+    # 异常类型可见，异常 message（可能含内部地址）不进入模型上下文。
+    assert "RuntimeError" in result.content
+    assert "boom" not in result.content
+    assert "internal.example" not in result.content
 
 
 @pytest.mark.asyncio
