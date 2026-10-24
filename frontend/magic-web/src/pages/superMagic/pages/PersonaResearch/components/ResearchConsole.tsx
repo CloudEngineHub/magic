@@ -419,7 +419,7 @@ function ResearchConsole({
 								})}
 							</span>
 						</div>
-						<ScrollArea className="min-h-0 flex-1">
+						<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 							<div className="mx-auto max-w-3xl p-4">
 								{activeDiscussionTitle ? (
 									// Older discussions saved no topic; their first question stands in,

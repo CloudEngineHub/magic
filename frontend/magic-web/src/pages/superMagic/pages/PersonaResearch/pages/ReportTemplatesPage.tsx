@@ -300,7 +300,7 @@ function ReportTemplatesPage() {
 				</div>
 			) : null}
 
-			<ScrollArea className="min-h-0 flex-1">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 				<div className="mx-auto w-full max-w-6xl p-4">
 					{templates.length === 0 && templateChats.length === 0 ? (
 						<Empty className="py-16">

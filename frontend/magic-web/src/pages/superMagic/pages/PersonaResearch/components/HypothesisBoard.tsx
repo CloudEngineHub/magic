@@ -88,7 +88,7 @@ function HypothesisBoard({ onOpenQuote, onOpenSources }: HypothesisBoardProps) {
 	}
 
 	return (
-		<ScrollArea className="h-full">
+		<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
 			<div ref={boardRef} className="mx-auto flex max-w-5xl flex-col gap-3.5 px-6 pb-12 pt-6">
 				<section
 					className={cn(

@@ -330,7 +330,7 @@ function PersonaLibraryPage() {
 				</div>
 			</div>
 
-			<ScrollArea className="min-h-0 flex-1">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 				{!store.libraryLoaded ? (
 					<LibrarySkeleton />
 				) : view === "personas" ? (

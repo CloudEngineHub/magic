@@ -91,7 +91,7 @@ function PersonaPanel({
 	}
 
 	return (
-		<ScrollArea className="h-full">
+		<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
 			<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-border px-5 py-2.5 text-xs text-muted-foreground">
 				{quota.map((row) => {
 					const actual = segmentCounts.get(row.segment) ?? 0

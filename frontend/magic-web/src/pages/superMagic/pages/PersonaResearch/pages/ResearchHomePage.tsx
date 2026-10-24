@@ -165,7 +165,11 @@ function ResearchHomePage() {
 	return (
 		// The sidebar docks beside the page, so the page keeps its own scroll area.
 		<ResearchHistoryFiles open={historyOpen} onOpenChange={changeHistoryOpen}>
-			<ScrollArea className="h-full bg-background" data-testid="persona-research-home">
+			<ScrollArea
+				className="h-full bg-background"
+				viewportClassName="[&>div]:!block"
+				data-testid="persona-research-home"
+			>
 				<div
 					className={cn(
 						"mx-auto flex w-full max-w-6xl flex-col",
@@ -176,7 +180,11 @@ function ResearchHomePage() {
 				    report templates sit as quiet links at the top right, above the hero. */}
 					<div className={cn("flex flex-col", isMobile ? "gap-2" : "gap-3")}>
 						<div
-							className={cn("flex items-center justify-end gap-1", styles.enter)}
+							// flex-wrap: the row (sidebar button, help and three links) is wider than a 320px screen.
+							className={cn(
+								"flex flex-wrap items-center justify-end gap-1",
+								styles.enter,
+							)}
 							style={enterDelay(0)}
 						>
 							{/* The sidebar lives in the mobile shell drawer; this is the only way to open it here. */}

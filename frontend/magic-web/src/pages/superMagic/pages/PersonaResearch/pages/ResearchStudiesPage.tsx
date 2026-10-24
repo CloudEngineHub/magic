@@ -45,7 +45,7 @@ function ResearchStudiesPage() {
 					</p>
 				</div>
 			</div>
-			<ScrollArea className="min-h-0 flex-1">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 				<div
 					className={cn(
 						"mx-auto w-full max-w-6xl",
