@@ -62,7 +62,7 @@ import styles from "./ResearchHomePage.module.css"
 
 /** Research home: ask a business question, pick a template, or reopen a study. */
 function ResearchHomePage() {
-	const { t } = useTranslation("personaResearch")
+	const { t, i18n } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const navigate = useNavigate()
 	const isMobile = useIsMobile()
@@ -71,7 +71,12 @@ function ResearchHomePage() {
 	// side panels narrow the page; below it the hero is one column and the card is left out.
 	const heroRef = useRef<HTMLElement>(null)
 	const heroWidth = useSize(heroRef)?.width
-	const heroSplit = !isMobile && (heroWidth === undefined || heroWidth >= HERO_SPLIT_MIN_WIDTH)
+	// English settings chips and labels are wider than the Chinese ones (about 680px against 540px),
+	// so the card waits for a wider hero; otherwise the settings wrap onto a second line.
+	const heroSplitMinWidth = i18n.language?.startsWith("zh")
+		? HERO_SPLIT_MIN_WIDTH
+		: HERO_SPLIT_MIN_WIDTH_WIDE_LABELS
+	const heroSplit = !isMobile && (heroWidth === undefined || heroWidth >= heroSplitMinWidth)
 	const templates = useResearchTemplates()
 	const { openStudy, requestDelete, deleteDialog } = useStudyActions()
 	// "历史产物" sidebar: the whole research project's files, opened from the top-right link.
@@ -516,6 +521,8 @@ function enterDelay(ms: number): CSSProperties {
 
 /** Hero width that fits the 380px voice card, a 48px gap and a ~540px composer. */
 const HERO_SPLIT_MIN_WIDTH = 968
+/** Same, for languages whose setting labels are longer than the Chinese ones (English). */
+const HERO_SPLIT_MIN_WIDTH_WIDE_LABELS = 1110
 
 const OPTIONS_STORAGE_KEY = "persona-research:composer-options"
 

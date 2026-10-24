@@ -64,6 +64,7 @@ import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import { useResearchBack } from "../hooks/useResearchBack"
 import CreatePersonaMenu from "../components/CreatePersonaMenu"
 import PersonaAvatar from "../components/PersonaAvatar"
 import PersonaBuildSheet from "../components/PersonaBuildSheet"
@@ -83,6 +84,7 @@ function PersonaLibraryPage() {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const navigate = useNavigate()
+	const goBack = useResearchBack()
 	const isMobile = useIsMobile()
 	const [view, setView] = useState<"personas" | "panels">("personas")
 	const [tier, setTier] = useState<TierFilter>("all")
@@ -262,7 +264,7 @@ function PersonaLibraryPage() {
 							size="icon"
 							className="size-8"
 							aria-label={t("study.backHome")}
-							onClick={() => navigate({ name: RouteName.PersonaResearch })}
+							onClick={goBack}
 						>
 							<ArrowLeft className="size-4" />
 						</Button>

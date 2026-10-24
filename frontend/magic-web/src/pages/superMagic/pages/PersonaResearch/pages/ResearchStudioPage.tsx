@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useMemoizedFn } from "ahooks"
+import { useMemoizedFn, useSize } from "ahooks"
 import {
 	ArrowLeft,
 	ChevronDown,
@@ -43,6 +43,7 @@ import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { platformKey } from "@/utils/storage"
 import { usePersonaResearchStore } from "../context"
+import { useResearchBack } from "../hooks/useResearchBack"
 import { useResearchDetailEvents, whenDetailReady } from "../hooks/useResearchDetailEvents"
 import ResearchConsole, {
 	ResearchConsoleSkeleton,
@@ -80,6 +81,9 @@ import {
 import { resolveStudyStatus } from "../services/studyStatus"
 import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 
+/** Console width from which the report actions keep their text labels (English needs the most). */
+const REPORT_ACTIONS_LABEL_MIN_WIDTH = 1160
+
 /** Which output tab follows each phase while the study runs (clarify stays in the conversation). */
 const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
 	plan: "hypotheses",
@@ -92,6 +96,7 @@ const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
 
 /** Research studio: stepper, conversation on the left, study outputs on the right. */
 function ResearchStudioPage() {
+	const goBack = useResearchBack()
 	const { t } = useTranslation("personaResearch")
 	const { topicId } = useParams<{ topicId?: string }>()
 	const navigate = useNavigate()
@@ -110,6 +115,13 @@ function ResearchStudioPage() {
 	const [shareOpen, setShareOpen] = useState(false)
 	// Phones preview files in the shared mobile popup; desktop uses the files tab.
 	const mobilePreviewRef = useRef<ResearchMobilePreviewRef>(null)
+	// The report's action buttons share the tab bar with the tabs; labelled they need about 1160px,
+	// below that they squeeze the tabs out of sight, so they shrink to icons.
+	const consolePanelRef = useRef<HTMLDivElement>(null)
+	const consolePanelWidth = useSize(consolePanelRef)?.width
+	const compactReportActions =
+		isMobile ||
+		(consolePanelWidth !== undefined && consolePanelWidth < REPORT_ACTIONS_LABEL_MIN_WIDTH)
 	const followedPhaseRef = useRef<string | null>(null)
 	const reportPaneRef = useRef<ResearchReportPaneRef>(null)
 	const conversationPanelRef = useRef<ImperativePanelHandle>(null)
@@ -410,7 +422,7 @@ function ResearchStudioPage() {
 						size="icon"
 						className="size-8 shrink-0"
 						aria-label={t("study.backHome")}
-						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+						onClick={goBack}
 					>
 						<ArrowLeft className="size-4" />
 					</Button>
@@ -570,7 +582,7 @@ function ResearchStudioPage() {
 					onInterceptFile={routeFile}
 				/>
 			}
-			// Icon-only on phones: the three labelled buttons (about 330px in English) squeeze the tab
+			// Icon-only when narrow: the three labelled buttons (about 330px in English) squeeze the tab
 			// strip beside them down to nothing, so the other tabs could not be reached.
 			reportActions={
 				report ? (
@@ -583,7 +595,7 @@ function ResearchStudioPage() {
 							onClick={() => reportPaneRef.current?.refresh()}
 						>
 							<RefreshCw className="size-3.5" />
-							{isMobile ? null : t("report.refresh")}
+							{compactReportActions ? null : t("report.refresh")}
 						</Button>
 						<Button
 							variant="ghost"
@@ -593,7 +605,7 @@ function ResearchStudioPage() {
 							onClick={() => reportPaneRef.current?.enterFullscreen()}
 						>
 							<Maximize2 className="size-3.5" />
-							{isMobile ? null : t("report.fullscreen")}
+							{compactReportActions ? null : t("report.fullscreen")}
 						</Button>
 						<Button
 							variant="ghost"
@@ -603,7 +615,7 @@ function ResearchStudioPage() {
 							onClick={() => openFile(report)}
 						>
 							<PencilLine className="size-3.5" />
-							{isMobile ? null : t("report.editDownload")}
+							{compactReportActions ? null : t("report.editDownload")}
 						</Button>
 					</>
 				) : null
@@ -697,6 +709,7 @@ function ResearchStudioPage() {
 				{outputsHidden ? null : (
 					<ResizablePanel id="outputs" order={1} defaultSize={64} minSize={40}>
 						<div
+							ref={consolePanelRef}
 							className={cn(
 								"h-full",
 								outputsRevealing &&

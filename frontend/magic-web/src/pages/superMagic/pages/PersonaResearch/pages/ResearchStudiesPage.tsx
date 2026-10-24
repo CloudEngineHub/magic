@@ -10,6 +10,7 @@ import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import StudyListSection from "../components/StudyListSection"
+import { useResearchBack } from "../hooks/useResearchBack"
 import { useStudyActions } from "../hooks/useStudyActions"
 
 /** Every study, opened from "view all" on the research home; same filters and search. */
@@ -20,6 +21,7 @@ function ResearchStudiesPage() {
 	const isMobile = useIsMobile()
 	const { openStudy, requestDelete, deleteDialog } = useStudyActions()
 	const goHome = () => navigate({ name: RouteName.PersonaResearch })
+	const goBack = useResearchBack()
 
 	return (
 		<div
@@ -33,7 +35,7 @@ function ResearchStudiesPage() {
 						size="icon"
 						className="size-8"
 						aria-label={t("study.backHome")}
-						onClick={goHome}
+						onClick={goBack}
 					>
 						<ArrowLeft className="size-4" />
 					</Button>

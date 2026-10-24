@@ -63,6 +63,7 @@ import ReportTemplateCard, {
 import ResearchChatSheet from "../components/ResearchChatSheet"
 import TemplateChatCard from "../components/TemplateChatCard"
 import { useReportTemplateHtml } from "../hooks/useReportTemplateHtml"
+import { useResearchBack } from "../hooks/useResearchBack"
 import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
 import { type TemplateChatEntry, useTemplateChats } from "../hooks/useTemplateChats"
 import { createProjectTextFile, deleteProjectFile } from "../services/projectFileWriter"
@@ -88,6 +89,7 @@ function ReportTemplatesPage() {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const navigate = useNavigate()
+	const goBack = useResearchBack()
 	const isMobile = useIsMobile()
 	const download = useResearchFileDownload()
 	const uploadRef = useRef<HTMLInputElement>(null)
@@ -269,7 +271,7 @@ function ReportTemplatesPage() {
 						size="icon"
 						className="size-8"
 						aria-label={t("study.backHome")}
-						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+						onClick={goBack}
 					>
 						<ArrowLeft className="size-4" />
 					</Button>
