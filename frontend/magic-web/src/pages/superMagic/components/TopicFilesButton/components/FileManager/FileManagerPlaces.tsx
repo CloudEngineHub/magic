@@ -323,7 +323,10 @@ export function FileManagerPlaces({
 									onKeyDown={(event) => onKeyDown(event, item)}
 									aria-current={directoryId === id ? "page" : undefined}
 								>
-									<FileResourceIcon presentation={presentation} size={15} />
+									{/* 图标类型不一（img / svg / 远程图），统一包一层 shrink-0，防止长文件名挤压 flex 行时图标被压缩变形。 */}
+									<span className="inline-flex shrink-0 items-center justify-center">
+										<FileResourceIcon presentation={presentation} size={15} />
+									</span>
 									<SmartTooltip
 										fileName
 										elementType="span"

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import type { CachedMicroAppTab } from "@/models/config/repositories/SuperProjectStateTypes"
 import { PUBLISHED_MICRO_APP_TAB_ID_PREFIX } from "../utils/tabConstants"
 
 export interface PublishedMicroAppTabData {
@@ -33,6 +34,10 @@ interface UsePublishedMicroAppTabReturn {
 	closePublishedMicroAppTab: (tabId: string) => void
 	isPublishedMicroAppTab: (tabId: string) => boolean
 	deactivateAllPublishedMicroAppTabs: () => void
+	restorePublishedMicroAppTabs: (
+		cachedTabs: CachedMicroAppTab[],
+		options: { restoreActive: boolean },
+	) => void
 }
 
 export function usePublishedMicroAppTab(projectId?: string): UsePublishedMicroAppTabReturn {
@@ -111,7 +116,46 @@ export function usePublishedMicroAppTab(projectId?: string): UsePublishedMicroAp
 		updateTabs((prev) => prev.map((tab) => ({ ...tab, active: false })))
 	}, [updateTabs])
 
+	// 刷新后从项目缓存重建；已在内存中的标签（用户读取期间刚打开的）保持原状，
+	// 只有明确允许时才恢复缓存里的激活态，避免覆盖用户当前的选择。
+	const restorePublishedMicroAppTabs = useCallback(
+		(cachedTabs: CachedMicroAppTab[], { restoreActive }: { restoreActive: boolean }) => {
+			if (cachedTabs.length === 0) return
+			updateTabs((prev) => {
+				const known = new Set(prev.map((tab) => tab.id))
+				const restored: PublishedMicroAppTabItem[] = cachedTabs.flatMap((cached) => {
+					const appId = cached.appId?.trim()
+					if (!appId || known.has(buildPublishedMicroAppTabId(appId))) return []
+					return [
+						{
+							id: buildPublishedMicroAppTabId(appId),
+							type: "micro_app",
+							title: cached.appName?.trim() || appId,
+							isPublishedMicroAppTab: true,
+							active: false,
+							closeable: true,
+							fileData: {},
+							data: { appId, appName: cached.appName?.trim() || appId },
+							create_at: cached.createdAt,
+						},
+					]
+				})
+				const activeCached = restoreActive
+					? cachedTabs.find((cached) => cached.active)
+					: undefined
+				const activeId = activeCached
+					? buildPublishedMicroAppTabId(activeCached.appId.trim())
+					: undefined
+				const merged = [...restored, ...prev]
+				if (!activeId || !merged.some((tab) => tab.id === activeId)) return merged
+				return merged.map((tab) => ({ ...tab, active: tab.id === activeId }))
+			})
+		},
+		[updateTabs],
+	)
+
 	return {
+		restorePublishedMicroAppTabs,
 		publishedMicroAppTabs,
 		openPublishedMicroAppTab,
 		closePublishedMicroAppTab,
