@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 const store = {
 	selectStudy: vi.fn(),
 	reportTemplates: [],
+	studies: [],
 	personas: [],
 	personaFileCount: 0,
 	studyPersonaPicks: [],
