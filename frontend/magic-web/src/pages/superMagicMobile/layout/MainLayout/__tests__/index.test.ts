@@ -24,4 +24,20 @@ describe("resolveEmbeddedShellState", () => {
 			showMainHeader: false,
 		})
 	})
+
+	it.each([
+		"/demo/super/research",
+		"/demo/super/research/personas",
+		"/demo/super/research/templates",
+		"/demo/super/research/studies",
+		// A study id must not fall through to the generic project routes.
+		"/demo/super/research/100000000000009005",
+	])("uses the mobile shell without the legacy header for AI research %s", (pathname) => {
+		expect(resolveEmbeddedShellState(pathname)).toEqual({
+			enabled: true,
+			activeView: "aiResearch",
+			testIdPrefix: "mobile-persona-research-page",
+			showMainHeader: false,
+		})
+	})
 })

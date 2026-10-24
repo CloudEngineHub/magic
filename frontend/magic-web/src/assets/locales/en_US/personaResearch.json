@@ -47,7 +47,8 @@
 	},
 	"composer": {
 		"followUpPlaceholder": "Ask a follow-up or tell the AI what to change",
-		"newStudyPlaceholder": "What business question do you want to research? e.g. Why do trial users churn in week two? Enter to send; Shift + Enter for a new line"
+		"newStudyPlaceholder": "What business question do you want to research? e.g. Why do trial users churn in week two? Enter to send; Shift + Enter for a new line",
+		"newStudyPlaceholderMobile": "What business question do you want to research? e.g. Why do trial users churn in week two?"
 	},
 	"confidence": {
 		"high": "High",

@@ -282,6 +282,8 @@ function ResearchConsole({
 								<TabsTrigger
 									key={value}
 									value={value}
+									// Mobile inactive tabs show only the icon, so the name must be on the control.
+									aria-label={isMobile ? label : undefined}
 									data-guide-anchor={
 										value === "validation"
 											? ResearchOnboardingAnchor.StudioValidation

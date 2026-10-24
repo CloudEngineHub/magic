@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react"
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react"
 import { useMemoizedFn, useSize } from "ahooks"
 import {
 	ArrowRight,
@@ -50,6 +50,14 @@ import ResearchOnboarding from "../onboarding/ResearchOnboarding"
 import ResearchHelp from "../onboarding/ResearchHelp"
 import { ResearchOnboardingAnchor } from "../onboarding/onboardingState"
 import { PRESSABLE } from "../components/surface"
+
+// Loaded only on mobile: the mobile shell pulls in the settings panel and its dependencies,
+// which the desktop home never needs.
+const MobileSidebarToggle = lazy(() =>
+	import("@/pages/superMagicMobile/components/MobileShell/MobileShellSidebarToggleButton").then(
+		(module) => ({ default: module.MobileShellSidebarToggleButton }),
+	),
+)
 import styles from "./ResearchHomePage.module.css"
 
 /** Research home: ask a business question, pick a template, or reopen a study. */
@@ -171,6 +179,18 @@ function ResearchHomePage() {
 							className={cn("flex items-center justify-end gap-1", styles.enter)}
 							style={enterDelay(0)}
 						>
+							{/* The sidebar lives in the mobile shell drawer; this is the only way to open it here. */}
+							{isMobile ? (
+								// The fallback keeps the row height and the right-aligned links in place.
+								<Suspense
+									fallback={<span className="mr-auto size-10" aria-hidden />}
+								>
+									<MobileSidebarToggle
+										variant="floating"
+										className="mr-auto size-10"
+									/>
+								</Suspense>
+							) : null}
 							<ResearchHelp page="home" />
 							<button
 								type="button"

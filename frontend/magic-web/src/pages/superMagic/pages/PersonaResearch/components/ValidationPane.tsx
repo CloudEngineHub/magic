@@ -61,11 +61,13 @@ function ValidationPane({ onRequestUpload, onOpenFile }: ValidationPaneProps) {
 	}
 
 	return (
-		<ScrollArea className="h-full">
+		// Same as the analysis board: keep the Radix table wrapper from widening past the viewport.
+		<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
 			<div className="mx-auto flex max-w-3xl flex-col gap-5 p-4">
 				<div className={cn(CARD_SURFACE, "flex flex-wrap items-center gap-2 p-3")}>
 					<Users className="size-4 text-muted-foreground" />
-					<span className="flex-1 text-sm">
+					{/* min-w keeps the sentence readable; the buttons wrap below it on narrow screens. */}
+					<span className="min-w-40 flex-1 text-sm">
 						{results
 							? t("validation.validatedCount", { count: results.respondent_count })
 							: t("validation.notYet")}
