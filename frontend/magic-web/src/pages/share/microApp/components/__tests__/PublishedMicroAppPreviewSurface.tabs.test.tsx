@@ -15,7 +15,9 @@ vi.mock("../MicroAppSafetyNotice", () => ({ default: () => null }))
 vi.mock("@/pages/superMagic/components/MicroAppStateIllustration", () => ({
 	MicroAppPermissionIllustration: () => null,
 }))
-vi.mock("@/pages/superMagic/components/MicroAppSkillsPanel", () => ({ default: () => null }))
+vi.mock("@/pages/superMagic/components/MicroAppSkillsPanel", () => ({
+	default: () => <button type="button">skills-trigger</button>,
+}))
 vi.mock("../PublishedMicroAppConversationProvider", () => ({
 	default: ({ children }: { children: ReactNode }) => children,
 }))
@@ -57,14 +59,20 @@ vi.mock("@/pages/superMagic/components/Detail/contents/HTML", () => ({
 const home = { file_id: "home", file_name: "index.html" }
 const detail = { file_id: "detail", file_name: "detail.html" }
 const files = [home, detail]
-function PublishedApp() {
+function PublishedApp({
+	attachmentList = files,
+	testIdPrefix = "micro-app-share",
+}: {
+	attachmentList?: typeof files
+	testIdPrefix?: "micro-app-share" | "micro-app-tab"
+} = {}) {
 	const browser = useMicroAppPreviewFiles({ attachmentList: files, defaultEntryFile: home })
 	const preview = {
 		browser,
 		previewFile: browser.previewEntryFile,
 		defaultEntryFile: home,
 		appId: "app",
-		attachmentList: files,
+		attachmentList,
 		attachmentsTree: files,
 		shareData: {},
 		shareMeta: { projectId: "project", temporaryToken: "test-token" },
@@ -72,7 +80,7 @@ function PublishedApp() {
 		installFlow: {},
 		previewMode: "desktop",
 	} as unknown as UsePublishedMicroAppPreviewReturn
-	return <PublishedMicroAppPreviewSurface preview={preview} testIdPrefix="micro-app-share" />
+	return <PublishedMicroAppPreviewSurface preview={preview} testIdPrefix={testIdPrefix} />
 }
 describe("published MicroApp tabs", () => {
 	it("starts with only home, carries query into the new page and returns to a barless home on close", () => {
@@ -89,5 +97,24 @@ describe("published MicroApp tabs", () => {
 		)
 		expect(screen.queryByRole("tablist")).not.toBeInTheDocument()
 		expect(screen.getByText("home")).toBeVisible()
+	})
+
+	it("hides the skills toolbar in the tab view when the project has no skill files", () => {
+		const { rerender } = render(<PublishedApp testIdPrefix="micro-app-tab" />)
+		expect(screen.queryByText("skills-trigger")).not.toBeInTheDocument()
+		rerender(
+			<PublishedApp
+				testIdPrefix="micro-app-tab"
+				attachmentList={[
+					...files,
+					{
+						file_id: "skill",
+						file_name: "SKILL.md",
+						relative_file_path: ".magic/skills/demo/SKILL.md",
+					},
+				]}
+			/>,
+		)
+		expect(screen.getByText("skills-trigger")).toBeVisible()
 	})
 })

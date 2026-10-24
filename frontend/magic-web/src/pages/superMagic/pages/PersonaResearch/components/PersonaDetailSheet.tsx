@@ -138,57 +138,47 @@ export default function PersonaDetailSheet({
 							</Title>
 							<Description className="line-clamp-2">{persona.tagline}</Description>
 						</div>
-						{/* One button row: edit, delete, then (in the dialog) close after a divider,
-						    all 32px high on the same centre line. The sheet keeps its own close. */}
-						{onEdit || onDelete || isDialog ? (
-							<div
-								className={cn(
-									"flex shrink-0 items-center gap-1 self-start",
-									!isDialog && "pr-7",
-								)}
-							>
-								{onEdit ? (
+						{/* One button row: edit, delete, then close after a divider, all 32px high on the
+						    same centre line. The bottom sheet's own corner close is switched off: it sat
+						    about 8px higher than this row, so the three buttons did not line up. */}
+						<div className="flex shrink-0 items-center gap-1 self-start">
+							{onEdit ? (
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-8 gap-1.5 px-2.5 text-xs"
+									onClick={() => onEdit(persona)}
+								>
+									<Pencil className="size-3.5" />
+									{t("persona.edit")}
+								</Button>
+							) : null}
+							{onDelete ? (
+								<MagicTooltip title={t("persona.delete")}>
 									<Button
 										variant="ghost"
-										size="sm"
-										className="h-8 gap-1.5 px-2.5 text-xs"
-										onClick={() => onEdit(persona)}
+										size="icon"
+										className="size-8 text-muted-foreground hover:text-destructive"
+										aria-label={t("persona.delete")}
+										onClick={() => onDelete(persona)}
 									>
-										<Pencil className="size-3.5" />
-										{t("persona.edit")}
+										<Trash2 className="size-4" />
 									</Button>
-								) : null}
-								{onDelete ? (
-									<MagicTooltip title={t("persona.delete")}>
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-8 text-muted-foreground hover:text-destructive"
-											aria-label={t("persona.delete")}
-											onClick={() => onDelete(persona)}
-										>
-											<Trash2 className="size-4" />
-										</Button>
-									</MagicTooltip>
-								) : null}
-								{isDialog ? (
-									<>
-										{onEdit || onDelete ? (
-											<span className="mx-1 h-4 w-px bg-border" aria-hidden />
-										) : null}
-										<Button
-											variant="ghost"
-											size="icon"
-											className="size-8 text-muted-foreground"
-											aria-label={t("common.close")}
-											onClick={() => onOpenChange(false)}
-										>
-											<X className="size-4" />
-										</Button>
-									</>
-								) : null}
-							</div>
-						) : null}
+								</MagicTooltip>
+							) : null}
+							{onEdit || onDelete ? (
+								<span className="mx-1 h-4 w-px bg-border" aria-hidden />
+							) : null}
+							<Button
+								variant="ghost"
+								size="icon"
+								className="size-8 text-muted-foreground"
+								aria-label={t("common.close")}
+								onClick={() => onOpenChange(false)}
+							>
+								<X className="size-4" />
+							</Button>
+						</div>
 					</div>
 					{leadQuote ? (
 						<HangingQuote
@@ -385,6 +375,7 @@ export default function PersonaDetailSheet({
 		<Sheet open={Boolean(persona)} onOpenChange={onOpenChange}>
 			<SheetContent
 				side="bottom"
+				showClose={false}
 				className="flex max-h-[88vh] flex-col gap-0 rounded-t-2xl p-0 pb-[env(safe-area-inset-bottom)]"
 				onCloseAutoFocus={onCloseAutoFocus}
 			>

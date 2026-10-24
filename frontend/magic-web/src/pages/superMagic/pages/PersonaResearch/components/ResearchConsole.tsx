@@ -282,6 +282,8 @@ function ResearchConsole({
 								<TabsTrigger
 									key={value}
 									value={value}
+									// Mobile inactive tabs show only the icon, so the name must be on the control.
+									aria-label={isMobile ? label : undefined}
 									data-guide-anchor={
 										value === "validation"
 											? ResearchOnboardingAnchor.StudioValidation
@@ -417,7 +419,7 @@ function ResearchConsole({
 								})}
 							</span>
 						</div>
-						<ScrollArea className="min-h-0 flex-1">
+						<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 							<div className="mx-auto max-w-3xl p-4">
 								{activeDiscussionTitle ? (
 									// Older discussions saved no topic; their first question stands in,
@@ -468,23 +470,28 @@ function ResearchConsole({
 					activeTab !== "files" && "hidden",
 				)}
 			>
-				<div className={cn("flex min-h-0 flex-1", isMobile && "flex-col")}>
-					<div
-						className={cn(
-							"shrink-0 bg-muted/40",
-							isMobile
-								? "max-h-44 border-b border-border"
-								: "w-60 border-r border-border",
-						)}
-					>
+				{isMobile ? (
+					// Phones list the files only; a tap opens the preview in the studio's popup (the
+					// preview pane is mounted there, never here, so there is a single instance).
+					<div className="min-h-0 flex-1 bg-muted/40">
 						<StudyFileList
 							activeFileId={activeFileId}
 							onOpenFile={onOpenFile}
-							variant={isMobile ? "mobile" : "desktop"}
+							variant="mobile"
 						/>
 					</div>
-					<div className="relative min-h-0 min-w-0 flex-1">{filesPane}</div>
-				</div>
+				) : (
+					<div className="flex min-h-0 flex-1">
+						<div className="w-60 shrink-0 border-r border-border bg-muted/40">
+							<StudyFileList
+								activeFileId={activeFileId}
+								onOpenFile={onOpenFile}
+								variant="desktop"
+							/>
+						</div>
+						<div className="relative min-h-0 min-w-0 flex-1">{filesPane}</div>
+					</div>
+				)}
 			</TabsContent>
 
 			<TabsContent value="validation" className="mt-0 min-h-0 flex-1 bg-muted/40">

@@ -16,6 +16,7 @@ import dayjs from "@/infrastructure/vendors/dayjs"
 import TopicSharePopover from "@/pages/superMagic/components/TopicSharePopover"
 import type { Topic } from "@/pages/superMagic/pages/Workspace/types"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
 import { useStudyRename } from "../hooks/useStudyRename"
@@ -40,6 +41,7 @@ interface StudyListItemProps {
  */
 function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 	const { t, i18n } = useTranslation("personaResearch")
+	const isMobile = useIsMobile()
 	// Instance locale, so the row does not inherit another component's global dayjs locale.
 	const dayjsLocale = i18n.language.toLowerCase().startsWith("zh") ? "zh-cn" : "en"
 	const store = usePersonaResearchStore()
@@ -117,7 +119,13 @@ function StudyListItem({ topic, onOpen, onDelete }: StudyListItemProps) {
 						{title}
 					</span>
 					{store.studyFilesReady ? (
-						<span className="truncate text-xs text-muted-foreground">
+						<span
+							className={cn(
+								"text-xs text-muted-foreground",
+								// Two lines on phones: "up to 20 rounds each" was cut to "up t…".
+								isMobile ? "line-clamp-2" : "truncate",
+							)}
+						>
 							{meta ||
 								(isConversation
 									? null

@@ -137,7 +137,7 @@ export default function PersonaFormDialog({
 				</div>
 
 				<div className="flex min-h-0 flex-1">
-					<ScrollArea className="min-h-0 flex-1">
+					<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 						<div className="px-6 py-2" data-persona-form>
 							{SECTION_ORDER.map((key, index) => {
 								const isOpen = form.sections[key]

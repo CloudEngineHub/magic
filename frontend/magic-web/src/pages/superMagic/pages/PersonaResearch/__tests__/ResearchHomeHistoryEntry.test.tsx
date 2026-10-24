@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 const store = {
 	selectStudy: vi.fn(),
 	reportTemplates: [],
+	studies: [],
 	personas: [],
 	personaFileCount: 0,
 	studyPersonaPicks: [],
@@ -12,7 +13,7 @@ const store = {
 
 vi.mock("react-i18next", async (importOriginal) => ({
 	...(await importOriginal<typeof import("react-i18next")>()),
-	useTranslation: () => ({ t: (key: string) => key }),
+	useTranslation: () => ({ t: (key: string) => key, i18n: { language: "zh_CN" } }),
 }))
 vi.mock("@/hooks/useIsMobile", () => ({ useIsMobile: () => false }))
 vi.mock("@/routes/hooks/useNavigate", () => ({ useNavigate: () => vi.fn() }))

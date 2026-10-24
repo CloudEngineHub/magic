@@ -95,9 +95,19 @@ export interface CachedFileManagerTab {
 
 export type CachedTabItem = CachedFileTab | CachedFileManagerTab
 
+/** 已发布微应用 Tab 不是文件，只需应用 ID、标题和激活状态即可重建。 */
+export interface CachedMicroAppTab {
+	appId: string
+	appName?: string
+	active: boolean
+	createdAt: number
+}
+
 // 文件状态接口
 export interface FileState {
 	tabs: CachedTabItem[]
+	/** 微应用 Tab 独立于文件 Tab 存储；缺省表示没有打开的微应用。 */
+	microAppTabs?: CachedMicroAppTab[]
 	/** ID 顺序包含个人 Tab 的位置引用，个人打开集合仍由个人仓储持有。 */
 	tabOrder?: string[]
 	activeTabId?: string

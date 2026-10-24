@@ -20,7 +20,7 @@ Creates the study and moves `study.json` through its phases. You report what hap
 | `created` | After the pre-search, before clarifying questions; for a persona-building request, before reading the materials | `title`, `question` (the user's words, verbatim), `slug_hint` (short ASCII kebab-case topic summary; use pinyin or English for non-Latin topics), `study_type: "persona_build"` only for a persona-building request |
 | `clarified` | Clarification answered, or nothing needed clarifying | — |
 | `plan_confirmed` | The user chose the start option in `ask_user` | `study_type`, `framework`, `decision`, `hypotheses` (`[{statement, support_criteria, refute_criteria, outcome_terms}]` in plan order; ids `H1`, `H2`, ... are assigned; `outcome_terms` are 4-12 short phrases a persona would use to state the tested outcome, including everyday paraphrases, for example `["用不完", "剩着", "白交钱", "规则"]`, each at least 2 characters), `quota` (`[{segment, criteria, count}]`; counts add up to the persona count, at most 12), `interview_rounds` (automatic ceiling, default 20, at most 20; not a required count; a lower explicit user ceiling is allowed), `guide_review` (`[{issue, before, after}]`, `issue` is `leading`, `double_barreled`, `hypothesis_reveal`, `jargon`, or `sequence_priming`; `[]` when nothing changed) |
-| `desk_research_done` | `desk-research.md` is written | `social_sampling`: `{status: "sampled", platforms, posts, comments}`, or `{status: "unavailable" or "not_relevant", note}` with the reason |
+| `desk_research_done` | `desk-research.md` is written | `social_sampling`: `{status: "sampled", platforms, posts, comments}` (`posts`: social posts actually opened, not all desk-research sources; `comments`: comments actually read; both must match the counts stated in `desk-research.md`), or `{status: "unavailable" or "not_relevant", note}` with the reason |
 | `desk_research_skipped` | A `panel_only` study skips desk research | — |
 | `interviews_finished` | `check_interviews` shows no unfinished transcript | — (the tool marks the interview phase failed when no interview succeeded) |
 | `report_written` | `synthesis.json` and `report.html` are written | — |
@@ -93,12 +93,12 @@ print(tool.call("check_interviews", {"study_dir": study_dir}).content)
 
 Writes `synthesis.json` and the hypothesis verdicts in `study.json` together. Call it in the `report` phase after reading the completed transcripts. Give only judgments and exact words:
 
-- `segments`: `[{name, persona_ids}]`, names equal to quota segments. Ids are assigned.
+- `segments`: `[{name, persona_ids}]`, names equal to quota segments. Ids are assigned. Place each persona by what they said in the interview: when it contradicts the recruited segment (recruited as a current user, says they stopped), use the interview and say so in the report's method.
 - `themes`: `[{name, description, stance_by_persona, quotes, source_refs, hypothesis_ids, confidence, confidence_reason, about_willingness_to_pay}]`. `quotes` are `[{persona_id, text, prompted}]` with the persona's exact words; set `prompted: true` when the moderator's question already named the idea. The tool finds the transcript file, `round_index`, and the question it answered. Personas you leave out of `stance_by_persona` become `not_mentioned`. Set `about_willingness_to_pay: true` for themes about price acceptance.
 - `dimensions` (optional): `[{name, level_by_segment, quotes}]`, `level_by_segment` keyed by segment name.
 - `hypotheses`: `[{id, verdict, verdict_reason, quotes, sources}]` for every examined hypothesis. `sources` are `[{ref, claim, covers}]`: the source id, one sentence on what it says about this hypothesis, and `covers: "core"` only when it states the hypothesis's core claim itself, otherwise `"context"`.
 
-The tool drops quotes that are not that persona's exact words and source refs that are not in `desk-research.md`, lowers confidence and verdicts that break the rules in methods.md (and says why in the reason fields), and computes saturation and homogeneity. Read `result.content`: report the removed quote count and any adjustments in the report, and use the adjusted verdicts and confidence.
+The tool drops quotes that are not that persona's exact words and source refs that are not in `desk-research.md`, lowers confidence and verdicts that break the rules in methods.md (and says why in the reason fields), and computes saturation and homogeneity. Read `result.content`, and use the adjusted verdicts and confidence. The same checks are saved in `synthesis.json` `checks`; take the removed quote count and adjustments for the report from there.
 
 ```python
 result = tool.call("save_study_synthesis", {

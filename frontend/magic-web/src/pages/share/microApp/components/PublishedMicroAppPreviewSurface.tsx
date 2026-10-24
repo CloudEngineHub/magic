@@ -12,6 +12,7 @@ import { createShareFileAccess } from "@/pages/superMagic/fileAccess/fileAccessC
 import HtmlPreviewContent from "@/pages/superMagic/components/Detail/contents/HTML"
 import { MicroAppPermissionIllustration } from "@/pages/superMagic/components/MicroAppStateIllustration"
 import MicroAppSkillsPanel from "@/pages/superMagic/components/MicroAppSkillsPanel"
+import { getSkillFiles } from "@/pages/superMagic/components/microAppSkills"
 import PublishedMicroAppConversationProvider from "./PublishedMicroAppConversationProvider"
 
 const NOOP_LEAVE = () => undefined
@@ -103,6 +104,9 @@ function PublishedMicroAppPreviewSurface({
 		[shareMeta.projectId, shareMeta.temporaryToken, shareMeta.topicId],
 	)
 
+	// 没有技能文件时整条工具栏都不渲染，避免只剩一个打开后为空的入口；memo 避免大项目每次渲染都遍历附件。
+	const hasSkills = useMemo(() => getSkillFiles(attachmentList).length > 0, [attachmentList])
+
 	if (emptyStateInfo) {
 		return (
 			<ShareEmptyState
@@ -185,7 +189,7 @@ function PublishedMicroAppPreviewSurface({
 								className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
 								data-testid={`${testIdPrefix}-preview`}
 							>
-								{testIdPrefix === "micro-app-tab" ? (
+								{testIdPrefix === "micro-app-tab" && hasSkills ? (
 									<header className="flex h-10 shrink-0 items-center justify-end border-b border-border bg-background px-3">
 										<MicroAppSkillsPanel
 											attachmentList={attachmentList}

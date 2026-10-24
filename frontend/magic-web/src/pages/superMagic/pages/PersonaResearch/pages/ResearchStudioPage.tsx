@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useMemoizedFn } from "ahooks"
+import { useMemoizedFn, useSize } from "ahooks"
 import {
 	ArrowLeft,
 	ChevronDown,
@@ -43,6 +43,7 @@ import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { platformKey } from "@/utils/storage"
 import { usePersonaResearchStore } from "../context"
+import { useResearchBack } from "../hooks/useResearchBack"
 import { useResearchDetailEvents, whenDetailReady } from "../hooks/useResearchDetailEvents"
 import ResearchConsole, {
 	ResearchConsoleSkeleton,
@@ -52,6 +53,9 @@ import ResearchConversationPanel, {
 	type ResearchConversationPanelRef,
 } from "../components/ResearchConversationPanel"
 import ResearchFilesPane from "../components/ResearchFilesPane"
+import ResearchMobilePreview, {
+	type ResearchMobilePreviewRef,
+} from "../components/ResearchMobilePreview"
 import ResearchReportPane, { type ResearchReportPaneRef } from "../components/ResearchReportPane"
 import PersonaAvatar from "../components/PersonaAvatar"
 import PersonaDetailSheet from "../components/PersonaDetailSheet"
@@ -77,6 +81,9 @@ import {
 import { resolveStudyStatus } from "../services/studyStatus"
 import type { PersonaFile, StudyFile, StudyPhaseKey } from "../types"
 
+/** Console width from which the report actions keep their text labels (English needs the most). */
+const REPORT_ACTIONS_LABEL_MIN_WIDTH = 1160
+
 /** Which output tab follows each phase while the study runs (clarify stays in the conversation). */
 const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
 	plan: "hypotheses",
@@ -89,6 +96,7 @@ const PHASE_TAB: Partial<Record<StudyFile["phase"], ResearchConsoleTab>> = {
 
 /** Research studio: stepper, conversation on the left, study outputs on the right. */
 function ResearchStudioPage() {
+	const goBack = useResearchBack()
 	const { t } = useTranslation("personaResearch")
 	const { topicId } = useParams<{ topicId?: string }>()
 	const navigate = useNavigate()
@@ -105,6 +113,15 @@ function ResearchStudioPage() {
 	const [autoDetail, setAutoDetail] = useState<unknown>()
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [shareOpen, setShareOpen] = useState(false)
+	// Phones preview files in the shared mobile popup; desktop uses the files tab.
+	const mobilePreviewRef = useRef<ResearchMobilePreviewRef>(null)
+	// The report's action buttons share the tab bar with the tabs; labelled they need about 1160px,
+	// below that they squeeze the tabs out of sight, so they shrink to icons.
+	const consolePanelRef = useRef<HTMLDivElement>(null)
+	const consolePanelWidth = useSize(consolePanelRef)?.width
+	const compactReportActions =
+		isMobile ||
+		(consolePanelWidth !== undefined && consolePanelWidth < REPORT_ACTIONS_LABEL_MIN_WIDTH)
 	const followedPhaseRef = useRef<string | null>(null)
 	const reportPaneRef = useRef<ResearchReportPaneRef>(null)
 	const conversationPanelRef = useRef<ImperativePanelHandle>(null)
@@ -176,9 +193,13 @@ function ResearchStudioPage() {
 		}
 	})
 
-	/** Files from the conversation open in the shared preview tab. */
+	/** Files from the conversation open in the shared preview tab (a popup on phones). */
 	const openFile = useMemoizedFn((fileItem?: unknown) => {
 		if (routeFile(fileItem)) return
+		if (isMobile) {
+			mobilePreviewRef.current?.openFile(fileItem)
+			return
+		}
 		showOutputs("files")
 		setUserSelectDetail(undefined)
 		// The preview tab is force-mounted; wait for the panel to mount and have layout.
@@ -190,6 +211,10 @@ function ResearchStudioPage() {
 
 	/** Tool results (search results, browser steps) open as a detail view in the same tab. */
 	const handleSelectDetail = useMemoizedFn((detail?: unknown) => {
+		if (isMobile) {
+			mobilePreviewRef.current?.openDetail(detail)
+			return
+		}
 		showOutputs("files")
 		setUserSelectDetail(detail)
 	})
@@ -202,7 +227,8 @@ function ResearchStudioPage() {
 		filesOpenedRef.current = false
 	}, [topicId])
 	useEffect(() => {
-		if (consoleTab !== "files" || filesOpenedRef.current) return
+		// On phones the files tab is just the list; a preview popup must never open by itself.
+		if (isMobile || consoleTab !== "files" || filesOpenedRef.current) return
 		// autoDetail is the conversation's latest tool step, pushed on load even when no tab shows it.
 		if (activeFileId || userSelectDetail) {
 			filesOpenedRef.current = true
@@ -211,13 +237,15 @@ function ResearchStudioPage() {
 		if (!defaultFile) return
 		filesOpenedRef.current = true
 		openFile(defaultFile)
-	}, [activeFileId, consoleTab, defaultFile, openFile, userSelectDetail])
+	}, [activeFileId, consoleTab, defaultFile, isMobile, openFile, userSelectDetail])
 
 	// Message cards open previews through pubsub (tool playback, file mentions, citations).
 	useResearchDetailEvents({
 		detailRef,
 		attachmentList: store.attachmentList,
 		routeFile,
+		// On phones the mobile preview below hosts these events instead.
+		enabled: !isMobile,
 		revealFiles: () => showOutputs("files"),
 		setActiveFileId,
 		setAutoDetail,
@@ -394,7 +422,7 @@ function ResearchStudioPage() {
 						size="icon"
 						className="size-8 shrink-0"
 						aria-label={t("study.backHome")}
-						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+						onClick={goBack}
 					>
 						<ArrowLeft className="size-4" />
 					</Button>
@@ -500,6 +528,9 @@ function ResearchStudioPage() {
 						className={cn("h-8", isMobile && "size-8")}
 						aria-label={t("study.share")}
 						data-guide-anchor={ResearchOnboardingAnchor.StudioShare}
+						// On phones the share popover only renders its sheet; the trigger is not wired to
+						// it, so the caller opens it. Desktop's popover trigger already toggles itself.
+						onClick={isMobile ? () => setShareOpen(true) : undefined}
 					>
 						<Share2 className="size-4" />
 						{isMobile ? null : t("study.share")}
@@ -517,6 +548,19 @@ function ResearchStudioPage() {
 				/>
 			)}
 		</div>
+	)
+
+	// Desktop only: phones never mount this pane (see ResearchMobilePreview).
+	const filesPaneNode = (
+		<ResearchFilesPane
+			ref={detailRef}
+			userSelectDetail={userSelectDetail}
+			autoDetail={autoDetail}
+			setUserSelectDetail={setUserSelectDetail}
+			activeFileId={activeFileId}
+			onActiveFileChange={setActiveFileId}
+			onInterceptFile={routeFile}
+		/>
 	)
 
 	const consoleNode = isContentLoading ? (
@@ -541,6 +585,8 @@ function ResearchStudioPage() {
 					onInterceptFile={routeFile}
 				/>
 			}
+			// Icon-only when narrow: the three labelled buttons (about 330px in English) squeeze the tab
+			// strip beside them down to nothing, so the other tabs could not be reached.
 			reportActions={
 				report ? (
 					<>
@@ -548,43 +594,39 @@ function ResearchStudioPage() {
 							variant="ghost"
 							size="sm"
 							className="h-7 gap-1.5 px-2 text-xs"
+							aria-label={t("report.refresh")}
 							onClick={() => reportPaneRef.current?.refresh()}
 						>
 							<RefreshCw className="size-3.5" />
-							{t("report.refresh")}
+							{compactReportActions ? null : t("report.refresh")}
 						</Button>
+						{/* Phones open the report in the file popup, which already is full screen. */}
+						{isMobile ? null : (
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-7 gap-1.5 px-2 text-xs"
+								aria-label={t("report.fullscreen")}
+								onClick={() => reportPaneRef.current?.enterFullscreen()}
+							>
+								<Maximize2 className="size-3.5" />
+								{compactReportActions ? null : t("report.fullscreen")}
+							</Button>
+						)}
 						<Button
 							variant="ghost"
 							size="sm"
 							className="h-7 gap-1.5 px-2 text-xs"
-							onClick={() => reportPaneRef.current?.enterFullscreen()}
-						>
-							<Maximize2 className="size-3.5" />
-							{t("report.fullscreen")}
-						</Button>
-						<Button
-							variant="ghost"
-							size="sm"
-							className="h-7 gap-1.5 px-2 text-xs"
+							aria-label={t("report.editDownload")}
 							onClick={() => openFile(report)}
 						>
 							<PencilLine className="size-3.5" />
-							{t("report.editDownload")}
+							{compactReportActions ? null : t("report.editDownload")}
 						</Button>
 					</>
 				) : null
 			}
-			filesPane={
-				<ResearchFilesPane
-					ref={detailRef}
-					userSelectDetail={userSelectDetail}
-					autoDetail={autoDetail}
-					setUserSelectDetail={setUserSelectDetail}
-					activeFileId={activeFileId}
-					onActiveFileChange={setActiveFileId}
-					onInterceptFile={routeFile}
-				/>
-			}
+			filesPane={filesPaneNode}
 		/>
 	)
 
@@ -650,6 +692,7 @@ function ResearchStudioPage() {
 					{consoleNode}
 				</div>
 				{sheet}
+				<ResearchMobilePreview ref={mobilePreviewRef} routeFile={routeFile} />
 			</div>
 		)
 	}
@@ -672,6 +715,7 @@ function ResearchStudioPage() {
 				{outputsHidden ? null : (
 					<ResizablePanel id="outputs" order={1} defaultSize={64} minSize={40}>
 						<div
+							ref={consolePanelRef}
 							className={cn(
 								"h-full",
 								outputsRevealing &&

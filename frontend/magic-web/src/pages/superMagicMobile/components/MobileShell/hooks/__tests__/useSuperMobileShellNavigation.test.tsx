@@ -128,6 +128,7 @@ describe("useSuperMobileShellNavigation", () => {
 			"myCrew",
 			"magiClaw",
 			"aiCanvas",
+			"personaResearch",
 			"microApps",
 			"trash",
 			"apps",

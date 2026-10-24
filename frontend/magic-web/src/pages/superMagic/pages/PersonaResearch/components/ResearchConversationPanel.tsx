@@ -4,6 +4,7 @@ import { useMemoizedFn } from "ahooks"
 import { isEmpty } from "lodash-es"
 import { observer } from "mobx-react-lite"
 import pubsub, { PubSubEvents } from "@/utils/pubsub"
+import { cn } from "@/utils/cn"
 import MessageList, { MessageListProvider } from "@/pages/superMagic/components/MessageList"
 import DefaultMessageEditorContainer from "@/pages/superMagic/components/MainInputContainer/components/editors/DefaultMessageEditorContainer"
 import MobileInputContainer from "@/pages/superMagicMobile/pages/ChatPage/components/MobileInputContainer"
@@ -300,7 +301,14 @@ const ResearchConversationPanel = forwardRef<
 					topicModelStore={topicModelStore}
 				/>
 			</MessageListProvider>
-			<div className="w-full shrink-0 px-3 pb-3">
+			<div
+				className={cn(
+					"w-full shrink-0 px-3 pb-3",
+					// The phone composer is a dock with its own grey band (rgb 250) around the white
+					// card; on this white page it reads as a grey strip, so the band takes the page colour.
+					isMobile && "[&_[data-testid=mobile-composer]]:!bg-background",
+				)}
+			>
 				{isMobile ? (
 					<MobileInputContainer editorContext={editorContext} editorNodes={editorNodes} />
 				) : (

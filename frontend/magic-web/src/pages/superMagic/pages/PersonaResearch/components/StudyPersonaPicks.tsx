@@ -16,7 +16,14 @@ const CHIP =
  * picked personas as an avatar stack whose popover lists them, each removable, with "pick more"
  * and "clear". The picks travel in the settings line, never as text in the question.
  */
-function StudyPersonaPicks({ onPickMore }: { onPickMore: () => void }) {
+function StudyPersonaPicks({
+	onPickMore,
+	fullWidth = false,
+}: {
+	onPickMore: () => void
+	/** Phones: a whole-row button under the setting tiles instead of a small trailing chip. */
+	fullWidth?: boolean
+}) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const picks = store.studyPersonaPicks
@@ -25,7 +32,12 @@ function StudyPersonaPicks({ onPickMore }: { onPickMore: () => void }) {
 		return (
 			<button
 				type="button"
-				className={cn(CHIP, "text-muted-foreground hover:bg-muted hover:text-foreground")}
+				className={cn(
+					CHIP,
+					"text-muted-foreground hover:bg-muted hover:text-foreground",
+					fullWidth &&
+						"h-10 w-full justify-center rounded-xl border border-dashed border-border",
+				)}
 				onClick={onPickMore}
 			>
 				<UsersRound className="size-3.5" />
@@ -37,7 +49,15 @@ function StudyPersonaPicks({ onPickMore }: { onPickMore: () => void }) {
 	return (
 		<Popover>
 			<PopoverTrigger asChild>
-				<button type="button" className={cn(CHIP, "bg-muted text-foreground", PRESSABLE)}>
+				<button
+					type="button"
+					className={cn(
+						CHIP,
+						"bg-muted text-foreground",
+						fullWidth && "h-10 w-full justify-center rounded-xl",
+						PRESSABLE,
+					)}
+				>
 					<span className="flex -space-x-1.5">
 						{picks.slice(0, 3).map((pick) => (
 							<PersonaAvatar

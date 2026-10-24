@@ -189,7 +189,7 @@ const ChatIntro = observer(function ChatIntro({
 
 	return (
 		<>
-			<ScrollArea className="min-h-0 flex-1">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 				<div className="flex flex-col items-center px-8 py-10 text-center">
 					<span className="mb-3 flex size-10 items-center justify-center rounded-xl bg-muted">
 						<Sparkles className="size-4" />

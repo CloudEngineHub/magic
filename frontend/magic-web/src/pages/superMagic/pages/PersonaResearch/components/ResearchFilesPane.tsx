@@ -64,6 +64,10 @@ const ResearchFilesPane = forwardRef<DetailRef, ResearchFilesPaneProps>(function
 				showFallbackWhenEmpty
 				allowDownload
 				persistFileTabs={false}
+				// The pane sits flush between the file list, the divider and the footer, so the card's
+				// default rounded corners would show white notches at the tab bar's top corners.
+				className="rounded-none"
+				previewSurfaceFrame={{ radius: "0px" }}
 				interceptFileOpen={onInterceptFile}
 			/>
 		</div>

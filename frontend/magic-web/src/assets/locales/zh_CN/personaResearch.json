@@ -47,7 +47,8 @@
 	},
 	"composer": {
 		"followUpPlaceholder": "继续追问，或告诉 AI 需要调整什么",
-		"newStudyPlaceholder": "你想研究什么商业问题？例如：试用用户为什么在第二周流失？ Enter 发送，Shift + Enter 换行"
+		"newStudyPlaceholder": "你想研究什么商业问题？例如：试用用户为什么在第二周流失？ Enter 发送，Shift + Enter 换行",
+		"newStudyPlaceholderMobile": "你想研究什么商业问题？例如：试用用户为什么在第二周流失？"
 	},
 	"confidence": {
 		"high": "高",
