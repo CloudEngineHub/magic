@@ -278,7 +278,12 @@ function ReportTemplatesPage() {
 					<h1 className="text-sm font-semibold leading-5">
 						{t("reportTemplates.title")}
 					</h1>
-					<p className="truncate text-xs leading-4 text-muted-foreground">
+					<p
+						className={cn(
+							"text-xs leading-4 text-muted-foreground",
+							isMobile ? "line-clamp-2" : "truncate",
+						)}
+					>
 						{t("reportTemplates.subtitle")}
 					</p>
 				</div>

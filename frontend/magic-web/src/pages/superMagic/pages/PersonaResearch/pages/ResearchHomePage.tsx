@@ -221,8 +221,8 @@ function ResearchHomePage() {
 										<UsersRound className="size-4" />
 									) : null}
 								</span>
-								{/* Hidden below 340px so the five top links stay on one row. */}
-								<span className="max-[340px]:hidden">
+								{/* Hidden below 390px (English "Persona library" is wider than the Chinese label) so the five top links stay on one row. */}
+								<span className="max-[389px]:hidden">
 									{t("home.personaLibraryLabel")}
 								</span>
 								{/* Counted from the file list: the home reads only a few preview personas. */}
@@ -276,7 +276,7 @@ function ResearchHomePage() {
 										isMobile
 											? // On ~320px phones the second line (9 characters at 36px) would wrap and
 												// leave a lone character; 30px keeps both lines whole.
-												"text-4xl leading-[1.15] max-[340px]:text-3xl"
+												"text-4xl leading-[1.15] max-[365px]:text-3xl"
 											: "text-[64px] leading-[1.08]",
 									)}
 								>

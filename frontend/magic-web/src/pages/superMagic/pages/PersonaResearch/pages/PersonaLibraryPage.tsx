@@ -269,7 +269,9 @@ function PersonaLibraryPage() {
 					</MagicTooltip>
 					<div className="flex flex-1 flex-col">
 						<h1 className="text-sm font-semibold">{t("library.title")}</h1>
-						<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
+						{isMobile ? null : (
+							<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
+						)}
 					</div>
 					{canEdit ? (
 						<CreatePersonaMenu
@@ -278,6 +280,11 @@ function PersonaLibraryPage() {
 						/>
 					) : null}
 				</div>
+				{/* Below the title row on phones: beside the create button the text is squeezed into a
+				    column a few words wide (eight lines in English). */}
+				{isMobile ? (
+					<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
+				) : null}
 				<div className={cn("flex gap-2", isMobile ? "flex-col" : "items-center")}>
 					<Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
 						<TabsList>

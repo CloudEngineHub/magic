@@ -541,6 +541,8 @@ function ResearchStudioPage() {
 					onInterceptFile={routeFile}
 				/>
 			}
+			// Icon-only on phones: the three labelled buttons (about 330px in English) squeeze the tab
+			// strip beside them down to nothing, so the other tabs could not be reached.
 			reportActions={
 				report ? (
 					<>
@@ -548,28 +550,31 @@ function ResearchStudioPage() {
 							variant="ghost"
 							size="sm"
 							className="h-7 gap-1.5 px-2 text-xs"
+							aria-label={t("report.refresh")}
 							onClick={() => reportPaneRef.current?.refresh()}
 						>
 							<RefreshCw className="size-3.5" />
-							{t("report.refresh")}
+							{isMobile ? null : t("report.refresh")}
 						</Button>
 						<Button
 							variant="ghost"
 							size="sm"
 							className="h-7 gap-1.5 px-2 text-xs"
+							aria-label={t("report.fullscreen")}
 							onClick={() => reportPaneRef.current?.enterFullscreen()}
 						>
 							<Maximize2 className="size-3.5" />
-							{t("report.fullscreen")}
+							{isMobile ? null : t("report.fullscreen")}
 						</Button>
 						<Button
 							variant="ghost"
 							size="sm"
 							className="h-7 gap-1.5 px-2 text-xs"
+							aria-label={t("report.editDownload")}
 							onClick={() => openFile(report)}
 						>
 							<PencilLine className="size-3.5" />
-							{t("report.editDownload")}
+							{isMobile ? null : t("report.editDownload")}
 						</Button>
 					</>
 				) : null
