@@ -18,11 +18,11 @@ Use a template only if it is a readable, complete HTML document (`<html` or `<bo
 
 ## Report Contract (Every Template)
 
-- Use this section order and the built-in ids: `summary` (the bottom line, always first), `hypotheses`, `business`, `method`, `findings`, `real-voices`, `tensions`, `personas`, `voices`, `limitations`, `validation`, `sources`. Drop a section only when it truly does not apply.
-- Citations are `<a href="#q<N>" class="citation-ref">[Q<N>]</a>` and `<a href="#s<N>" class="citation-ref">[S<N>]</a>`. Each quote card has `id="q<N>"`, `data-source-name` (persona name), and `data-source-title` (the quote); each source card has `id="s<N>"`.
-- Each hypothesis, recommendation, and theme has a compact evidence bar linking only its relevant evidence: AI interview signals `[Q#]`, external facts or context `[S#]`, inference from those premises, and the real-person validation status for that claim. Do not repeat study-wide interview or source totals here; a completed interview is not automatically evidence for every claim.
+- Use this section order and the built-in ids: `summary` (the bottom line, always first), `hypotheses`, `business`, `method`, `findings`, `real-voices`, `tensions`, `personas`, `voices`, `limitations`, `validation`, `sources`. Drop a section when it does not apply or would only repeat another section.
+- Citations are `<a href="#q<N>" class="citation-ref">[Q<N>]</a>` and `<a href="#s<N>" class="citation-ref">[S<N>]</a>`. Each quote card has `id="q<N>"`, `data-source-name` (persona name), and `data-source-title` (the quote); each source card has `id="s<N>"`. Quote cards have no `href`: downloaded and shared reports carry only the page and its images, so links to `interviews/*.json` or `validation-questionnaire.*` would be dead. Name the questionnaire files in text instead; the chat reply links them.
+- Each hypothesis, recommendation, and theme has a compact evidence bar linking only its relevant evidence, with plain labels in the user's language: interviews `[Q#]`, sources `[S#]`, and inference from those premises. Show a claim's real-person status there only after real answers have been compared. Do not repeat study-wide interview or source totals here; a completed interview is not automatically evidence for every claim.
 - The bottom line opens with a decision badge (`decision-go`, `decision-conditional`, or `decision-nogo` in the default template) and a one-sentence answer before any detail; recommendations follow it, while findings retain the counter-evidence and uncertainty that qualify it.
-- State next to the opening answer that interviewees are AI-simulated and give clearly labeled whole-study totals: completed AI interviews, external sources reviewed, and real-person validation status. Put planned, failed and downweighted sample accounting in `method` and `limitations`; these numbers do not measure support for a claim. Follow methods.md for qualitative frequency wording and evidence judgments.
+- State once, next to the opening answer, that interviewees are AI-simulated (report-writing.md, "Say the AI Caveat Once") and give clearly labeled whole-study totals: completed AI interviews, external sources reviewed, and real-person validation status. Put planned, failed and downweighted sample accounting in `method` and `limitations`; these numbers do not measure support for a claim. Follow methods.md for qualitative frequency wording and evidence judgments.
 - Charts and data tables are optional inline fragments chosen by report-charts.md, placed in `findings` (or `hypotheses`), never in `summary`. They carry their own styles, so any template shows them; a report without them is correct when the data does not warrant one.
 - Replace every sample text in the template with study content, and set `<html lang>` to the user's language. This includes the verdict, decision and confidence badges, which must not stay in English for a non-English reader. The page chrome (top bar, contents, buttons, popover) fills itself from the `<title>`, the section titles and `<html lang>`: do not edit it by hand; for a language other than Chinese or English, add one entry to the `LABELS` map in the template's page script.
 - Keep the template's own scripts. Behaviour a template lacks (citation popovers, persona portraits) is not added; citations then work as plain anchor links.
@@ -33,62 +33,34 @@ Never retype or rewrite a template: a full template is too long to reproduce, an
 
 1. Copy the chosen template file to a draft outside the workspace, with code, not by writing its text out. The draft lives in the sandbox-local runtime folder next to the workspace: `../.runtime/persona-report/<slug>.html` (relative to the workspace; create the folder first). For example: `shutil.copyfile("templates/voices.html", "../.runtime/persona-report/<slug>.html")`.
 2. Edit the draft in place with `edit_file` or `multi_edit_file` (both accept that path), one section at a time. Replace only the sample content (text, quotes, citations, badges, figures); keep `<head>`, the `<style>` and `<script>` blocks, section ids, class names and data attributes. Duplicate a sample row for each extra item; delete a row or section only when it does not apply.
-3. Before publishing, search the draft for sample leftovers (`Zhang Wei`, `Li Na`, `Illustrative`, `example.com`, `image-placeholder`) and for English badge text; fix anything found.
+3. Before publishing, search the draft for sample leftovers (`Zhang Wei`, `Li Na`, `Illustrative`, `example.com`, `image-placeholder`), English badge or button text in a non-English report (for example `Open`, `Back to the text` in an older template copy that still has `TRANSLATE` labels: translate them), a second `<main>` or `<header>`, and links to `interviews/` or `validation-questionnaire`; fix anything found, then run the delivery check in report-writing.md.
 4. Publish once: copy the finished draft to `studies/<slug>/report.html` with code, delete the draft, then send `report_written`. Never write a partly edited page to `report.html`; a rewrite of an existing report is built the same way and replaces the old file only when complete.
 
 A report whose HTML has none of the template's section ids, `<nav class="top-bar">`, contents list or script blocks was not built from the template; rebuild it.
 
-## Write for a Reader Making a Decision
+## Writing and Analysis
 
-Before styling, draft the answer, its strongest evidence, what remains unknown, and the next action. A reader scanning only the opening and headings should understand the proposed decision, its evidence and any remaining conditions.
+Write every visible word by [report-writing.md](report-writing.md): analysis depth, structure, wording, the one-time AI caveat, language conventions and the delivery check. The rest of this file covers layout and section content.
 
-- Every heading names its subject and the point made about it, in one plain phrase. The report title is the research subject plus the decision it informs, with no verdict in it (for example "Trial user retention: whether to add a weekly task to onboarding"); the opening answer then states the recommendation and its condition. A hypothesis heading restates the hypothesis in neutral words; its verdict belongs in the badge and its reason in the paragraph. A theme heading names the theme and the direction of the finding. Do not repeat the research question as a subtitle.
-- Never use a quote, a sentence lifted from the body, a bare number, a persona's wording, a coined label or an unexplained abbreviation as a heading, and do not give two items the same heading. Test: a reader who sees only the headings can tell what is studied and what each part concludes.
-- Write in a formal, plain written register: complete sentences, a neutral tone, and no spoken fillers, slang, rhetorical questions, exclamations or slogans. Use the verbs and nouns a professional would write in a formal memo in the report's language; avoid mechanical, metaphorical or colloquial wording (for example "fix" or "patch" for a process, "one cut", "cannot be moved") and literal translations of English idioms. When a decision weighs two options, name what is being improved or prioritised, not what is "fixed". Use one term for one idea throughout (for example always "AI interview", never alternating it with "chat" or "simulation"); define a necessary term or group name once, at first use; keep names, numbers and units exactly as in the source.
-- Each paragraph makes one point in 1-3 sentences: what happened or was said, what it suggests, and why it matters for this decision. Keep a connected explanation when the reasoning needs it; do not split it into disconnected slogans. Use familiar words, specific subjects and verbs. Explain a necessary research term on first use.
-- Put the citation directly after the fact it supports. Say "AI interview signal", "external evidence", "real-person result", or "our inference" when the distinction could be missed. A source about a related market does not prove the study's core claim. Preserve exact quotes; edit only the surrounding explanation.
-- Recommendations name an action, its audience or context, and the observable result to check. Do not invent an owner, deadline, threshold, price, cause, or quote to make the wording concrete. Say what is missing when the evidence cannot support a decision.
-- Delete generic introductions, exaggerated benefits, abstract noun chains, metaphors that hide the action, and repeated summaries. Replace "improve the end-to-end value experience" with the actual step and result. Keep a fact once in full; later sections may point back to it. Keep conflicting findings separate rather than smoothing them into a positive story.
-- Use a short list for parallel reasons or steps, a table for a real comparison, and paragraphs for reasoning. Bold only the judgment or action that deserves attention. Move judging criteria and secondary detail into labeled `details`; keep counter-evidence, missing validation and other limits that can change the decision visible beside it.
+## Keep the Opening Small and Honest
 
-Headings (illustrative):
-
-| Hard to follow | Clear |
-|---|---|
-| "4", or a quote such as "I forgot it existed" used as a heading | "Trial users do not form a weekly routine" |
-| "Rest gets squeezed" (a slogan) | "Short gaps between shifts reduce staff rest time" |
-| "H2: the late-to-early problem" (an unexplained coinage) | "Starting an early shift soon after a late shift is the most serious rest problem" |
-| "Fix pickup first, or fix kitchen speed first" (a mechanical verb; reads like a literal translation) | "Whether to improve the pickup step or kitchen speed first" |
-
-Body text (illustrative wording, not research evidence):
-
-| Hard to act on | Clear enough to assess |
-|---|---|
-| The research comprehensively reveals opportunities to empower a sustainable retention loop. | First test whether trial users can finish one weekly task. AI interviews suggest they forget the app after trying it; real users have not confirmed the reason. |
-| Users lack a first win, so onboarding is the core cause of churn. | Our inference: helping users finish a first task may improve return visits. The AI interviews suggest this; they do not establish the cause of churn. |
-| Strengthen value perception and optimize the experience. | Ask trial users to complete their next weekly task with the app, and record where they stop. Use the result to decide which onboarding step to change. |
-
-### Keep the Opening Small and Honest
-
-Before any image, method card or persona panel: short title, decision badge, one-sentence answer, the few cited reasons needed to explain it, whole-study evidence scope and AI-simulation label, then what could change the answer. List at most 3 remaining validation priorities, each tied to a hypothesis and a concrete test; one is enough when only one matters, and none is needed when no material check remains. If evidence is incomplete, say what cannot yet be decided. Neither reasons nor validation tasks are quotas to fill.
+Before any image, method card or persona panel: short title, decision badge, one-sentence answer, the few cited reasons needed to explain it, whole-study evidence scope and the one AI-simulation note, then what could change the answer. List at most 3 remaining validation priorities, each tied to a hypothesis and a concrete test; one is enough when only one matters, and none is needed when no material check remains. If evidence is incomplete, say what cannot yet be decided. Neither reasons nor validation tasks are quotas to fill.
 
 Keep the title compact enough for the answer to be visible on a typical laptop. Do not force a one-screen fit by clipping, shrinking or hiding material caveats. Use readable body text near 16px, relaxed line-height and a bounded reading width; let long titles, source names and badges wrap. Use spacing and type weight to group content, with one restrained emphasis color. No decorative cover before the decision, fixed-height text boxes, or walls of bold text. Images are optional supporting material after the decision content.
 
-### What Each Section Contains
+## What Each Section Contains
 
 | Section | Content |
 |---|---|
-| `summary` | Opening described above; decision classes and confidence follow methods.md. Show homogeneity warnings and skipped or overridden leak checks beside the verdict. |
-| `hypotheses` | Each hypothesis's verdict, reason and evidence; fold support/refute criteria. |
+| `summary` | Opening described above; decision classes and confidence follow methods.md. Show a homogeneity warning or a skipped or overridden leak check beside the verdict, in plain words (for example "the four interviewees answered almost alike, which more likely reflects one model playing four people"). |
+| `hypotheses` | Each hypothesis's finding as a judgment heading, a plain verdict badge, the analysis (observation, interpretation, implication) and evidence; fold support/refute criteria. |
 | `business` | Decision-relevant recommendations using methods.md, labeled as tests, conditional actions or supported actions. Omit unrelated commercial topics; for no-go, title it "If you still want to try" and give only stopping conditions or cheap tests. |
-| `method` | Scope, framework, completed vs. planned interviews and rounds, and any focus group actually run. |
-| `findings` | At most 6 decision-relevant themes in full, strongest first, with segment differences and counter-evidence beside the claim. Other themes get one line and a citation each. |
+| `method` | Scope, framework, completed vs. planned interviews and rounds, and focus groups planned vs. actually run. |
+| `findings` | Themes not already explained under `hypotheses`: at most 6 in full, strongest first, with segment differences and counter-evidence beside the claim; other themes get one line and a citation each. A theme that restates a hypothesis is dropped, with one line pointing to it. End with the cross-finding connection when one exists. |
 | `real-voices` | Apply the comparison rules in methods.md. Explain decision-relevant conflicts or evidence gaps in full; compatible or non-comparable observations need only a short cited explanation. |
-| `tensions`, `personas`, `voices` | Disagreements, persona panel, and exact interview quotes with transcript links. |
-| `limitations` | AI simulation, effective sample, failed and downweighted interviews, saturation, removed quotes, search-only social evidence, and leak-check overrides or a skipped check. |
+| `tensions`, `personas`, `voices` | Disagreements not already stated beside a finding, the persona panel (tiers in plain words), and exact interview quotes without links. |
+| `limitations` | In plain words: AI simulation and what it rules out, effective sample, failed and downweighted interviews, whether later interviews still raised new themes, removed quotes (or that all quotes matched), search-only social evidence, and a leak-check override or skipped check (omit the leak check when it simply passed). |
 | `validation`, `sources` | Real-person validation plan/results and all cited sources. Show the comparison table only after answers have actually been compared. |
-
-Before delivery, read the title and every heading once as a native reader and replace any word you would not use in a formal memo; then read only the title, opening and section headings once. Can the reader state the recommendation, evidence type, main uncertainty and next test? Then compare the text with `synthesis.json` and the transcripts: no stronger claims, missing conditions, altered quotes, invented specifics or repeated paragraphs. Check citation targets and inspect the rendered page at wide and narrow widths when a preview is available; unrendered output is not visual acceptance.
 
 ## Images
 

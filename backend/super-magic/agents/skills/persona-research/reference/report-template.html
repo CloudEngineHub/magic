@@ -7,7 +7,10 @@
   - Content comes from study.json hypotheses and synthesis.json; every quote has passed the quote self-check.
   - Whole-study sample accounting is not support for a claim. Follow methods.md for qualitative frequency wording.
   - Verdict badge classes: verdict-supported, verdict-refuted, verdict-mixed, verdict-insufficient, verdict-pending.
-  - Each claim's .evidence-bar cites its relevant evidence and validation status; only #summary's evidence bar shows whole-study totals.
+  - Each claim's .evidence-bar cites only its relevant evidence; only #summary's evidence bar shows whole-study totals.
+  - Say once, in #summary, that the interviewees are AI-simulated and not yet checked with real people. Do not repeat it on cards, quotes or evidence bars;
+    per-claim validation status appears only after real-person answers have been compared.
+  - Quote cards and the questionnaire mention carry no links to interviews/*.json or validation-questionnaire.*: downloads and shares do not include those files.
   - Persona portraits and colours are drawn by the script from data-persona (the persona name, exactly as in the persona file);
     data-gender is male / female / unknown, data-age is a number. Never draw faces or hard-code colours yourself.
     .persona-portrait is always square (it keeps its aspect ratio at any size); never turn it into a wide or cropped banner.
@@ -145,8 +148,8 @@
         /* Jumping to a quote or source flashes it once, so the reader sees where they landed. */
         section[id], :target { scroll-margin-top: 72px; }
         @keyframes target-flash { from { background-color: rgba(47,74,122,0.14); } to { background-color: transparent; } }
-        a[id^="q"]:target, a[id^="s"]:target { animation: target-flash 1.8s ease-out; }
-        @media (prefers-reduced-motion: reduce) { a[id^="q"]:target, a[id^="s"]:target { animation: none; background-color: rgba(47,74,122,0.1); } html { scroll-behavior: auto !important; } }
+        #voices [id^="q"]:target, #sources [id^="s"]:target { animation: target-flash 1.8s ease-out; }
+        @media (prefers-reduced-motion: reduce) { #voices [id^="q"]:target, #sources [id^="s"]:target { animation: none; background-color: rgba(47,74,122,0.1); } html { scroll-behavior: auto !important; } }
 
         .citation-tooltip { position: fixed; z-index: 1000; background: #17140f; color: #fff; box-shadow: 0 12px 32px -8px rgba(23,20,15,0.35); padding: 12px 14px; border-radius: 12px; font-size: 13px; line-height: 1.6; width: max-content; max-width: min(320px, calc(100vw - 16px)); opacity: 0; transform: translateY(4px); transition: opacity 0.15s ease, transform 0.15s ease; pointer-events: none; visibility: hidden; }
         .citation-tooltip.visible { opacity: 1; transform: translateY(0); pointer-events: auto; visibility: visible; }
@@ -218,7 +221,7 @@
             <section id="summary" class="opening space-y-4" data-decision="conditional" aria-labelledby="summary-title">
                 <h2 id="summary-title" class="section-title">Bottom line</h2>
                 <div class="flex flex-wrap items-center gap-2">
-                    <span class="chip decision-conditional">Test first · awaiting real-person validation</span>
+                    <span class="chip decision-conditional">Test first</span>
                     <span class="text-[13px] text-muted">Decision: whether to redesign the first-week onboarding.</span>
                 </div>
                 <!-- A recommendation, not an established cause: no source yet covers this study's core claim. -->
@@ -233,13 +236,13 @@
                     <span><b>7</b><em>AI interviews completed</em></span>
                     <span><b>Not done</b><em>Real-person validation</em></span>
                 </div>
-                <p class="opening-limit">The interviewees are AI-simulated personas, not real users. Treat their answers as leads to test. A sample of this kind cannot show how common a problem is.</p>
+                <p class="opening-limit">The interviewees are AI-simulated personas, not real users, and no real user has been asked yet. Treat their answers as leads to test; they cannot show how common a problem is. The rest of this report does not repeat this note.</p>
                 <p class="opening-limit"><b>Reconsider if:</b> real trial users say a missing feature or the price is why they stopped.</p>
                 <div class="space-y-3 pt-2">
                     <h3 class="text-base font-bold">Validate these first</h3>
                     <!-- Keep only the remaining tests that bear on the decision; this study has one priority, not a quota of three. -->
                     <ol class="validation-priorities">
-                        <li><span class="font-mono text-xs text-muted">H1 · Weekly routine</span><br><b>Find where the weekly task stops</b><p>Ask real trial users to show their most recent weekly task and where they stopped. Use questions Q2–Q4 to tell a missing routine apart from a missing feature.</p></li>
+                        <li><span class="text-xs text-muted">Hypothesis 1 · Weekly routine</span><br><b>Find where the weekly task stops</b><p>Ask real trial users to show their most recent weekly task and where they stopped. Questions 2–4 of the questionnaire tell a missing routine apart from a missing feature.</p></li>
                     </ol>
                 </div>
             </section>
@@ -251,9 +254,9 @@
                 <article class="claim grid lg:grid-cols-[minmax(0,1fr)_240px] gap-x-10 gap-y-4 py-6 border-b border-rule">
                     <div class="space-y-2.5">
                         <div class="flex items-center gap-2">
-                            <span class="font-mono text-xs text-faint">H1</span>
-                            <!-- Badge text in the user's language; AI-only evidence caps the verdict at "mixed" -->
-                            <span class="chip verdict-mixed">Mixed · awaiting real-person validation</span>
+                            <span class="text-xs text-faint">Hypothesis 1</span>
+                            <!-- Badge text in the user's language, a plain word for how far the evidence goes; AI-only evidence caps the verdict at "mixed" -->
+                            <span class="chip verdict-mixed">Partly supported</span>
                         </div>
                         <h3 class="text-[17px] font-bold leading-relaxed">Trial users do not form a weekly routine</h3>
                         <p class="claim-body">Some completed AI interviews describe trying the app and then forgetting it, which fits a missing routine; why users leave is not yet confirmed. No external source yet covers behaviour in the second week.<a href="#q1" class="citation-ref">[Q1]</a><a href="#s1" class="citation-ref">[S1]</a></p>
@@ -261,15 +264,14 @@
                         <details class="criteria"><summary>Judging criteria</summary>
                             <p>Supported if most interviewees describe no recurring use. Refuted if most name a missing feature as the reason they stopped.</p></details>
                         <div class="evidence-bar">
-                            <span>AI interview signal <a href="#q1" class="citation-ref">[Q1]</a></span>
-                            <span>External context, not core evidence <a href="#s1" class="citation-ref">[S1]</a></span>
-                            <span>Real-person validation: not done</span>
+                            <span>Interviews <a href="#q1" class="citation-ref">[Q1]</a></span>
+                            <span>Background source <a href="#s1" class="citation-ref">[S1]</a></span>
                         </div>
                     </div>
                     <!-- Margin: the strongest quote for this hypothesis, its speaker, then up to two sources -->
                     <aside class="margin-note self-start space-y-2 text-[13px] leading-6" data-persona-tone="Zhang Wei">
                         <p class="hang font-bold text-ink">I tried it twice in the first week, then forgot it existed.</p>
-                        <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span><span class="min-w-0">Zhang Wei · AI-simulated · <a href="#q1" class="text-link">Q1</a></span></p>
+                        <p class="flex items-center gap-2 text-xs text-faint"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span><span class="min-w-0">Zhang Wei · <a href="#q1" class="text-link">Q1</a></span></p>
                         <p class="font-mono text-[11px] text-faint"><a href="#s1" class="text-link">[S1]</a> SaaS Trial Retention Benchmarks</p>
                     </aside>
                 </article>
@@ -287,18 +289,18 @@
                         <div class="space-y-2">
                             <h3 class="font-bold">Observe the next weekly task</h3>
                             <p>Ask real trial users to show where they stop, including any feature they find missing. The result shows whether a weak routine explains the lack of return visits.</p>
-                            <p class="text-sm text-muted">H1 · Our inference from the AI interview signal. Use questions Q2–Q4 of the questionnaire to check it.</p>
+                            <p class="text-sm text-muted">Based on hypothesis 1. Our inference from the interviews; questions 2–4 of the questionnaire check it.</p>
                         </div>
-                        <div class="evidence-bar sm:col-span-2"><span>Inference from AI interviews <a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></span><span>Real-person validation: not done</span></div>
+                        <div class="evidence-bar sm:col-span-2"><span>Inference from interviews <a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></span></div>
                     </div>
                     <div class="grid sm:grid-cols-[160px_minmax(0,1fr)] gap-x-6 gap-y-2 py-5">
                         <p><span class="chip verdict-mixed">Conditional action</span></p>
                         <div class="space-y-2">
-                            <h3 class="font-bold">Test a small onboarding change if H1 holds</h3>
+                            <h3 class="font-bold">Test a small onboarding change once real users confirm the missing routine</h3>
                             <p>If real users have trouble setting up a recurring task, test added help for that step and check whether they complete it and return. If they mainly need a missing feature, reconsider the onboarding change.</p>
-                            <p class="text-sm text-muted">H1 · A proposed test, not a proven improvement in retention.</p>
+                            <p class="text-sm text-muted">Based on hypothesis 1. A proposed test, not a proven improvement in retention.</p>
                         </div>
-                        <div class="evidence-bar sm:col-span-2"><span>Inference from AI interviews <a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></span><span>Real-person validation: not done</span></div>
+                        <div class="evidence-bar sm:col-span-2"><span>Inference from interviews <a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></span></div>
                     </div>
                 </div>
                 <figure class="report-figure" data-image-slot="concept" data-image-source="generate" data-image-ratio="16:9"
@@ -348,19 +350,18 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <h3 class="text-[17px] font-bold">Trial use rarely turns into a recurring task</h3>
                             <!-- Class confidence-<synthesis confidence>; badge text in the user's language -->
-                            <span class="chip confidence-to_validate">Awaiting real-person validation</span>
+                            <span class="chip confidence-to_validate">Interviews only</span>
                         </div>
-                        <p class="claim-body">Some AI interviewees said they tried the app and forgot it, or could not find a weekly task for it. Our inference is that onboarding may need to link a task to a return visit. The interviews do not establish that cause.<a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></p>
+                        <p class="claim-body">Two interviewees said they tried the app and forgot it, or could not find a weekly task for it. Our inference is that onboarding may need to link a task to a return visit. The interviews do not establish that cause.<a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></p>
                         <!-- These are individual signals, not established segment differences; group by segment only when the evidence supports it. -->
                         <ul class="text-sm list-disc pl-5 space-y-1 text-muted">
                             <li><span class="font-medium text-ink">Zhang Wei:</span> describes forgetting the app after trying it.<a href="#q1" class="citation-ref">[Q1]</a></li>
                             <li><span class="font-medium text-ink">Li Na:</span> describes not finding a weekly task for it.<a href="#q2" class="citation-ref">[Q2]</a></li>
                         </ul>
-                        <p class="text-xs text-faint">Remaining gap: neither interview explains why real users leave. A missing feature is another explanation to check with real users. Related hypothesis: H1.</p>
+                        <p class="text-xs text-faint">Remaining gap: neither interview explains why real users leave. A missing feature is another explanation to check with real users. (Hypothesis 1)</p>
                         <div class="evidence-bar">
-                            <span>AI interview signals <a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></span>
+                            <span>Interviews <a href="#q1" class="citation-ref">[Q1]</a><a href="#q2" class="citation-ref">[Q2]</a></span>
                             <span>Inference: a routine may help return visits</span>
-                            <span><i class="fa-solid fa-user-check"></i>Real-person validation: not done</span>
                         </div>
                     </div>
                     <aside class="margin-note self-start space-y-2 text-[13px] leading-6" data-persona-tone="Zhang Wei">
@@ -373,10 +374,10 @@
             <!-- Compare the same claim in comparable circumstances. Use voices-differ only for opposing claims;
                  different questions and silence are evidence gaps, not contradictions. Keep compatible context brief. -->
             <section id="real-voices" class="space-y-4">
-                <h2 class="section-title">Public voices and AI interviews</h2>
+                <h2 class="section-title">Public posts and the interviews</h2>
                 <p class="text-sm text-muted">Public posts are outside context. They do not validate the views of this product's trial users.</p>
-                <p>Some posts also describe forgetting a trial.<a href="#s3" class="citation-ref">[S3]</a> This fits the AI interview signal but does not show why users of this app stopped.</p>
-                <p class="text-sm text-muted"><span class="chip voices-silent">Different questions · not a contradiction</span> A public post discusses price before purchase;<a href="#s2" class="citation-ref">[S2]</a> an AI interview discusses a friend prompting a trial.<a href="#q3" class="citation-ref">[Q3]</a> Both can be true. Together they show neither agreement nor conflict on H1.</p>
+                <p>Some posts also describe forgetting a trial.<a href="#s3" class="citation-ref">[S3]</a> This fits what the interviewees said but does not show why users of this app stopped.</p>
+                <p class="text-sm text-muted"><span class="chip voices-silent">Different questions · not a contradiction</span> A public post discusses price before purchase;<a href="#s2" class="citation-ref">[S2]</a> an AI interview discusses a friend prompting a trial.<a href="#q3" class="citation-ref">[Q3]</a> Both can be true. Together they show neither agreement nor conflict on hypothesis 1.</p>
             </section>
 
             <!-- Open questions and disagreements -->
@@ -390,7 +391,7 @@
             <!-- Persona panel: the only place portraits are shown as a group. One card per persona; the head takes the persona colour. -->
             <section id="personas" class="space-y-4">
                 <h2 class="section-title">Persona panel</h2>
-                <p class="text-sm text-muted">All personas are AI-simulated. Each card links to the quotes that persona contributed.</p>
+                <p class="text-sm text-muted">Each card links to the quotes that persona contributed.</p>
                 <div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
                     <div class="persona-card rounded-2xl border border-rule overflow-hidden" data-persona-tone="Zhang Wei">
                         <div class="persona-head flex items-center gap-3 px-4 py-4">
@@ -399,7 +400,7 @@
                         </div>
                         <div class="px-4 py-3 space-y-2">
                             <p class="text-[13px] text-muted">Closes deals by phone; sceptical of AI tools.</p>
-                            <div class="flex flex-wrap gap-1 text-xs"><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">relationship-driven</span><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">evidence-based</span></div>
+                            <div class="flex flex-wrap gap-1 text-xs"><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">relationship-driven</span><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">built from public sources</span></div>
                             <p class="text-xs text-faint">Interview completed, 5 rounds · <a href="#q1" class="text-link">Quote Q1</a></p>
                         </div>
                     </div>
@@ -410,7 +411,7 @@
                         </div>
                         <div class="px-4 py-3 space-y-2">
                             <p class="text-[13px] text-muted">Tries new tools often; keeps few of them.</p>
-                            <div class="flex flex-wrap gap-1 text-xs"><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">early adopter</span><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">generated</span></div>
+                            <div class="flex flex-wrap gap-1 text-xs"><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">early adopter</span><span class="px-2 py-0.5 rounded-md bg-sunken border border-rule">mostly inferred by the model</span></div>
                             <p class="text-xs text-faint">Interview completed, 4 rounds · <a href="#q2" class="text-link">Quote Q2</a></p>
                         </div>
                     </div>
@@ -421,19 +422,19 @@
             <section id="voices" class="space-y-4">
                 <h2 class="section-title">Interview quotes</h2>
                 <div class="divide-y divide-rule border-y border-rule">
-                    <!-- id="q<N>"; data-source-name = persona name; data-source-title = quote; href = transcript path -->
-                    <a id="q1" href="interviews/p_zhangwei_7f3a.json" class="block py-4 pl-6 pr-2 hover:bg-sunken" data-persona-tone="Zhang Wei">
+                    <!-- id="q<N>"; data-source-name = persona name; data-source-title = quote. No href: transcripts are not part of a downloaded or shared report. -->
+                    <div id="q1" class="block py-4 pl-6 pr-2 hover:bg-sunken" data-persona-tone="Zhang Wei">
                         <p data-source-title class="hang text-[15px] font-bold leading-7">I tried it twice in the first week, then forgot it existed.</p>
                         <p class="flex items-center gap-2 text-xs text-faint mt-2"><span class="persona-portrait w-5 h-5" data-persona="Zhang Wei" data-gender="male" data-age="52"></span><span class="min-w-0">[Q1] <span data-source-name>Zhang Wei</span> · interview, round 2 · theme: no routine</span></p>
-                    </a>
-                    <a id="q2" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
+                    </div>
+                    <div id="q2" class="block py-4 pl-6 pr-2 hover:bg-sunken">
                         <p data-source-title class="hang text-[15px] font-bold leading-7">I liked trying it, but I never found a weekly task for it.</p>
-                        <p class="text-xs text-muted mt-2">[Q2] <span data-source-name>Li Na</span> · AI-simulated · illustrative quote</p>
-                    </a>
-                    <a id="q3" href="interviews/sample.json" class="block py-4 pl-6 pr-2 hover:bg-sunken">
+                        <p class="text-xs text-muted mt-2">[Q2] <span data-source-name>Li Na</span> · interview, round 3 · theme: no weekly task</p>
+                    </div>
+                    <div id="q3" class="block py-4 pl-6 pr-2 hover:bg-sunken">
                         <p data-source-title class="hang text-[15px] font-bold leading-7">Not before I see a friend using it.</p>
-                        <p class="text-xs text-muted mt-2">[Q3] <span data-source-name>Zhang Wei</span> · AI-simulated · illustrative quote</p>
-                    </a>
+                        <p class="text-xs text-muted mt-2">[Q3] <span data-source-name>Zhang Wei</span> · interview, round 4 · theme: waits for a friend</p>
+                    </div>
                 </div>
             </section>
 
@@ -453,15 +454,15 @@
             <!-- Validation -->
             <section id="validation" class="space-y-4">
                 <h2 class="section-title">Validate with real people</h2>
-                <p class="text-[14px] leading-7 text-muted max-w-3xl">Run <a class="text-link underline" href="validation-questionnaire.md">validation-questionnaire.md</a> with 8–15 real people, or import <a class="text-link underline" href="validation-questionnaire.csv">validation-questionnaire.csv</a> into a survey tool. Each question is tagged with the hypothesis it tests, for example [H1]. Validate H1 first.</p>
+                <p class="text-[14px] leading-7 text-muted max-w-3xl">Ask 8–15 real trial users the questionnaire saved with this study (validation-questionnaire.md; validation-questionnaire.csv imports into survey tools). Each question names the hypothesis it checks. Start with hypothesis 1.</p>
                 <!-- Include this table only after real-person answers are compared (from validation-results.json); mark disagreements in red.
                 Example only: insert and populate this table after validation_compared.
                 <div class="overflow-x-auto border-y border-rule">
                     <table class="w-full text-sm">
                         <thead class="text-xs text-faint text-left"><tr><th class="py-2 pr-4 font-normal">Hypothesis</th><th class="py-2 pr-4 font-normal">AI verdict</th><th class="py-2 pr-4 font-normal">Real people (12)</th><th class="py-2 font-normal">Agreement</th></tr></thead>
                         <tbody>
-                            <tr class="border-t border-rule"><td class="py-2 pr-4 font-mono text-xs">H1</td><td class="py-2 pr-4"><span class="chip verdict-mixed">Mixed</span></td><td class="py-2 pr-4"><span class="chip verdict-supported">Supported</span></td><td class="py-2">Agree</td></tr>
-                            <tr class="border-t border-rule"><td class="py-2 pr-4 font-mono text-xs">H2</td><td class="py-2 pr-4"><span class="chip verdict-mixed">Mixed</span></td><td class="py-2 pr-4"><span class="chip verdict-refuted">Refuted</span></td><td class="py-2 font-semibold" style="color: var(--neg)">Disagree</td></tr>
+                            <tr class="border-t border-rule"><td class="py-2 pr-4 text-xs">Hypothesis 1</td><td class="py-2 pr-4"><span class="chip verdict-mixed">Mixed</span></td><td class="py-2 pr-4"><span class="chip verdict-supported">Supported</span></td><td class="py-2">Agree</td></tr>
+                            <tr class="border-t border-rule"><td class="py-2 pr-4 text-xs">Hypothesis 2</td><td class="py-2 pr-4"><span class="chip verdict-mixed">Mixed</span></td><td class="py-2 pr-4"><span class="chip verdict-refuted">Refuted</span></td><td class="py-2 font-semibold" style="color: var(--neg)">Disagree</td></tr>
                         </tbody>
                     </table>
                 </div>

@@ -23,7 +23,7 @@ At most 3 charts or tables besides the stance matrix. Skip any that fail the "Dr
 - Do not rely on color alone: the stance matrix pairs each color with a symbol (support, oppose, mixed, not mentioned).
 - Numbers respondents gave are willingness-to-pay style evidence: label the figure "AI-simulated, pending real-person validation", draw ranges only, show only numbers the respondent said (never your conversion of a price into another unit), and repeat the pricing warning from methods.md. Say what each person anchored on; answers anchored on different things are not comparable and are never averaged.
 - Outside numbers (benchmark table) never share a chart with respondent numbers. Every row carries its `[S#]`.
-- Every figure ends with a caption explaining what a mark means and an evidence bar following report-templates.md: cite the data actually drawn, identify AI signals, external evidence or inference, and state the applicable real-person validation status. Do not repeat whole-study totals as support for the chart.
+- Every figure ends with a caption explaining what a mark means and an evidence bar following report-templates.md and report-writing.md: cite the data actually drawn and label interviews, sources or inference in plain words; state real-person status only after real answers have been compared. Do not repeat whole-study totals as support for the chart.
 - Place charts inside `findings` (or `hypotheses` when the chart serves one hypothesis). Do not insert them into `summary`.
 - A chart never carries a claim the text does not state; the text still cites `[Q#]` and `[S#]`.
 
