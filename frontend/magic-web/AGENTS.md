@@ -64,6 +64,12 @@ Instruction priority: system/developer instructions and the user's request take 
 - Honour existing project aliases (`@/`) and barrel exports. Add exports to `index.ts` files when exposing new modules.
 - **Scroll areas**: Wrap new or modified scrollable content regions with the shared `ScrollArea` from `@/components/shadcn-ui/scroll-area`. Use `viewportRef` for scroll positioning and `viewportClassName` for viewport behavior; do not create separate native `overflow-auto` / `overflow-scroll` containers for product content. Keep independent panels in separate `ScrollArea` instances, with controls outside the scrolling viewport.
 - **Mobile detection**: Use `@/hooks/useIsMobile` as the default source of truth for mobile viewport checks. Do not introduce new business usage of `@/hooks/use-mobile`; treat it as a compatibility entry only unless a task explicitly requires otherwise.
+- **Desktop and mobile coverage**: Every UI or route change must be checked on both desktop and mobile (390px wide) without being asked, and the report must say what was checked. Before finishing, confirm:
+  - The page renders correctly at both widths with no horizontal overflow. A wide child (table, matrix) inside a `ScrollArea` stretches the Radix `display: table` wrapper; use `viewportClassName="[&>div]:!block"` so banners and cards keep the viewport width.
+  - A new or moved mobile route is registered in `src/pages/superMagicMobile/layout/MainLayout/resolveEmbeddedShellState.ts` (mobile shell, sidebar entry, generic header) and covered by its test. Pages that draw their own header must not also show the generic header; a top-level page needs the `MobileShellSidebarToggleButton`, a detail page needs a back control, and back and sibling navigation go through route names.
+  - Rows of controls wrap or stack on narrow screens instead of squeezing text; tap targets are comfortable (about 40px or more); icon-only controls carry an accessible name.
+  - Desktop-only hints (keyboard shortcuts, hover text) are not shown on mobile, and mobile-only UI is not mounted on desktop (lazy-load it when its dependencies are heavy).
+  - If `enterprise/src/` overrides the touched file, the overlay is adapted for both widths too.
 - When touching MobX stores, ensure actions remain pure and derivations are memoized where necessary.
 - Keep business logic out of presentation components—place it in services or hooks.
 - **Commentary**: All code contributions must include guiding comments for:
@@ -111,6 +117,7 @@ Instruction priority: system/developer instructions and the user's request take 
   - For new components: Use shadcn/ui + Tailwind CSS, ensure props are typed, update i18n keys
   - For existing components: Mirror component structure, extend styles via `createStyles`, maintain consistency
   - Never convert existing antd-style components to Tailwind unless explicitly requested
+  - Check desktop and mobile layouts as described in "Desktop and mobile coverage" before reporting the change as done; include both in the manual verification notes
 - **Data/Store Changes**: Modify MobX/Zustand stores cautiously, update dependent selectors, and add tests or storybook notes if behaviour shifts.
 - **Super Magic File-System Performance**: Treat 10k files as the baseline: do not `JSON.stringify`, deep-clone, deep-compare, or log full `attachments` / `attachmentList` / `renderProps` in render paths; use `loadProjectAttachments`, `attachmentIndex` / `treeIndex`, primitive cache keys, abortable requests, and explicit MobX annotations for large input configs.
 - **Network file operations**: Copy/cut only records clipboard intent. Actual copy/move writes must use the shared scope confirmation after preparation; show preparation in a centered modal with cancellation. Cancelling preparation is not rollback of already submitted writes. Reuse the existing file menus, upload queues, conflict handling, and operation lifecycle.
