@@ -122,6 +122,8 @@
 		"data": "Data files",
 		"deliverables": "Deliverables",
 		"empty": "Once the study starts, all its files are listed here.",
+		"previewDescription": "Preview the selected study file",
+		"previewTitle": "File preview",
 		"process": "Research process",
 		"role": {
 			"deskResearch": "Market insight",

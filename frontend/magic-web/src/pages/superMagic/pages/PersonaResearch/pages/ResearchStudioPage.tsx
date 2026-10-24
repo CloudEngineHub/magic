@@ -11,6 +11,7 @@ import {
 	PencilLine,
 	RefreshCw,
 	Share2,
+	X,
 } from "lucide-react"
 import type { ImperativePanelHandle } from "react-resizable-panels"
 import { observer } from "mobx-react-lite"
@@ -19,6 +20,7 @@ import { useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { Button } from "@/components/shadcn-ui/button"
 import { Skeleton } from "@/components/shadcn-ui/skeleton"
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/shadcn-ui/sheet"
 import {
 	Empty,
 	EmptyContent,
@@ -105,6 +107,8 @@ function ResearchStudioPage() {
 	const [autoDetail, setAutoDetail] = useState<unknown>()
 	const [activeFileId, setActiveFileId] = useState<string | null>(null)
 	const [shareOpen, setShareOpen] = useState(false)
+	// Phones preview files in a full-screen popup over the page; desktop uses the files tab.
+	const [filePreviewOpen, setFilePreviewOpen] = useState(false)
 	const followedPhaseRef = useRef<string | null>(null)
 	const reportPaneRef = useRef<ResearchReportPaneRef>(null)
 	const conversationPanelRef = useRef<ImperativePanelHandle>(null)
@@ -176,10 +180,25 @@ function ResearchStudioPage() {
 		}
 	})
 
+	/**
+	 * Brings the file preview into view: the files tab on desktop, a popup on phones (the files tab
+	 * there is only the list). The preview mounts a moment later; callers wait for `detailRef`.
+	 */
+	const revealFiles = useMemoizedFn(() => {
+		if (isMobile) setFilePreviewOpen(true)
+		else showOutputs("files")
+	})
+
+	const closeFilePreview = useMemoizedFn(() => {
+		setFilePreviewOpen(false)
+		// A tool step opened from the conversation would otherwise reappear on the next preview.
+		setUserSelectDetail(undefined)
+	})
+
 	/** Files from the conversation open in the shared preview tab. */
 	const openFile = useMemoizedFn((fileItem?: unknown) => {
 		if (routeFile(fileItem)) return
-		showOutputs("files")
+		revealFiles()
 		setUserSelectDetail(undefined)
 		// The preview tab is force-mounted; wait for the panel to mount and have layout.
 		setTimeout(
@@ -190,7 +209,7 @@ function ResearchStudioPage() {
 
 	/** Tool results (search results, browser steps) open as a detail view in the same tab. */
 	const handleSelectDetail = useMemoizedFn((detail?: unknown) => {
-		showOutputs("files")
+		revealFiles()
 		setUserSelectDetail(detail)
 	})
 
@@ -202,7 +221,8 @@ function ResearchStudioPage() {
 		filesOpenedRef.current = false
 	}, [topicId])
 	useEffect(() => {
-		if (consoleTab !== "files" || filesOpenedRef.current) return
+		// On phones the files tab is just the list; a preview popup must never open by itself.
+		if (isMobile || consoleTab !== "files" || filesOpenedRef.current) return
 		// autoDetail is the conversation's latest tool step, pushed on load even when no tab shows it.
 		if (activeFileId || userSelectDetail) {
 			filesOpenedRef.current = true
@@ -211,14 +231,14 @@ function ResearchStudioPage() {
 		if (!defaultFile) return
 		filesOpenedRef.current = true
 		openFile(defaultFile)
-	}, [activeFileId, consoleTab, defaultFile, openFile, userSelectDetail])
+	}, [activeFileId, consoleTab, defaultFile, isMobile, openFile, userSelectDetail])
 
 	// Message cards open previews through pubsub (tool playback, file mentions, citations).
 	useResearchDetailEvents({
 		detailRef,
 		attachmentList: store.attachmentList,
 		routeFile,
-		revealFiles: () => showOutputs("files"),
+		revealFiles,
 		setActiveFileId,
 		setAutoDetail,
 	})
@@ -519,6 +539,19 @@ function ResearchStudioPage() {
 		</div>
 	)
 
+	// One preview instance: desktop shows it in the files tab, phones inside the popup below.
+	const filesPaneNode = (
+		<ResearchFilesPane
+			ref={detailRef}
+			userSelectDetail={userSelectDetail}
+			autoDetail={autoDetail}
+			setUserSelectDetail={setUserSelectDetail}
+			activeFileId={activeFileId}
+			onActiveFileChange={setActiveFileId}
+			onInterceptFile={routeFile}
+		/>
+	)
+
 	const consoleNode = isContentLoading ? (
 		<ResearchConsoleSkeleton />
 	) : (
@@ -579,17 +612,7 @@ function ResearchStudioPage() {
 					</>
 				) : null
 			}
-			filesPane={
-				<ResearchFilesPane
-					ref={detailRef}
-					userSelectDetail={userSelectDetail}
-					autoDetail={autoDetail}
-					setUserSelectDetail={setUserSelectDetail}
-					activeFileId={activeFileId}
-					onActiveFileChange={setActiveFileId}
-					onInterceptFile={routeFile}
-				/>
-			}
+			filesPane={filesPaneNode}
 		/>
 	)
 
@@ -618,6 +641,43 @@ function ResearchStudioPage() {
 			onOpenInterview={handleOpenInterview}
 			side={isMobile ? "bottom" : "center"}
 		/>
+	)
+
+	// Phones: a tap on a file (list, message link, mention, tool step) previews it here, full screen.
+	const filePreviewSheet = (
+		<Sheet
+			open={isMobile && filePreviewOpen}
+			onOpenChange={(open) => (open ? setFilePreviewOpen(true) : closeFilePreview())}
+		>
+			<SheetContent
+				side="bottom"
+				showClose={false}
+				className="z-drawer flex h-[calc(100dvh-24px)] flex-col gap-0 rounded-t-2xl p-0"
+				overlayClassName="z-drawer"
+				data-testid="persona-research-file-preview"
+			>
+				<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-2">
+					<SheetTitle className="min-w-0 flex-1 truncate text-sm font-semibold">
+						{t("files.previewTitle")}
+					</SheetTitle>
+					<SheetDescription className="sr-only">
+						{t("files.previewDescription")}
+					</SheetDescription>
+					<Button
+						variant="ghost"
+						size="icon"
+						className="size-8"
+						aria-label={t("common.close")}
+						onClick={closeFilePreview}
+					>
+						<X className="size-4" />
+					</Button>
+				</div>
+				<div className="min-h-0 flex-1 pb-[env(safe-area-inset-bottom)]">
+					{filesPaneNode}
+				</div>
+			</SheetContent>
+		</Sheet>
 	)
 
 	if (isMobile) {
@@ -655,6 +715,7 @@ function ResearchStudioPage() {
 					{consoleNode}
 				</div>
 				{sheet}
+				{filePreviewSheet}
 			</div>
 		)
 	}
