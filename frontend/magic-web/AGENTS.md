@@ -69,7 +69,6 @@ Instruction priority: system/developer instructions and the user's request take 
   - A new or moved mobile route is registered in `src/pages/superMagicMobile/layout/MainLayout/resolveEmbeddedShellState.ts` (mobile shell, sidebar entry, generic header) and covered by its test. Pages that draw their own header must not also show the generic header; a top-level page needs the `MobileShellSidebarToggleButton`, a detail page needs a back control, and back and sibling navigation go through route names.
   - Rows of controls wrap or stack on narrow screens instead of squeezing text; tap targets are comfortable (about 40px or more); icon-only controls carry an accessible name.
   - Desktop-only hints (keyboard shortcuts, hover text) are not shown on mobile, and mobile-only UI is not mounted on desktop (lazy-load it when its dependencies are heavy).
-  - If `enterprise/src/` overrides the touched file, the overlay is adapted for both widths too.
 - When touching MobX stores, ensure actions remain pure and derivations are memoized where necessary.
 - Keep business logic out of presentation components—place it in services or hooks.
 - **Commentary**: All code contributions must include guiding comments for:
