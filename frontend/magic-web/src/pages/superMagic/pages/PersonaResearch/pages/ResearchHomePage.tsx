@@ -339,7 +339,7 @@ function ResearchHomePage() {
 											// this rounded card) around a white shadowed pill. Flatten both so the input and the
 											// settings below read as one surface. Tied to the dock's markup in MobileComposer.
 											isMobile &&
-												"[&>div:first-child>.rounded-3xl]:!bg-transparent [&>div:first-child>.rounded-3xl]:!shadow-none [&>div:first-child]:!bg-transparent [&>div:first-child]:!p-0 [&_[data-testid=mobile-composer-header]]:px-3 [&_[data-testid=mobile-composer-header]]:pt-2.5",
+												"[&>div:first-child>.rounded-3xl]:!bg-transparent [&>div:first-child>.rounded-3xl]:!shadow-none [&>div:first-child>.rounded-3xl]:!ring-0 [&>div:first-child]:!bg-transparent [&>div:first-child]:!p-0 [&_[data-testid=mobile-composer-header]]:px-3 [&_[data-testid=mobile-composer-header]]:pt-2.5",
 											styles.enter,
 										)}
 										style={enterDelay(170)}
