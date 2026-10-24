@@ -314,7 +314,7 @@ function ResearchHomePage() {
 										// this rounded card) around a white shadowed pill. Flatten both so the input and the
 										// settings below read as one surface. Tied to the dock's markup in MobileComposer.
 										isMobile &&
-											"[&>div:first-child>.rounded-3xl]:!bg-transparent [&>div:first-child>.rounded-3xl]:!shadow-none [&>div:first-child]:!bg-transparent [&>div:first-child]:!p-0",
+											"[&>div:first-child>.rounded-3xl]:!bg-transparent [&>div:first-child>.rounded-3xl]:!shadow-none [&>div:first-child]:!bg-transparent [&>div:first-child]:!p-0 [&_[data-testid=mobile-composer-header]]:px-3 [&_[data-testid=mobile-composer-header]]:pt-2.5",
 										styles.enter,
 									)}
 									style={enterDelay(170)}
@@ -338,18 +338,21 @@ function ResearchHomePage() {
 										onChange={updateOptions}
 										reportTemplate={reportTemplateOption}
 										guideAnchor={ResearchOnboardingAnchor.HomeSettings}
-										// Below 480px the chips form a two-column grid instead of ragged wrapped rows.
+										// Phones: a tidy two-column grid of tiles under a hairline, left edge in line
+										// with the text above, instead of ragged wrapped chips.
 										className={cn(
-											"pb-3 pt-1.5",
 											isMobile
-												? "px-3 max-[479px]:grid max-[479px]:grid-cols-2"
-												: "px-2.5",
+												? "grid grid-cols-2 gap-2 border-t border-border px-4 pb-4 pt-3"
+												: "px-2.5 pb-3 pt-1.5",
 										)}
 										pickedCount={store.studyPersonaPicks.length}
 										trailing={
 											isMobile ? (
-												<div className="flex justify-end max-[479px]:col-span-2">
-													<StudyPersonaPicks onPickMore={openLibrary} />
+												<div className="col-span-2">
+													<StudyPersonaPicks
+														onPickMore={openLibrary}
+														fullWidth
+													/>
 												</div>
 											) : (
 												<StudyPersonaPicks onPickMore={openLibrary} />
@@ -357,23 +360,41 @@ function ResearchHomePage() {
 										}
 									/>
 								</div>
-								{/* What every study promises, in place of decorative value-prop tiles. */}
+								{/* What every study promises, in place of decorative value-prop tiles. Phones get a small
+								    grouped list; three loose grey lines under the card looked unfinished. */}
 								<div
 									className={cn(
-										"mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground",
+										isMobile
+											? "mt-3 flex flex-col rounded-xl bg-muted/40 px-3.5 text-[13px] text-foreground/75 [&>span:not(:last-child)]:border-b [&>span:not(:last-child)]:border-border/60 [&>span]:py-2.5"
+											: "mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-muted-foreground",
 										styles.enter,
 									)}
 									style={enterDelay(220)}
 								>
-									<span className="inline-flex items-center gap-1.5">
+									<span
+										className={cn(
+											"inline-flex items-center",
+											isMobile ? "gap-2.5" : "gap-1.5",
+										)}
+									>
 										<ListChecks className="size-3.5" />
 										{t("home.promise.clarify")}
 									</span>
-									<span className="inline-flex items-center gap-1.5">
+									<span
+										className={cn(
+											"inline-flex items-center",
+											isMobile ? "gap-2.5" : "gap-1.5",
+										)}
+									>
 										<Quote className="size-3.5" />
 										{t("home.promise.quotes")}
 									</span>
-									<span className="inline-flex items-center gap-1.5">
+									<span
+										className={cn(
+											"inline-flex items-center",
+											isMobile ? "gap-2.5" : "gap-1.5",
+										)}
+									>
 										<ClipboardCheck className="size-3.5" />
 										{t("home.promise.validate")}
 									</span>

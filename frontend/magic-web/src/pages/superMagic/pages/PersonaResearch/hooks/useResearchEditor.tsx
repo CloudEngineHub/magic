@@ -180,6 +180,8 @@ export function useResearchEditor({
 			topicModelStore,
 			enableMessageSendByContent: true,
 			showModeToggle: false,
+			// The desktop editor carries the model picker; the phone composer shows it only on request.
+			showModelSelector: isMobile,
 			allowChangeMode: false,
 			containerClassName: isMobile
 				? undefined

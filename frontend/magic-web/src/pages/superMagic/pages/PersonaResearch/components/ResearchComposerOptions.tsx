@@ -284,11 +284,46 @@ const OptionChip = forwardRef<
 		valueLabel: string
 		active: boolean
 		showAuto: boolean
-		/** Phones below 480px lay the chips out in a two-column grid, so each chip fills its cell. */
-		fill?: boolean
+		/**
+		 * Phones show each setting as a tile (name above, current value below) that fills its grid
+		 * cell: a bare "Report" or "User research" chip does not say which setting it is.
+		 */
+		tile?: boolean
 	} & ComponentPropsWithoutRef<"button">
->(function OptionChip({ icon, label, valueLabel, active, showAuto, fill, ...buttonProps }, ref) {
+>(function OptionChip({ icon, label, valueLabel, active, showAuto, tile, ...buttonProps }, ref) {
 	const { t } = useTranslation("personaResearch")
+	if (tile) {
+		return (
+			<button
+				ref={ref}
+				type="button"
+				aria-label={`${label}: ${valueLabel}`}
+				{...buttonProps}
+				className={cn(
+					"flex h-14 w-full min-w-0 flex-col justify-center gap-0.5 rounded-xl bg-muted/60 px-3 text-left outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25 max-[340px]:px-2.5",
+					PRESSABLE,
+				)}
+			>
+				<span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground [&_svg]:size-3">
+					{icon}
+					<span className="truncate">{label}</span>
+				</span>
+				<span className="flex items-center gap-1">
+					<span
+						className={cn(
+							"min-w-0 flex-1 truncate text-[13px] leading-5",
+							// "Auto" is the unset state: quieter than a value the user picked.
+							active ? "font-medium text-foreground" : "text-muted-foreground",
+						)}
+					>
+						{valueLabel}
+					</span>
+					{/* Dropped on ~320px phones so the value gets the width. */}
+					<ChevronDown className="size-3.5 shrink-0 opacity-60 max-[340px]:hidden" />
+				</span>
+			</button>
+		)
+	}
 	return (
 		<button
 			ref={ref}
@@ -302,21 +337,13 @@ const OptionChip = forwardRef<
 				active
 					? "bg-muted text-foreground"
 					: "text-muted-foreground hover:bg-muted hover:text-foreground",
-				fill && "max-[479px]:w-full",
 				PRESSABLE,
 			)}
 		>
 			{icon}
 			{/* Short chips so all settings fit one row: the value alone once it is set,
 			    else the setting's name, plus "· Auto" where there is room. */}
-			<span
-				className={cn(
-					"max-w-[10em] truncate",
-					active && "font-medium",
-					// In a grid cell the name takes the free width so the chevron sits at the cell's edge.
-					fill && "max-[479px]:flex-1 max-[479px]:text-left",
-				)}
-			>
+			<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
 				{active ? valueLabel : label}
 			</span>
 			{!active && showAuto ? <span className="opacity-70">· {t("options.auto")}</span> : null}
@@ -439,7 +466,7 @@ function OptionMenu({
 					valueLabel={valueLabel}
 					active={active}
 					showAuto={showAuto}
-					fill
+					tile
 					onClick={() => onOpenChange(true)}
 				/>
 				<ActionDrawer
