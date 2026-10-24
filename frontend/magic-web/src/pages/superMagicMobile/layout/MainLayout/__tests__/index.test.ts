@@ -35,7 +35,7 @@ describe("resolveEmbeddedShellState", () => {
 	])("uses the mobile shell without the legacy header for AI research %s", (pathname) => {
 		expect(resolveEmbeddedShellState(pathname)).toEqual({
 			enabled: true,
-			activeView: "aiResearch",
+			activeView: "personaResearch",
 			testIdPrefix: "mobile-persona-research-page",
 			showMainHeader: false,
 		})

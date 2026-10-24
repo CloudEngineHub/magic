@@ -27,7 +27,7 @@ export function resolveEmbeddedShellState(pathname: string): EmbeddedMobileShell
 	if (matchPath(`/:clusterCode${RoutePath.PersonaResearch}/*`, pathname)) {
 		return {
 			enabled: true,
-			activeView: "aiResearch",
+			activeView: "personaResearch",
 			testIdPrefix: "mobile-persona-research-page",
 			showMainHeader: false,
 		}
