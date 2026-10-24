@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useSearchParams } from "react-router-dom"
 import { ProjectStateRepository } from "@/models/config/repositories/SuperProjectStateRepository"
 import type {
+	CachedMicroAppTab,
 	CachedTabItem,
 	FileManagerSnapshot,
 	ProjectFileManagerSnapshot,
@@ -308,6 +309,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		closePublishedMicroAppTab: closePublishedMicroAppTabOriginal,
 		isPublishedMicroAppTab,
 		deactivateAllPublishedMicroAppTabs,
+		restorePublishedMicroAppTabs,
 	} = usePublishedMicroAppTab(viewerProjectId)
 
 	// 当前是否有激活的预览 tab（文件 / 知识库 / 微应用）
@@ -1495,9 +1497,23 @@ export function useFilesViewer(props: FilesViewerProps) {
 						? normalizeProjectTabItem(activeSourceTab, attachments).id
 						: cachedActiveTabId
 
-					const restoreActive =
+					const canRestoreActive =
 						!projectRestoreState.current.interacted &&
 						!preserveUserActiveOnProjectRestore.current
+					// 微应用 Tab 不在文件 reducer 内；它是缓存中的激活项时，文件 Tab 不再抢占激活态。
+					const microAppRestoresActive =
+						canRestoreActive &&
+						Boolean(cachedState.fileState.microAppTabs?.some((tab) => tab.active))
+					const restoreActive = canRestoreActive && !microAppRestoresActive
+					if (cachedState.fileState.microAppTabs?.length) {
+						restorePublishedMicroAppTabs(cachedState.fileState.microAppTabs, {
+							restoreActive: microAppRestoresActive,
+						})
+						if (microAppRestoresActive) {
+							updatePlaybackTab({ active: false })
+							deactivateAllKnowledgeBaseTabs()
+						}
+					}
 					dispatchTabs({
 						type: TabActionType.RESTORE_PROJECT_TABS,
 						payload: {
@@ -1579,6 +1595,9 @@ export function useFilesViewer(props: FilesViewerProps) {
 		cacheLoaded,
 		projectStateRepository,
 		openPlaybackTab,
+		restorePublishedMicroAppTabs,
+		updatePlaybackTab,
+		deactivateAllKnowledgeBaseTabs,
 		userFileTabsLoaded,
 		userIdentityKey,
 		isProjectSwitching,
@@ -1957,6 +1976,12 @@ export function useFilesViewer(props: FilesViewerProps) {
 				display_config: tab.display_config,
 			}
 		})
+		const cachedMicroAppTabs: CachedMicroAppTab[] = publishedMicroAppTabs.map((tab) => ({
+			appId: tab.data.appId,
+			appName: tab.data.appName,
+			active: tab.active,
+			createdAt: tab.create_at,
+		}))
 		const savedPlaybackExists = Boolean(playbackTab)
 		const savedPlaybackActive = playbackTab?.active || false
 		const preservePositions = Boolean(viewerProjectId && (!cacheLoaded || isProjectSwitching))
@@ -1989,6 +2014,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 				)
 				await projectStateRepository.updateFileState(savedOrganization, savedProjectId, {
 					tabs: cachedTabs,
+					microAppTabs: cachedMicroAppTabs,
 					tabOrder: persistableTabs.map((tab) => tab.id),
 					activeTabId: persistedActiveTabId,
 					fileManagerState:
@@ -2015,6 +2041,7 @@ export function useFilesViewer(props: FilesViewerProps) {
 		isProjectSwitching,
 		projectStateRepository,
 		playbackTab,
+		publishedMicroAppTabs,
 		persistFileTabs,
 		isShareRoute,
 		isFileShare,
