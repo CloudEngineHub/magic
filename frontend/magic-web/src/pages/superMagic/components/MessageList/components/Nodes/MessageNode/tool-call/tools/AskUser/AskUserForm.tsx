@@ -88,6 +88,9 @@ const ASK_USER_INPUT_MAX_HEIGHT = 200
 const askUserInputClass = `min-h-16 w-full max-h-[200px] min-w-0 resize-none overflow-hidden rounded-md border border-border bg-background px-2 py-1 text-left text-sm font-normal leading-5 text-foreground shadow-none outline-none placeholder:text-sm placeholder:text-muted-foreground focus-visible:border-border focus-visible:!ring-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm ${askUserScrollAreaClass}`
 const askUserOptionControlBase =
 	"mt-0.5 size-4 shrink-0 border border-input bg-background shadow-xs focus-visible:ring-1 focus-visible:ring-ring/50"
+// The "other" row holds a 28px-tall input, so its control drops to 6px (not 2px) to sit on the
+// input's vertical center; the textarea grows downward and the control stays on the first line.
+const askUserOtherControlClass = "mt-1.5"
 const askUserOptionRowClass = "flex min-h-6 cursor-pointer items-start gap-2 py-0.5"
 
 function formatAnswerForDisplay(value?: AnswerValue | null) {
@@ -814,6 +817,7 @@ const SelectField = memo(function SelectField({
 							className={cn(
 								askUserOptionControlBase,
 								"rounded-full text-foreground [&_svg]:fill-primary",
+								isOther && askUserOtherControlClass,
 							)}
 						/>
 						{isOther ? (
@@ -968,6 +972,7 @@ const MultiSelectField = memo(function MultiSelectField({
 								className={cn(
 									askUserOptionControlBase,
 									"rounded-[4px] data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+									isOther && askUserOtherControlClass,
 								)}
 							/>
 							{isOther ? (

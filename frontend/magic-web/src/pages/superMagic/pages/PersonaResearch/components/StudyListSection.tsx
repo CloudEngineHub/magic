@@ -38,6 +38,8 @@ interface StudyListSectionProps {
 	 */
 	variant?: "home" | "page"
 	onViewAll?: () => void
+	/** Off on phones' home, where a pinned section bar takes over and a jump needs a free heading. */
+	stickyHeader?: boolean
 }
 
 /**
@@ -51,6 +53,7 @@ function StudyListSection({
 	onTrySample,
 	variant = "home",
 	onViewAll,
+	stickyHeader = true,
 }: StudyListSectionProps) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
@@ -86,9 +89,11 @@ function StudyListSection({
 				className={cn(
 					// Sticks under the top of the scroll area; the translucent fill and hairline keep
 					// rows readable as they pass beneath it.
-					"sticky top-0 z-10 -mx-2 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/90 px-2 py-3 backdrop-blur",
+					"-mx-2 flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background/90 px-2 py-3 backdrop-blur",
+					stickyHeader && "sticky top-0 z-10",
 					variant === "page" && "justify-end",
 				)}
+				data-pin-id={variant === "home" ? "studies" : undefined}
 				data-guide-anchor={
 					variant === "home" ? ResearchOnboardingAnchor.HomeStudies : undefined
 				}

@@ -45,12 +45,6 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		nativeRecordingTab: "ai_recording",
 	},
 	{
-		key: "personaResearch",
-		icon: UsersRound,
-		labelKey: "mobile.shell.navPersonaResearch",
-		routeName: RouteName.PersonaResearch,
-	},
-	{
 		key: "myCrew",
 		icon: Bot,
 		labelKey: "mobile.shell.navMyCrew",
@@ -64,11 +58,18 @@ export const BASE_SUPER_MOBILE_SHELL_NAV_ITEMS: SuperMobileShellNavConfigItem[] 
 		requiredPermissionCode: FUNCTION_PERMISSION_CODE.MagicClawAccess,
 	},
 	{
-		// Directly above micro-apps, matching the desktop sidebar's AI canvas entry icon.
+		// Above AI research and micro-apps, matching the desktop sidebar's AI canvas entry icon.
 		key: "aiCanvas",
 		icon: Palette,
 		labelKey: "mobile.shell.navAiCanvas",
 		routeName: RouteName.AiCanvas,
+	},
+	{
+		// Directly below AI canvas, as on the desktop sidebar.
+		key: "personaResearch",
+		icon: UsersRound,
+		labelKey: "mobile.shell.navPersonaResearch",
+		routeName: RouteName.PersonaResearch,
 	},
 	{
 		key: "microApps",

@@ -164,7 +164,10 @@ export function useResearchEditor({
 			layoutConfig: isMobile ? MOBILE_LAYOUT_CONFIG : DEFAULT_LAYOUT_CONFIG,
 			placeholder: selectedTopic
 				? t("composer.followUpPlaceholder")
-				: t("composer.newStudyPlaceholder"),
+				: isMobile
+					? // Touch keyboards have no Enter-to-send or Shift+Enter, so the hint is desktop-only.
+						t("composer.newStudyPlaceholderMobile")
+					: t("composer.newStudyPlaceholder"),
 			showLoading,
 			isTaskRunning: canInterruptTask,
 			stopEventLoading,
@@ -177,6 +180,8 @@ export function useResearchEditor({
 			topicModelStore,
 			enableMessageSendByContent: true,
 			showModeToggle: false,
+			// The desktop editor carries the model picker; the phone composer shows it only on request.
+			showModelSelector: isMobile,
 			allowChangeMode: false,
 			containerClassName: isMobile
 				? undefined

@@ -855,6 +855,9 @@ function TopicSharePopover({
 				>
 					<TopicSharePopoverContent
 						fileListOffHint={fileListOffHint}
+						// Same inner padding as the desktop popover and the trigger-less sheet; without it
+						// the switches, link box and buttons ran into the sheet's edges.
+						className="p-3.5"
 						topicId={topicId}
 						topicTitle={topicTitle}
 						onSaveSuccess={onSaveSuccess}

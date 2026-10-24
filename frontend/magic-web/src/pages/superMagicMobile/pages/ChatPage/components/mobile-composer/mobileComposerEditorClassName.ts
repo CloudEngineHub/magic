@@ -11,7 +11,9 @@ const baseEditorClassName = cn(
 	"max-h-[100px] min-h-0 overflow-hidden text-sm text-foreground",
 	"[&_.ProseMirror]:m-0 [&_.ProseMirror]:max-h-[100px] [&_.ProseMirror]:overflow-y-auto",
 	"[&_.ProseMirror]:break-words [&_.ProseMirror]:text-sm [&_.ProseMirror]:outline-none",
-	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0",
+	// overflow-wrap:anywhere (not break-all) still wraps long URLs and CJK text anywhere, but moves
+	// whole English words to the next line instead of splitting them mid-letter.
+	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:[overflow-wrap:anywhere]",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:pointer-events-none",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:block",
 	"[&_.ProseMirror_.is-editor-empty:first-child::before]:w-full",

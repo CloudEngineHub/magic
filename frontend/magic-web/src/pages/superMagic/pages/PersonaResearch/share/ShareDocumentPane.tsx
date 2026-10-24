@@ -38,7 +38,7 @@ function ShareDocumentPane({ file }: { file: AttachmentItem | null }) {
 	}
 	if (getAttachmentPath(file).endsWith(".html")) return <HtmlDocument file={file} />
 	return (
-		<ScrollArea className="h-full">
+		<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
 			<div className="mx-auto max-w-3xl p-5 text-sm">
 				<MarkdownFilePane file={file} copyable />
 			</div>

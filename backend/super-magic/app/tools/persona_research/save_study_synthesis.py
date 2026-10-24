@@ -11,11 +11,12 @@
 | 立场补全                   | Theme Coding                   | 没写到的已访谈人设补成 not_mentioned                   |
 | 饱和度                     | Saturation                     | 按 panel.json 顺序数每份完成访谈首次出现的主题数       |
 | 可信度上限                 | Theme Confidence Rules         | 外部来源不够时下调，并在 confidence_reason 写明         |
-| 结论上限                   | Hypothesis Verdict Rules       | 只有 AI 访谈支撑的 supported/refuted 改为 mixed         |
+| 结论上限                   | Hypothesis Verdict Rules       | 只有 AI 访谈支撑的 supported/refuted 改为 mixed；不足 3 人谈到且无来源 → insufficient |
 | 降权访谈                   | Downweighting                  | inferred_ratio ≥ 0.4 的访谈不能单独撑起 high/medium     |
 | 被问到才说                 | Prompted Answers               | 引文全是 prompted 的主题最高 low；引文旁记录所答的问题 |
 | 支付意愿                   | Theme Confidence Rules         | about_willingness_to_pay 的主题未经真人验证 → to_validate |
-| 来源要说同一件事           | Hypothesis Verdict Rules       | supported/refuted 需要至少 1 条 covers=core 的来源     |
+| 来源要说同一件事           | Hypothesis Verdict Rules       | supported/refuted 需要至少 1 条 covers=core 的来源；关联假设都没有 core 来源的主题最高 medium |
+| 核对记录                   | Quote Checks                   | 删掉的引文、忽略的来源、规则调整写进 synthesis.json checks，报告局限据此填写 |
 | 同质化                     | Homogeneity                    | 全员一致的主题过半时警告，并把这些主题 high 降为 medium |
 
 为什么加后四条（2026-10 对 6 项真实研究的复盘）：录音卡研究 12 个主题零反对、第一位受访者
@@ -314,6 +315,11 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
     def sources(refs: List[str]) -> List[str]:
         return [ref.strip() for ref in refs if known_source(ref)]
 
+    # 有 covers=core 来源的假设；关联假设都不在其中的主题不能评 high（见 _cap_confidence）。
+    core_hypotheses = {
+        item.id for item in params.hypotheses
+        if any(s.covers == SourceCoverage.CORE and s.ref.strip() in source_ids for s in item.sources)
+    }
     segments = _segments(study, params.segments)
     segment_ids = {segment["name"]: segment["id"] for segment in segments}
     validated = {h.id for h in study.hypotheses if h.validation and h.validation.verdict == Agreement.AGREE}
@@ -330,7 +336,8 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
         located = quotes(theme.quotes)
         refs = sources(theme.source_refs)
         confidence, reason = _cap_confidence(
-            theme, theme_id, refs, located, downweighted, bool(validated & set(theme.hypothesis_ids)), outcome
+            theme, theme_id, refs, located, downweighted, bool(validated & set(theme.hypothesis_ids)),
+            bool(core_hypotheses & set(theme.hypothesis_ids)), outcome,
         )
         themes.append({
             "id": theme_id,
@@ -357,7 +364,7 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
             "quote_refs": [_quote_ref(item) for item in quotes(dimension.quotes)],
         })
 
-    _apply_verdicts(study, params.hypotheses, quotes, known_source, outcome)
+    _apply_verdicts(study, params.hypotheses, themes, quotes, known_source, outcome)
     outcome.saturation, outcome.saturated = await _saturation(study_path, interviews, params.themes)
     return {
         "schema_version": SCHEMA_VERSION,
@@ -366,6 +373,14 @@ async def _build(study_path: Path, study: Study, params: SaveStudySynthesisParam
         "dimensions": dimensions,
         "saturation": {"new_themes_per_interview": outcome.saturation, "saturated": outcome.saturated},
         "homogeneity": {"unanimous_theme_ids": outcome.unanimous, "warning": outcome.homogeneity_warning},
+        # 只在工具返回里出现的核对结果，写报告时往往已不在上下文里；落盘后局限一节能照实填写。
+        "checks": {
+            "quotes_total": outcome.quotes_total,
+            "removed_quotes": outcome.dropped_quotes,
+            "ignored_source_refs": outcome.dropped_sources,
+            "adjustments": outcome.adjustments,
+            "downweighted_interviews": outcome.downweighted,
+        },
     }
 
 
@@ -400,6 +415,7 @@ def _cap_confidence(
     located: List[_Located],
     downweighted: set[str],
     validated: bool,
+    core_covered: bool,
     outcome: _Outcome,
 ) -> tuple[str, str]:
     """按 methods.md 的可信度规则给出上限；只下调，不上调。规则按下表顺序取第一条命中的。
@@ -410,6 +426,10 @@ def _cap_confidence(
     | 关于支付意愿，且未经真人验证           | to_validate |
     | 没有外部来源，且未经真人验证           | to_validate |
     | 要 high 但只有 1 个外部来源            | medium      |
+    | 要 high，关联的假设都没有 core 来源    | medium      |
+
+    最后一条的例子：主题「换工具先问要不要多一步」挂了 2 个来源，但它关联的 H3 没有任何来源
+    直接说明换工具时最先担心什么，2 个来源只是背景 → 最高 medium。
     """
     requested = theme.confidence
     allowed = requested
@@ -427,6 +447,10 @@ def _cap_confidence(
             allowed, rule_zh, rule_en = Confidence.TO_VALIDATE, "只有 AI 访谈支持，没有外部来源", "supported by AI interviews only"
         elif requested == Confidence.HIGH and len(refs) < 2 and not validated:
             allowed, rule_zh, rule_en = Confidence.MEDIUM, "只有 1 个外部来源", "only one external source agrees"
+        elif requested == Confidence.HIGH and theme.hypothesis_ids and not core_covered and not validated:
+            allowed, rule_zh, rule_en = (
+                Confidence.MEDIUM, "关联的假设没有来源直接说明核心主张", "no source states the core claim of its hypotheses"
+            )
     reason = theme.confidence_reason.strip()
     if allowed != requested:
         outcome.adjustments.append(f"{theme_id} confidence {requested.value} -> {allowed.value}: {rule_en}")
@@ -467,9 +491,17 @@ def _apply_homogeneity(themes: List[Dict[str, Any]], interviewed: int, outcome: 
             )
 
 
-def _apply_verdicts(study: Study, items: List[HypothesisVerdictInput], quotes, known_source, outcome: _Outcome) -> None:
-    """写入假设结论。supported/refuted 需要至少 1 条 covers=core 的外部来源，否则降为 mixed。
+def _apply_verdicts(
+    study: Study, items: List[HypothesisVerdictInput], themes: List[Dict[str, Any]], quotes, known_source, outcome: _Outcome
+) -> None:
+    """写入假设结论，按 methods.md 的结论规则只下调、不上调。
 
+    | 情况                                         | 结论上限     | 原因前缀       |
+    | 谈到它的受访者不足 3 人，且没有任何外部来源  | insufficient | 无             |
+    | supported/refuted 但没有 covers=core 的来源  | mixed        | 待真人验证     |
+    | 模型直接给 mixed，也没有 covers=core 的来源  | mixed        | 待真人验证     |
+
+    「谈到它的受访者」= 该结论引文的说话人 ∪ 关联此假设的主题里立场不是 not_mentioned 的人。
     例：H「规则比价格更阻碍办卡」，来源 S1 只记录了自动续费投诉（context）→ mixed，
     原因前加「待真人验证：」；若 S7 的调查直接显示多数人因规则放弃（core）→ 保留 supported。
     """
@@ -482,11 +514,23 @@ def _apply_verdicts(study: Study, items: List[HypothesisVerdictInput], quotes, k
         located = quotes(item.quotes)
         cited = [source for source in item.sources if known_source(source.ref)]
         legacy = [ref.strip() for ref in item.source_refs if known_source(ref)]
+        has_core = any(s.covers == SourceCoverage.CORE for s in cited)
+        addressed = {entry.persona_id for entry in located} | {
+            pid
+            for theme in themes if item.id in theme["hypothesis_ids"]
+            for pid, stance in theme["stance_by_persona"].items() if stance != Stance.NOT_MENTIONED.value
+        }
         verdict, reason = item.verdict, item.verdict_reason.strip()
-        if verdict in (Verdict.SUPPORTED, Verdict.REFUTED) and not any(s.covers == SourceCoverage.CORE for s in cited):
+        if verdict not in (Verdict.PENDING, Verdict.INSUFFICIENT) and len(addressed) < 3 and not cited and not legacy:
+            outcome.adjustments.append(
+                f"{item.id} verdict {verdict.value} -> insufficient: {len(addressed)} interviewees address it and no source covers it"
+            )
+            verdict = Verdict.INSUFFICIENT
+        elif verdict in (Verdict.SUPPORTED, Verdict.REFUTED) and not has_core:
             rule = "supported by AI interviews only" if not cited and not legacy else "no source states the core claim"
             outcome.adjustments.append(f"{item.id} verdict {verdict.value} -> mixed: {rule}")
             verdict = Verdict.MIXED
+        if verdict == Verdict.MIXED and not has_core:
             prefix = "待真人验证：" if _CJK.search(reason) else "Pending real-person validation: "
             if not reason.startswith(prefix.strip(": ：")):
                 reason = prefix + reason
@@ -497,6 +541,7 @@ def _apply_verdicts(study: Study, items: List[HypothesisVerdictInput], quotes, k
             + [{"kind": "source", "ref": s.ref.strip(), "claim": s.claim.strip(), "covers": s.covers.value} for s in cited]
             + [{"kind": "source", "ref": ref} for ref in legacy]
         )
+
 
 async def _saturation(study_path: Path, interviews: Dict[str, Transcript], themes: List[ThemeInput]) -> tuple[List[int], bool]:
     """按 panel.json 顺序，数每份完成的一对一访谈里首次出现的主题数；最后两项都是 0 才算饱和。

@@ -824,6 +824,7 @@ async def test_synthesis_locates_quotes_caps_rules_and_counts_saturation(tmp_pat
                      "quotes": [{"persona_id": "p_b_0002", "text": "Too expensive for me."}]}],
         hypotheses=[
             {"id": "H1", "verdict": "supported", "verdict_reason": "Most agree.",
+             "sources": [{"ref": "S1", "claim": "Owners value long relationships.", "covers": "context"}],
              "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount."}]},
             {"id": "H2", "verdict": "refuted", "verdict_reason": "S2 contradicts it.",
              "sources": [{"ref": "S2", "claim": "Most buyers wait for a friend's verdict.", "covers": "core"}],
@@ -853,7 +854,17 @@ async def test_synthesis_locates_quotes_caps_rules_and_counts_saturation(tmp_pat
     hypotheses = {h["id"]: h for h in _read(tmp_path, f"{study_dir}/study.json")["hypotheses"]}
     assert hypotheses["H1"]["verdict"] == "mixed"
     assert hypotheses["H1"]["verdict_reason"].startswith("Pending real-person validation")
-    assert hypotheses["H1"]["evidence_refs"] == [{"kind": "quote", "persona_id": "p_a_0001", "round_index": 3, "text": "Arguing costs more than the discount.", "prompted": False}]
+    assert hypotheses["H1"]["evidence_refs"] == [
+        {"kind": "quote", "persona_id": "p_a_0001", "round_index": 3, "text": "Arguing costs more than the discount.", "prompted": False},
+        {"kind": "source", "ref": "S1", "claim": "Owners value long relationships.", "covers": "context"},
+    ]
+    # 删掉的引文和规则调整落盘，写报告局限时不依赖工具返回文本。
+    checks = synthesis["checks"]
+    assert checks["quotes_total"] == 6
+    assert checks["removed_quotes"] == ["p_a_0001: Something never said"]
+    assert checks["ignored_source_refs"] == ["S9"]
+    assert any(item.startswith("H1 verdict supported -> mixed") for item in checks["adjustments"])
+    assert checks["downweighted_interviews"] == ["p_b_0002"]
     assert hypotheses["H2"]["verdict"] == "refuted"
     assert hypotheses["H2"]["evidence_refs"][0]["file"] == "discussions/fg_1.json"
     assert hypotheses["H2"]["evidence_refs"][1] == {"kind": "source", "ref": "S2", "claim": "Most buyers wait for a friend's verdict.", "covers": "core"}
@@ -896,6 +907,60 @@ async def test_verdict_needs_a_source_that_states_the_core_claim(tmp_path):
     assert hypotheses["H1"]["evidence_refs"] == [{"kind": "source", "ref": "S1", "claim": "有人投诉自动续费。", "covers": "context"}]
     assert hypotheses["H2"]["verdict"] == "mixed"
     assert "no source states the core claim" in result.content
+
+
+async def test_verdict_without_interviews_or_sources_is_insufficient_and_mixed_gets_prefix(tmp_path):
+    study_dir = await _report_ready(tmp_path)
+
+    result = await SaveStudySynthesis(base_dir=tmp_path).execute(ToolContext(), SaveStudySynthesisParams(
+        study_dir=study_dir,
+        segments=[{"name": "Owners", "persona_ids": ["p_a_0001"]}],
+        themes=[{"name": "x", "stance_by_persona": {"p_a_0001": "support"}, "hypothesis_ids": ["H1"], "confidence": "low"}],
+        hypotheses=[
+            # 只有 1 位受访者谈到、没有任何来源：即使模型给 supported，也只能是 insufficient。
+            {"id": "H1", "verdict": "supported", "verdict_reason": "Licensing matters.",
+             "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount."}]},
+            # 模型直接给 mixed、没有 core 来源：同样要加「待真人验证」前缀。
+            {"id": "H2", "verdict": "mixed", "verdict_reason": "说法不一。",
+             "sources": [{"ref": "S2", "claim": "有人在等朋友评价。", "covers": "context"}]},
+        ],
+    ))
+
+    assert result.ok is True, result.content
+    hypotheses = {h["id"]: h for h in _read(tmp_path, f"{study_dir}/study.json")["hypotheses"]}
+    assert hypotheses["H1"]["verdict"] == "insufficient"
+    assert hypotheses["H1"]["verdict_reason"] == "Licensing matters."
+    assert "H1 verdict supported -> insufficient" in result.content
+    assert hypotheses["H2"]["verdict"] == "mixed"
+    assert hypotheses["H2"]["verdict_reason"] == "待真人验证：说法不一。"
+
+
+async def test_high_theme_needs_a_core_source_for_its_hypotheses(tmp_path):
+    study_dir = await _report_ready(tmp_path)
+
+    await SaveStudySynthesis(base_dir=tmp_path).execute(ToolContext(), SaveStudySynthesisParams(
+        study_dir=study_dir,
+        segments=[{"name": "Owners", "persona_ids": ["p_a_0001"]}],
+        themes=[
+            {"name": "Background only", "stance_by_persona": {"p_a_0001": "support"},
+             "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount."}],
+             "source_refs": ["S1", "S2"], "hypothesis_ids": ["H1"], "confidence": "high"},
+            {"name": "Core covered", "stance_by_persona": {"p_a_0001": "support"},
+             "quotes": [{"persona_id": "p_a_0001", "text": "Arguing costs more than the discount."}],
+             "source_refs": ["S1", "S2"], "hypothesis_ids": ["H2"], "confidence": "high"},
+        ],
+        hypotheses=[
+            {"id": "H1", "verdict": "mixed", "verdict_reason": "Context only.",
+             "sources": [{"ref": "S1", "claim": "Owners complain.", "covers": "context"}]},
+            {"id": "H2", "verdict": "supported", "verdict_reason": "Survey says so.",
+             "sources": [{"ref": "S2", "claim": "Most buyers wait for a friend.", "covers": "core"}]},
+        ],
+    ))
+
+    background, covered = _read(tmp_path, f"{study_dir}/synthesis.json")["themes"]
+    assert background["confidence"] == "medium"
+    assert "core claim" in background["confidence_reason"]
+    assert covered["confidence"] == "high"
 
 
 async def test_prompted_and_price_themes_are_capped(tmp_path):

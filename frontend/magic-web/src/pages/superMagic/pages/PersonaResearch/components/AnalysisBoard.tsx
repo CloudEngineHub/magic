@@ -66,7 +66,9 @@ function AnalysisBoard({ onOpenQuote, onOpenSources }: AnalysisBoardProps) {
 	const saturation = synthesis.saturation
 
 	return (
-		<ScrollArea className="h-full">
+		// Radix wraps the content in a display:table box that grows to the widest child (the theme
+		// matrix); forcing block keeps banners and cards inside the viewport width on narrow screens.
+		<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
 			<div className="mx-auto flex max-w-5xl flex-col gap-6 p-4">
 				{synthesis.homogeneity?.warning ? (
 					// Unanimous AI answers read as strong evidence but often mean the model answered alike.

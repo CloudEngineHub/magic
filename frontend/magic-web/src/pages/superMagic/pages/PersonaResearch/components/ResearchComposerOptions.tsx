@@ -1,4 +1,12 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react"
+import {
+	forwardRef,
+	useLayoutEffect,
+	useRef,
+	useState,
+	type ComponentPropsWithoutRef,
+	type KeyboardEvent,
+	type ReactNode,
+} from "react"
 import { useSize } from "ahooks"
 import {
 	Check,
@@ -20,6 +28,8 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/shadcn-ui/dropdown-menu"
 import { Button } from "@/components/shadcn-ui/button"
+import { ActionDrawer, ActionGroup, ActionItem } from "@/components/shadcn-composed/action-drawer"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { Input } from "@/components/shadcn-ui/input"
 import { cn } from "@/utils/cn"
 import {
@@ -265,6 +275,83 @@ interface CustomEntry {
 	onCommit: (draft: string) => void
 }
 
+/** Quiet chip inside the composer; forwards props and ref so a menu trigger can wrap it. */
+const OptionChip = forwardRef<
+	HTMLButtonElement,
+	{
+		icon: ReactNode
+		label: string
+		valueLabel: string
+		active: boolean
+		showAuto: boolean
+		/**
+		 * Phones show each setting as a tile (name above, current value below) that fills its grid
+		 * cell: a bare "Report" or "User research" chip does not say which setting it is.
+		 */
+		tile?: boolean
+	} & ComponentPropsWithoutRef<"button">
+>(function OptionChip({ icon, label, valueLabel, active, showAuto, tile, ...buttonProps }, ref) {
+	const { t } = useTranslation("personaResearch")
+	if (tile) {
+		return (
+			<button
+				ref={ref}
+				type="button"
+				aria-label={`${label}: ${valueLabel}`}
+				{...buttonProps}
+				className={cn(
+					"flex h-14 w-full min-w-0 flex-col justify-center gap-0.5 rounded-xl bg-muted/60 px-3 text-left outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25 max-[340px]:px-2.5",
+					PRESSABLE,
+				)}
+			>
+				<span className="flex items-center gap-1 text-[11px] leading-4 text-muted-foreground [&_svg]:size-3">
+					{icon}
+					<span className="truncate">{label}</span>
+				</span>
+				<span className="flex items-center gap-1">
+					<span
+						className={cn(
+							"min-w-0 flex-1 truncate text-[13px] leading-5",
+							// "Auto" is the unset state: quieter than a value the user picked.
+							active ? "font-medium text-foreground" : "text-muted-foreground",
+						)}
+					>
+						{valueLabel}
+					</span>
+					{/* Dropped on ~320px phones so the value gets the width. */}
+					<ChevronDown className="size-3.5 shrink-0 opacity-60 max-[340px]:hidden" />
+				</span>
+			</button>
+		)
+	}
+	return (
+		<button
+			ref={ref}
+			type="button"
+			aria-label={`${label}: ${valueLabel}`}
+			{...buttonProps}
+			className={cn(
+				// Quiet chips inside the composer; a fixed value gets a soft fill, not solid ink.
+				// Inset focus ring so a focused chip never paints over its neighbour.
+				"inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25",
+				active
+					? "bg-muted text-foreground"
+					: "text-muted-foreground hover:bg-muted hover:text-foreground",
+				PRESSABLE,
+			)}
+		>
+			{icon}
+			{/* Short chips so all settings fit one row: the value alone once it is set,
+			    else the setting's name, plus "· Auto" where there is room. */}
+			<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
+				{active ? valueLabel : label}
+			</span>
+			{!active && showAuto ? <span className="opacity-70">· {t("options.auto")}</span> : null}
+			<ChevronDown className="size-3.5 opacity-60" />
+		</button>
+	)
+})
+
 function OptionMenu({
 	icon,
 	label,
@@ -293,6 +380,7 @@ function OptionMenu({
 	footer?: { icon: ReactNode; label: string; onSelect: () => void }
 }) {
 	const { t } = useTranslation("personaResearch")
+	const isMobile = useIsMobile()
 	const [open, setOpen] = useState(false)
 	const [editing, setEditing] = useState(false)
 	const [draft, setDraft] = useState("")
@@ -325,34 +413,130 @@ function OptionMenu({
 			setEditing(false)
 		}
 	}
+	const customLabel =
+		custom?.selected && custom.current
+			? t("options.customValue", { value: custom.current })
+			: t("options.custom")
+	// The input that replaces the "Custom" row; phones get a taller field and 16px text so iOS
+	// does not zoom the page when it takes focus.
+	const customEditor = custom ? (
+		<div className={cn("flex flex-col gap-1.5", isMobile ? "p-2" : "px-2 pb-1.5 pt-1")}>
+			<div className="flex items-center gap-1.5">
+				<Input
+					autoFocus
+					value={draft}
+					onChange={(event) => setDraft(event.target.value)}
+					onKeyDown={onInputKeyDown}
+					inputMode={custom.numeric ? "numeric" : "text"}
+					maxLength={custom.maxLength}
+					placeholder={custom.placeholder}
+					aria-label={title}
+					aria-invalid={Boolean(error)}
+					className={isMobile ? "h-10 text-base" : "h-8 text-xs"}
+				/>
+				<Button
+					size="sm"
+					className={isMobile ? "h-10 px-3" : "h-8 px-2.5"}
+					disabled={!canApply}
+					onClick={apply}
+				>
+					{t("options.customApply")}
+				</Button>
+			</div>
+			{error ? (
+				<span className="text-[11px] text-destructive" role="alert">
+					{error}
+				</span>
+			) : null}
+		</div>
+	) : null
+
+	if (isMobile) {
+		// Phones pick from a bottom sheet: a dropdown anchored to a small chip is hard to hit and
+		// can run off the screen edge.
+		const choose = (onSelect: () => void) => {
+			onSelect()
+			onOpenChange(false)
+		}
+		return (
+			<>
+				<OptionChip
+					icon={icon}
+					label={label}
+					valueLabel={valueLabel}
+					active={active}
+					showAuto={showAuto}
+					tile
+					onClick={() => onOpenChange(true)}
+				/>
+				<ActionDrawer
+					open={open}
+					onOpenChange={onOpenChange}
+					title={title}
+					showCancel={false}
+				>
+					{description ? (
+						<p className="px-1 text-xs leading-relaxed text-muted-foreground">
+							{description}
+						</p>
+					) : null}
+					<ActionGroup>
+						{items.map((item) => (
+							<ActionItem
+								key={item.key}
+								className="h-11"
+								label={
+									<span className="flex items-center gap-2">
+										<span className="flex-1">{item.label}</span>
+										{item.selected ? <Check className="size-4" /> : null}
+									</span>
+								}
+								onClick={() => choose(item.onSelect)}
+							/>
+						))}
+						{custom ? (
+							editing ? (
+								customEditor
+							) : (
+								<ActionItem
+									className="h-11"
+									icon={<PencilLine className="text-muted-foreground" />}
+									label={
+										<span className="flex items-center gap-2">
+											<span className="flex-1 truncate">{customLabel}</span>
+											{custom.selected ? <Check className="size-4" /> : null}
+										</span>
+									}
+									onClick={startEditing}
+								/>
+							)
+						) : null}
+					</ActionGroup>
+					{footer ? (
+						<ActionGroup>
+							<ActionItem
+								className="h-11 text-muted-foreground"
+								icon={footer.icon}
+								label={footer.label}
+								onClick={() => choose(footer.onSelect)}
+							/>
+						</ActionGroup>
+					) : null}
+				</ActionDrawer>
+			</>
+		)
+	}
 
 	return (
 		<DropdownMenu open={open} onOpenChange={onOpenChange}>
 			<DropdownMenuTrigger asChild>
-				<button
-					type="button"
-					aria-label={`${label}: ${valueLabel}`}
-					className={cn(
-						// Quiet chips inside the composer; a fixed value gets a soft fill, not solid ink.
-						// Inset focus ring so a focused chip never paints over its neighbour.
-						"inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-xs outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-foreground/25",
-						active
-							? "bg-muted text-foreground"
-							: "text-muted-foreground hover:bg-muted hover:text-foreground",
-						PRESSABLE,
-					)}
-				>
-					{icon}
-					{/* Short chips so all settings fit one row: the value alone once it is set,
-					    else the setting's name, plus "· Auto" where there is room. */}
-					<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
-						{active ? valueLabel : label}
-					</span>
-					{!active && showAuto ? (
-						<span className="opacity-70">· {t("options.auto")}</span>
-					) : null}
-					<ChevronDown className="size-3.5 opacity-60" />
-				</button>
+				<OptionChip
+					icon={icon}
+					label={label}
+					valueLabel={valueLabel}
+					active={active}
+					showAuto={showAuto}
+				/>
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				align="start"
@@ -374,35 +558,7 @@ function OptionMenu({
 				))}
 				{custom ? (
 					editing ? (
-						<div className="flex flex-col gap-1.5 px-2 pb-1.5 pt-1">
-							<div className="flex items-center gap-1.5">
-								<Input
-									autoFocus
-									value={draft}
-									onChange={(event) => setDraft(event.target.value)}
-									onKeyDown={onInputKeyDown}
-									inputMode={custom.numeric ? "numeric" : "text"}
-									maxLength={custom.maxLength}
-									placeholder={custom.placeholder}
-									aria-label={title}
-									aria-invalid={Boolean(error)}
-									className="h-8 text-xs"
-								/>
-								<Button
-									size="sm"
-									className="h-8 px-2.5"
-									disabled={!canApply}
-									onClick={apply}
-								>
-									{t("options.customApply")}
-								</Button>
-							</div>
-							{error ? (
-								<span className="text-[11px] text-destructive" role="alert">
-									{error}
-								</span>
-							) : null}
-						</div>
+						customEditor
 					) : (
 						<DropdownMenuItem
 							onSelect={(event) => {
@@ -412,11 +568,7 @@ function OptionMenu({
 							}}
 						>
 							<PencilLine className="size-4 text-muted-foreground" />
-							<span className="flex-1 truncate">
-								{custom.selected && custom.current
-									? t("options.customValue", { value: custom.current })
-									: t("options.custom")}
-							</span>
+							<span className="flex-1 truncate">{customLabel}</span>
 							{custom.selected ? <Check className="size-4" /> : null}
 						</DropdownMenuItem>
 					)

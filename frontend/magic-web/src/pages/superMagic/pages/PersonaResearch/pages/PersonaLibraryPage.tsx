@@ -64,6 +64,7 @@ import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { cn } from "@/utils/cn"
 import { usePersonaResearchStore } from "../context"
+import { useResearchBack } from "../hooks/useResearchBack"
 import CreatePersonaMenu from "../components/CreatePersonaMenu"
 import PersonaAvatar from "../components/PersonaAvatar"
 import PersonaBuildSheet from "../components/PersonaBuildSheet"
@@ -83,6 +84,7 @@ function PersonaLibraryPage() {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const navigate = useNavigate()
+	const goBack = useResearchBack()
 	const isMobile = useIsMobile()
 	const [view, setView] = useState<"personas" | "panels">("personas")
 	const [tier, setTier] = useState<TierFilter>("all")
@@ -262,14 +264,16 @@ function PersonaLibraryPage() {
 							size="icon"
 							className="size-8"
 							aria-label={t("study.backHome")}
-							onClick={() => navigate({ name: RouteName.PersonaResearch })}
+							onClick={goBack}
 						>
 							<ArrowLeft className="size-4" />
 						</Button>
 					</MagicTooltip>
 					<div className="flex flex-1 flex-col">
 						<h1 className="text-sm font-semibold">{t("library.title")}</h1>
-						<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
+						{isMobile ? null : (
+							<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
+						)}
 					</div>
 					{canEdit ? (
 						<CreatePersonaMenu
@@ -278,6 +282,11 @@ function PersonaLibraryPage() {
 						/>
 					) : null}
 				</div>
+				{/* Below the title row on phones: beside the create button the text is squeezed into a
+				    column a few words wide (eight lines in English). */}
+				{isMobile ? (
+					<p className="text-xs text-muted-foreground">{t("library.subtitle")}</p>
+				) : null}
 				<div className={cn("flex gap-2", isMobile ? "flex-col" : "items-center")}>
 					<Tabs value={view} onValueChange={(value) => setView(value as typeof view)}>
 						<TabsList>
@@ -330,7 +339,7 @@ function PersonaLibraryPage() {
 				</div>
 			</div>
 
-			<ScrollArea className="min-h-0 flex-1">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 				{!store.libraryLoaded ? (
 					<LibrarySkeleton />
 				) : view === "personas" ? (

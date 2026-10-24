@@ -119,7 +119,12 @@ function InterviewsPanel({
 			onSelect={onFocus}
 		/>
 	)
-	if (isMobile && !selected) return <ScrollArea className="h-full">{list}</ScrollArea>
+	if (isMobile && !selected)
+		return (
+			<ScrollArea className="h-full" viewportClassName="[&>div]:!block">
+				{list}
+			</ScrollArea>
+		)
 
 	return (
 		<div ref={rootRef} className={cn("flex h-full min-h-0", isMobile && "flex-col")}>
@@ -189,7 +194,10 @@ function InterviewsPanel({
 							{transcriptContent}
 						</InterviewConversation>
 					) : (
-						<ScrollArea className="min-h-0 min-w-0 flex-1">
+						<ScrollArea
+							className="min-h-0 min-w-0 flex-1"
+							viewportClassName="[&>div]:!block"
+						>
 							<div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 pb-14 pt-6">
 								{transcriptContent}
 							</div>

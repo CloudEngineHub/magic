@@ -53,6 +53,7 @@ import {
 	type Topic,
 } from "@/pages/superMagic/pages/Workspace/types"
 import { useIsMobile } from "@/hooks/useIsMobile"
+import { cn } from "@/utils/cn"
 import { useNavigate } from "@/routes/hooks/useNavigate"
 import { RouteName } from "@/routes/constants"
 import { usePersonaResearchStore } from "../context"
@@ -63,6 +64,7 @@ import ReportTemplateCard, {
 import ResearchChatSheet from "../components/ResearchChatSheet"
 import TemplateChatCard from "../components/TemplateChatCard"
 import { useReportTemplateHtml } from "../hooks/useReportTemplateHtml"
+import { useResearchBack } from "../hooks/useResearchBack"
 import { useResearchFileDownload } from "../hooks/useResearchFileDownload"
 import { type TemplateChatEntry, useTemplateChats } from "../hooks/useTemplateChats"
 import { createProjectTextFile, deleteProjectFile } from "../services/projectFileWriter"
@@ -88,6 +90,7 @@ function ReportTemplatesPage() {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
 	const navigate = useNavigate()
+	const goBack = useResearchBack()
 	const isMobile = useIsMobile()
 	const download = useResearchFileDownload()
 	const uploadRef = useRef<HTMLInputElement>(null)
@@ -269,7 +272,7 @@ function ReportTemplatesPage() {
 						size="icon"
 						className="size-8"
 						aria-label={t("study.backHome")}
-						onClick={() => navigate({ name: RouteName.PersonaResearch })}
+						onClick={goBack}
 					>
 						<ArrowLeft className="size-4" />
 					</Button>
@@ -278,7 +281,12 @@ function ReportTemplatesPage() {
 					<h1 className="text-sm font-semibold leading-5">
 						{t("reportTemplates.title")}
 					</h1>
-					<p className="truncate text-xs leading-4 text-muted-foreground">
+					<p
+						className={cn(
+							"text-xs leading-4 text-muted-foreground",
+							isMobile ? "line-clamp-2" : "truncate",
+						)}
+					>
 						{t("reportTemplates.subtitle")}
 					</p>
 				</div>
@@ -300,7 +308,7 @@ function ReportTemplatesPage() {
 				</div>
 			) : null}
 
-			<ScrollArea className="min-h-0 flex-1">
+			<ScrollArea className="min-h-0 flex-1" viewportClassName="[&>div]:!block">
 				<div className="mx-auto w-full max-w-6xl p-4">
 					{templates.length === 0 && templateChats.length === 0 ? (
 						<Empty className="py-16">

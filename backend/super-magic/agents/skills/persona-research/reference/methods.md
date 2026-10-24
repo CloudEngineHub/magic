@@ -21,7 +21,7 @@ Pick one `study_type` in the plan. Types set the default mix of methods; you may
 
 ## Hypotheses
 
-- Write 3-5 hypotheses that the decision depends on. Each is one falsifiable sentence with `support_criteria` and `refute_criteria` stated as observable answers or source findings, not as feelings.
+- Write 3-5 hypotheses that the decision depends on. Each is one falsifiable sentence about one claim; split "A and B are both preconditions" into two hypotheses, or a verdict on one half will be read as a verdict on both. Give each `support_criteria` and `refute_criteria` stated as observable answers or source findings, not as feelings.
 - [Good] "Owners' biggest pain is unrecorded verbal agreements, not meeting notes." Support: most participants describe a specific dispute over an unrecorded deal. Refute: most only mention meeting notes.
 - [Bad] "Owners like AI tools." It cannot be refuted and does not inform a decision.
 - Give each hypothesis `outcome_terms`: 4-12 short phrases a respondent would use to state the tested outcome in the user's language, including the everyday paraphrases, because personas leak conclusions in other words. For "low-frequency buyers will not use up a monthly card": "用不完", "回不了本", "剩着", "白交钱", "去不了几次", "浪费". Pick phrases specific to the outcome, not generic words every persona needs ("咖啡", "老板"). `save_personas` blocks personas whose stance fields contain any of them.
@@ -53,7 +53,8 @@ When the user requests photographic persona avatars, read [persona-portraits.md]
 
 ## Interview Guide
 
-- Use 3-5 shared core questions for comparable coverage across personas, or fewer for a quick interview or an explicitly lower ceiling (never fewer than 1). The rest of the interview consists of probes chosen from each persona's actual answers, not a longer fixed questionnaire. Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two.
+- Use 3-5 shared core questions for comparable coverage across personas, or fewer for a quick interview or an explicitly lower ceiling (never fewer than 1). The rest of the interview consists of probes chosen from each persona's actual answers, not a longer fixed questionnaire. Order them from broad to specific: recent behavior, the problem, current solutions, reaction to the concept, then price or switching. Cut the least decision-relevant question instead of merging two, but never the only question that tests a hypothesis.
+- Round budget: core questions, the negative question and the pressure round must fit the ceiling with room for at least one probe (core + 3 <= ceiling). With a low ceiling, reduce the number of core questions in the plan rather than letting interviewers drop them later. During an interview, when rounds run short, keep this priority: core questions, then the negative question, then the pressure round, then probes.
 - One question per round. `persona_chat` rejects a message with several question marks or a numbered list.
 - Open questions only; never ask two things in one question.
 - Do not reveal the hypothesis before the participant has described their own behavior.
@@ -74,7 +75,7 @@ Before showing the plan, check every guide question against this list, rewrite t
 | `double_barreled` (one question mark) | Two questions are joined by a comma under one question mark | "What kind of membership would you not buy, and if that were fixed would you buy it?" | Ask "What would make you decide not to buy it?" now and "If that changed, what would you do?" next round |
 | `sequence_priming` | An earlier question's wording steers a later answer, or a question presupposes the hypothesis's situation | "What would you want to know first?" followed by "Which rules would make it a bad deal?" | "What would you want to know first?" followed by "What would make you decide not to buy it?" |
 
-Also check the guide as a whole: if a hypothesis says X matters more than Y, the guide must ask about X and Y with equal weight, or neither by name.
+Also check the guide as a whole. Coverage: every hypothesis is tested by at least one core question; list the question number(s) beside each hypothesis in `plan.md` (the interviewers never see this map). A rewritten question replaces its original in the final guide; a question that exists only in the self-check table is not in the guide. Balance: if a hypothesis says X matters more than Y, the guide must ask about X and Y with equal weight, or neither by name.
 
 ## Interview Techniques
 
@@ -141,11 +142,11 @@ Checked by the tool: a theme is unanimous when at least 3 personas support it, n
 | `supported` | The support criteria are met in most relevant completed interviews, at least one external source states the core claim (`covers: core`), and no external source contradicts it |
 | `refuted` | The refute criteria are met in most relevant completed interviews and at least one external source states the refutation (`covers: core`) |
 | `mixed` | Evidence splits across segments, interviews and sources disagree, or the AI-only cap below applies |
-| `insufficient` | Fewer than 3 completed interviews address it and no external source covers it |
+| `insufficient` | Fewer than 3 completed interviews address it and no external source covers it (checked by the tool: interviewees quoted for the hypothesis or holding a stance on its themes) |
 
 A source covers the core claim only when it says the hypothesis itself, not just its background. [Context] "Users complain about auto-renewal" for "rules deter buyers more than price". [Core] "In a 2,000-person survey, most who dropped monthly cards cited expiry rules, few cited price". Sources about price levels or competitors' prices are context for any willingness-to-pay hypothesis.
 
-AI-only cap (checked by the tool): when no source covers the core claim, the verdict is at most `mixed`, and `verdict_reason` starts with "Pending real-person validation" (in the user's language). Real-person results go into `validation`; they do not overwrite `verdict`.
+AI-only cap (checked by the tool): when no source covers the core claim, the verdict is at most `mixed`, and every `mixed` verdict without such a source has a `verdict_reason` that starts with "Pending real-person validation" (in the user's language). Real-person results go into `validation`; they do not overwrite `verdict`.
 
 ### Theme Confidence Rules
 
@@ -160,7 +161,7 @@ The tool lowers `high` and `medium` that lack the required external sources, res
 
 ### Quote Checks
 
-Use exact persona words when presenting interview evidence. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations, and never re-add a removed quote by paraphrasing it. Cite external facts to their external sources. Label your inference and cite its premises; recommendations explain which finding motivates the action and how to test it. An external fact or a recommendation does not require a persona quote.
+Use exact persona words when presenting interview evidence. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations (from `synthesis.json` `checks`), and never re-add a removed quote by paraphrasing it. Cite external facts to their external sources. Label your inference and cite its premises; reasoned inference about mechanisms, boundaries and consequences is expected (report-writing.md, "Analyse, Do Not Just Assemble"), presented as inference, not as an established cause. Recommendations explain which finding motivates the action and how to test it. An external fact or a recommendation does not require a persona quote.
 
 ### Writing Findings
 
@@ -168,7 +169,7 @@ Bottom line (the report's opening verdict):
 
 - `go` only when every hypothesis the decision depends on is `supported` (or `refuted`, for a no-go) with a source that covers the core claim. When any of them is `mixed`, `insufficient`, or pending real-person validation, the verdict is at most `conditional`, and the conditions are exactly the things to validate first.
 - When synthesis raised a homogeneity warning, or the leak check was skipped or overridden, say so beside the opening judgment. Keep counter-evidence and minority views beside the findings they qualify; when selecting the top themes, include a relevant opposing or mixed theme if one exists.
-- AI-simulated samples do not support statistical inference. Never report AI stance counts, ratios, percentages or averages. Use most / some / a few only to describe the relevant AI interviews, not prevalence in real users. Effective sample accounting describes the study as a whole, not support for an individual claim. A theme raised by one persona is a signal, not a pattern; `not_mentioned` is silence, never agreement.
+- AI-simulated samples do not support statistical inference. Never report percentages, ratios or averages from AI interviews, or words that imply prevalence among real people. Naming the personas who said something, or a plain count of them ("three of the four interviewees"), is concrete and allowed when it matches the cited quotes; it describes this panel only. Effective sample accounting describes the study as a whole, not support for an individual claim. A theme raised by one persona is a signal, not a pattern; `not_mentioned` is silence, never agreement.
 - Compare public voices and AI interviews only on the same claim in comparable circumstances. Opposite answers are conflicting evidence; answers about different questions are not comparable, and silence leaves an evidence gap. For example, "I check the price before buying" and "a friend prompted me to try" can both be true. Do not infer disagreement or weaken a hypothesis merely because the statements emphasize different things.
 
 Use [report-templates.md](report-templates.md) for report structure, attribution display and sample accounting, and [report-charts.md](report-charts.md) to decide whether a chart adds information. These presentation choices do not change the verdict or confidence rules above.
@@ -177,7 +178,7 @@ Use [report-templates.md](report-templates.md) for report structure, attribution
 
 Answer the decision in the confirmed plan. Include only actions relevant to that decision and supported by the findings; each identifies its hypothesis, evidence or inference, and the observable result that would justify proceeding. Untested actions remain candidates. A conditional verdict gives tests and the actions conditional on their results; a no-go gives stopping conditions or cheap tests, not a launch plan. Feature and usability studies need no positioning, pricing, channel strategy or 30-day launch plan unless the confirmed decision calls for them.
 
-When pricing is relevant, give a direction and range only if cited evidence supports them; otherwise state the missing evidence and how to collect it. Never invent a range or present one AI answer as a recommended price. AI price and willingness-to-pay answers may be optimistic and cannot set a price without real-person validation; state this beside any AI-derived pricing direction. Report observed spending as an observation, not as a price recommendation.
+When pricing is relevant, give a direction and range only if cited evidence supports them; otherwise state the missing evidence and how to collect it. Never invent a range, derive one from AI answers, or present one AI answer as a recommended price. AI price and willingness-to-pay answers may be optimistic and cannot set a price without real-person validation; state this beside any AI-derived pricing direction. Report observed spending as an observation, not as a price recommendation.
 
 ## Real Voices (Desk Research)
 

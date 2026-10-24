@@ -18,7 +18,7 @@
 		"matrixTitle": "Themes × personas",
 		"newThemesTrend": "New themes per respondent",
 		"notSaturated": "New themes are still appearing; consider more interviews",
-		"notValidated": "Real-person validation: not done",
+		"notValidated": "Not yet validated with real people",
 		"otherSegment": "Other",
 		"relatedHypotheses": "Related hypotheses: {{ids}}",
 		"saturated": "The last respondents added no new themes; themes are saturated",
@@ -47,13 +47,14 @@
 	},
 	"composer": {
 		"followUpPlaceholder": "Ask a follow-up or tell the AI what to change",
-		"newStudyPlaceholder": "What business question do you want to research? e.g. Why do trial users churn in week two? Enter to send; Shift + Enter for a new line"
+		"newStudyPlaceholder": "What business question do you want to research? e.g. Why do trial users churn in week two? Enter to send; Shift + Enter for a new line",
+		"newStudyPlaceholderMobile": "What business question do you want to research? e.g. Why do trial users churn in week two?"
 	},
 	"confidence": {
 		"high": "High",
 		"low": "Low",
 		"medium": "Medium",
-		"toValidate": "Needs real-person validation"
+		"toValidate": "Needs validation with real people"
 	},
 	"console": {
 		"analysis": "Analysis",
@@ -133,7 +134,7 @@
 			"study": "Study state",
 			"synthesis": "Synthesis",
 			"validation": "Validation questionnaire",
-			"validationCsv": "Questionnaire table (for survey tools)",
+			"validationCsv": "Questionnaire sheet (for survey tools)",
 			"validationResults": "Real-person comparison"
 		}
 	},
@@ -289,7 +290,7 @@
 		"promise": {
 			"clarify": "Clarifies the goal before interviewing",
 			"quotes": "Every conclusion comes with quotes",
-			"validate": "Includes a real-people survey"
+			"validate": "Comes with a survey for real users"
 		},
 		"rename": "Rename",
 		"reportTemplatesLabel": "Report templates",
@@ -317,7 +318,7 @@
 		"moreQuotes": "{{count}} more quotes",
 		"openRound": "Round {{index}} · see context",
 		"openTranscript": "See interview context",
-		"progress": "{{decided}}/{{total}} judged",
+		"progress": "{{decided}}/{{total}} concluded",
 		"prompted": "Prompted",
 		"promptedBy": "The moderator raised this first: \"{{question}}\"",
 		"promptedHint": "The moderator raised this idea before the persona said it, so it is weaker evidence",
@@ -336,17 +337,17 @@
 			"support": "Agree"
 		},
 		"supportIf": "Supported if",
-		"validationSummary": "Real-person check: "
+		"validationSummary": "Checked with real people: "
 	},
 	"interviewChat": {
 		"aiNote": "Answers are AI-simulated",
 		"failed": "Message was not sent. Try again.",
-		"keyboardHint": "Enter to send · Shift+Enter for a new line",
+		"keyboardHint": "Enter to send · Shift + Enter for a new line",
 		"label": "Continue chatting with {{name}}",
 		"newReply": "New answer",
 		"placeholder": "Ask {{name}} a follow-up…",
 		"processing": "Processing your follow-up…",
-		"queued": "Waiting to be processed; follow-ups are queued while another task is running",
+		"queued": "Queued. Follow-ups wait while another task is running.",
 		"reportUnchanged": "New answers are not yet included in the original summary or report",
 		"retry": "Retry sending",
 		"send": "Send",
@@ -434,7 +435,7 @@
 			"summary": "Test business judgements with AI-simulated respondents. Click for the full guide.",
 			"title": "AI research guide",
 			"validation": "AI findings need real people to check them. Validation holds a questionnaire for real customers (exportable as CSV for survey tools). Upload the answers to the conversation and the AI compares them with the simulated findings, marking where they agree and conflict.",
-			"validationTitle": "Real-person validation"
+			"validationTitle": "Validating with real people"
 		},
 		"home": {
 			"composer": {
@@ -494,13 +495,13 @@
 	"options": {
 		"answeredRounds": "{{count}} rounds answered",
 		"auto": "Auto",
-		"autoPanel": "Auto (AI decides from the quota)",
-		"autoRounds": "Auto (choose depth for the research question)",
+		"autoPanel": "Auto (AI decides)",
+		"autoRounds": "Auto (AI picks the depth)",
 		"custom": "Custom",
 		"customApply": "Apply",
 		"customRange": "Enter {{min}}–{{max}}",
 		"customValue": "Custom: {{value}}",
-		"depthDeep": "In-depth exploration",
+		"depthDeep": "Deep dive",
 		"depthQuick": "Quick overview",
 		"depthStandard": "Standard interview",
 		"manageReportTemplates": "Manage report templates",
@@ -687,7 +688,7 @@
 			"placeholder": "Describe the report style you want, e.g. dark, magazine-like, big headlines",
 			"saved": "Template saved: {{names}}",
 			"tipBase": "Or say which existing template to start from",
-			"tipDescribe": "Describe brand colours, fonts, and layout, e.g. \"dark, magazine-like, big headlines\"",
+			"tipDescribe": "Describe brand colors, fonts, and layout, e.g. \"dark, magazine-like, big headlines\"",
 			"tipUpload": "Upload a report or web page HTML you like as a reference",
 			"title": "Create a template with AI",
 			"unsentNotice": "This message was never sent, so the AI has not seen it. Your request is back in the composer; send it again when ready."
@@ -770,7 +771,7 @@
 	"state": {
 		"fileLoadFailed": "Could not read the file. Please try again later.",
 		"fileLoading": "Loading file…",
-		"loadFailed": "AI Research failed to load",
+		"loadFailed": "AI research failed to load",
 		"retry": "Retry"
 	},
 	"status": {
@@ -804,7 +805,7 @@
 		"resizePanels": "Resize conversation and outputs",
 		"scale": "{{personas}} people · up to {{rounds}} rounds each",
 		"share": "Share",
-		"socialSampled": "Social sampled: {{platforms}}",
+		"socialSampled": "Social platforms sampled: {{platforms}}",
 		"untitled": "Untitled study"
 	},
 	"studyType": {
@@ -851,7 +852,7 @@
 	"toolCard": {
 		"answering": "Answering…",
 		"attempt": "Attempt {{index}}",
-		"foldedAttempts": "{{count}} attempts not run; the AI adjusted",
+		"foldedAttempts": "{{count}} attempts skipped after the AI adjusted its approach",
 		"newAndReused": "{{new}} new · {{reused}} reused",
 		"notAnswered": "Could not answer",
 		"round": "Round {{round}}",
@@ -930,7 +931,7 @@
 				"gender": "female",
 				"line": "Two yuan cheaper doesn't matter. What matters is whether I can find someone when it breaks.",
 				"name": "He Jing",
-				"tags": ["Retired teacher", "Runs a neighbourhood group-buy"]
+				"tags": ["Retired teacher", "Runs a neighborhood group-buy"]
 			}
 		]
 	}
