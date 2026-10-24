@@ -15,6 +15,9 @@ export interface HelpIllustrationProps {
 	variant: "flow" | "tree" | "document"
 }
 
+/** Columns of the wide flow layout; keep in step with `grid-cols-3` below. */
+const FLOW_COLUMNS = 3
+
 /** 图示只解释关系，不呈现真实文件、连接状态或可点击的操作。 */
 export function HelpIllustration({ title, steps, variant }: HelpIllustrationProps) {
 	const { t } = useTranslation("interface")
@@ -30,7 +33,9 @@ export function HelpIllustration({ title, steps, variant }: HelpIllustrationProp
 				className={cn(
 					"p-5",
 					variant === "flow"
-						? "grid gap-3 [@container_help-article_(min-width:500px)]:grid-cols-3"
+						? // Wide: three columns with a 32px gutter so the 16px arrow sits in the gap instead of on
+							// the card borders.
+							"grid gap-3 [@container_help-article_(min-width:500px)]:grid-cols-3 [@container_help-article_(min-width:500px)]:gap-x-8"
 						: "space-y-3",
 				)}
 			>
@@ -51,11 +56,14 @@ export function HelpIllustration({ title, steps, variant }: HelpIllustrationProp
 									aria-hidden
 									className="mx-auto mb-3 text-muted-foreground [@container_help-article_(min-width:500px)]:hidden"
 								/>
-								<ArrowRight
-									size={16}
-									aria-hidden
-									className="absolute -left-3.5 top-5 z-10 hidden rounded-full bg-background text-muted-foreground [@container_help-article_(min-width:500px)]:block"
-								/>
+								{/* Only between neighbours in one row: the first card of a row has nothing on its left. */}
+								{index % FLOW_COLUMNS !== 0 && (
+									<ArrowRight
+										size={16}
+										aria-hidden
+										className="absolute -left-6 top-1/2 z-10 hidden -translate-y-1/2 text-muted-foreground [@container_help-article_(min-width:500px)]:block"
+									/>
+								)}
 							</>
 						)}
 						<div className="flex-1 rounded-lg border bg-background p-4 shadow-sm">
