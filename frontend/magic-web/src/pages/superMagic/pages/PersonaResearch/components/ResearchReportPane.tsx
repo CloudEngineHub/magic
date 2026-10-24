@@ -10,6 +10,11 @@ import {
 	EmptyTitle,
 } from "@/components/shadcn-ui/empty"
 import Detail, { type DetailRef } from "@/pages/superMagic/components/Detail"
+import PreviewDetailPopup, {
+	type PreviewDetailPopupRef,
+} from "@/pages/superMagicMobile/components/PreviewDetailPopup"
+import { buildMobileFilePreviewDetail } from "@/pages/superMagicMobile/pages/TopicPage/mobileFilePreview"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import { usePersonaResearchStore } from "../context"
 import { attachmentVersionKey } from "../services/researchFiles"
 
@@ -29,7 +34,11 @@ const ResearchReportPane = forwardRef<
 >(function ResearchReportPane({ generating, onInterceptFile }, ref) {
 	const { t } = useTranslation("personaResearch")
 	const store = usePersonaResearchStore()
+	const isMobile = useIsMobile()
 	const detailRef = useRef<DetailRef>(null)
+	// Phones render the report in place with the shared mobile preview (as the AI canvas tab does);
+	// the desktop preview pane does not draw there and left the tab blank.
+	const mobilePreviewRef = useRef<PreviewDetailPopupRef>(null)
 	const [userSelectDetail, setUserSelectDetail] = useState<unknown>()
 	const [fullscreen, setFullscreen] = useState(false)
 	// Bumping it remounts the preview, which refetches the file link and rereads the content.
@@ -45,11 +54,22 @@ const ResearchReportPane = forwardRef<
 	// Reopen when the agent rewrites the report so the pane never shows a stale version.
 	useEffect(() => {
 		if (!report) return
+		if (isMobile) {
+			const detail = buildMobileFilePreviewDetail(report, store.attachmentList)
+			if (detail)
+				mobilePreviewRef.current?.open(detail, store.attachments, store.attachmentList)
+			return
+		}
 		const timer = setTimeout(() => detailRef.current?.openFileTab?.(report), 100)
 		return () => clearTimeout(timer)
 		// versionKey covers file_id and rewrites; refreshKey remounts the preview, which must reopen it.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [versionKey, refreshKey])
+	}, [versionKey, refreshKey, isMobile])
+
+	useEffect(() => {
+		// Keep the phone preview's file context current without reloading the report.
+		mobilePreviewRef.current?.updateAttachments(store.attachments, store.attachmentList)
+	}, [store.attachments, store.attachmentList])
 
 	const project = store.selectedProject
 	if (!report || !project) {
@@ -67,6 +87,31 @@ const ResearchReportPane = forwardRef<
 					</EmptyDescription>
 				</EmptyHeader>
 			</Empty>
+		)
+	}
+
+	if (isMobile) {
+		return (
+			<div className="h-full min-h-0" data-testid="persona-research-report">
+				<PreviewDetailPopup
+					key={`${store.selectedTopic?.id}-report-${refreshKey}`}
+					ref={mobilePreviewRef}
+					inline
+					// The toolbar would only repeat the tab bar's actions above.
+					showFileHeader={false}
+					selectedProject={project}
+					selectedTopic={store.selectedTopic}
+					allowEdit={false}
+					setUserSelectDetail={(detail) => {
+						if (detail)
+							mobilePreviewRef.current?.open(
+								detail,
+								store.attachments,
+								store.attachmentList,
+							)
+					}}
+				/>
+			</div>
 		)
 	}
 

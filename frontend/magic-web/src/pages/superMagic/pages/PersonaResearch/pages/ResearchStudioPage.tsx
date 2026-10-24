@@ -528,6 +528,9 @@ function ResearchStudioPage() {
 						className={cn("h-8", isMobile && "size-8")}
 						aria-label={t("study.share")}
 						data-guide-anchor={ResearchOnboardingAnchor.StudioShare}
+						// On phones the share popover only renders its sheet; the trigger is not wired to
+						// it, so the caller opens it. Desktop's popover trigger already toggles itself.
+						onClick={isMobile ? () => setShareOpen(true) : undefined}
 					>
 						<Share2 className="size-4" />
 						{isMobile ? null : t("study.share")}
@@ -597,16 +600,19 @@ function ResearchStudioPage() {
 							<RefreshCw className="size-3.5" />
 							{compactReportActions ? null : t("report.refresh")}
 						</Button>
-						<Button
-							variant="ghost"
-							size="sm"
-							className="h-7 gap-1.5 px-2 text-xs"
-							aria-label={t("report.fullscreen")}
-							onClick={() => reportPaneRef.current?.enterFullscreen()}
-						>
-							<Maximize2 className="size-3.5" />
-							{compactReportActions ? null : t("report.fullscreen")}
-						</Button>
+						{/* Phones open the report in the file popup, which already is full screen. */}
+						{isMobile ? null : (
+							<Button
+								variant="ghost"
+								size="sm"
+								className="h-7 gap-1.5 px-2 text-xs"
+								aria-label={t("report.fullscreen")}
+								onClick={() => reportPaneRef.current?.enterFullscreen()}
+							>
+								<Maximize2 className="size-3.5" />
+								{compactReportActions ? null : t("report.fullscreen")}
+							</Button>
+						)}
 						<Button
 							variant="ghost"
 							size="sm"
