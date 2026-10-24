@@ -203,6 +203,8 @@ function ResearchHomePage() {
 							<button
 								type="button"
 								data-guide-anchor={ResearchOnboardingAnchor.HomePersonaLibrary}
+								// The text label is hidden on the narrowest phones, so the name moves to the button.
+								aria-label={t("home.personaLibraryLabel")}
 								className={cn(HOME_LINK, PRESSABLE)}
 								onClick={openLibrary}
 							>
@@ -219,7 +221,10 @@ function ResearchHomePage() {
 										<UsersRound className="size-4" />
 									) : null}
 								</span>
-								{t("home.personaLibraryLabel")}
+								{/* Hidden below 340px so the five top links stay on one row. */}
+								<span className="max-[340px]:hidden">
+									{t("home.personaLibraryLabel")}
+								</span>
 								{/* Counted from the file list: the home reads only a few preview personas. */}
 								<span className="font-mono text-xs opacity-70">
 									{store.personaFileCount}
@@ -269,7 +274,9 @@ function ResearchHomePage() {
 										"font-black tracking-[-0.035em] text-foreground",
 										// Leading goes with the size: cn() drops a leading class placed before a text size.
 										isMobile
-											? "text-4xl leading-[1.15]"
+											? // On ~320px phones the second line (9 characters at 36px) would wrap and
+												// leave a lone character; 30px keeps both lines whole.
+												"text-4xl leading-[1.15] max-[340px]:text-3xl"
 											: "text-[64px] leading-[1.08]",
 									)}
 								>
