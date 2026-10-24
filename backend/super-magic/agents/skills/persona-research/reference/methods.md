@@ -142,11 +142,11 @@ Checked by the tool: a theme is unanimous when at least 3 personas support it, n
 | `supported` | The support criteria are met in most relevant completed interviews, at least one external source states the core claim (`covers: core`), and no external source contradicts it |
 | `refuted` | The refute criteria are met in most relevant completed interviews and at least one external source states the refutation (`covers: core`) |
 | `mixed` | Evidence splits across segments, interviews and sources disagree, or the AI-only cap below applies |
-| `insufficient` | Fewer than 3 completed interviews address it and no external source covers it |
+| `insufficient` | Fewer than 3 completed interviews address it and no external source covers it (checked by the tool: interviewees quoted for the hypothesis or holding a stance on its themes) |
 
 A source covers the core claim only when it says the hypothesis itself, not just its background. [Context] "Users complain about auto-renewal" for "rules deter buyers more than price". [Core] "In a 2,000-person survey, most who dropped monthly cards cited expiry rules, few cited price". Sources about price levels or competitors' prices are context for any willingness-to-pay hypothesis.
 
-AI-only cap (checked by the tool): when no source covers the core claim, the verdict is at most `mixed`, and `verdict_reason` starts with "Pending real-person validation" (in the user's language). Real-person results go into `validation`; they do not overwrite `verdict`.
+AI-only cap (checked by the tool): when no source covers the core claim, the verdict is at most `mixed`, and every `mixed` verdict without such a source has a `verdict_reason` that starts with "Pending real-person validation" (in the user's language). Real-person results go into `validation`; they do not overwrite `verdict`.
 
 ### Theme Confidence Rules
 
@@ -161,7 +161,7 @@ The tool lowers `high` and `medium` that lack the required external sources, res
 
 ### Quote Checks
 
-Use exact persona words when presenting interview evidence. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations, and never re-add a removed quote by paraphrasing it. Cite external facts to their external sources. Label your inference and cite its premises; recommendations explain which finding motivates the action and how to test it. An external fact or a recommendation does not require a persona quote.
+Use exact persona words when presenting interview evidence. `save_study_synthesis` locates each quote in that persona's own answers and drops the ones it cannot find; report how many were removed in the report's limitations (from `synthesis.json` `checks`), and never re-add a removed quote by paraphrasing it. Cite external facts to their external sources. Label your inference and cite its premises; reasoned inference about mechanisms, boundaries and consequences is expected (report-writing.md, "Analyse, Do Not Just Assemble"), presented as inference, not as an established cause. Recommendations explain which finding motivates the action and how to test it. An external fact or a recommendation does not require a persona quote.
 
 ### Writing Findings
 
@@ -178,7 +178,7 @@ Use [report-templates.md](report-templates.md) for report structure, attribution
 
 Answer the decision in the confirmed plan. Include only actions relevant to that decision and supported by the findings; each identifies its hypothesis, evidence or inference, and the observable result that would justify proceeding. Untested actions remain candidates. A conditional verdict gives tests and the actions conditional on their results; a no-go gives stopping conditions or cheap tests, not a launch plan. Feature and usability studies need no positioning, pricing, channel strategy or 30-day launch plan unless the confirmed decision calls for them.
 
-When pricing is relevant, give a direction and range only if cited evidence supports them; otherwise state the missing evidence and how to collect it. Never invent a range or present one AI answer as a recommended price. AI price and willingness-to-pay answers may be optimistic and cannot set a price without real-person validation; state this beside any AI-derived pricing direction. Report observed spending as an observation, not as a price recommendation.
+When pricing is relevant, give a direction and range only if cited evidence supports them; otherwise state the missing evidence and how to collect it. Never invent a range, derive one from AI answers, or present one AI answer as a recommended price. AI price and willingness-to-pay answers may be optimistic and cannot set a price without real-person validation; state this beside any AI-derived pricing direction. Report observed spending as an observation, not as a price recommendation.
 
 ## Real Voices (Desk Research)
 

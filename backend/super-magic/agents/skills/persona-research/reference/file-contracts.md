@@ -373,6 +373,7 @@ The structured analysis behind the report and the analysis board. Write it in th
 | `dimensions` | no | array of `{ "id", "name", "level_by_segment", "quote_refs" }`: `id` is `D1`, `D2`, ...; `level_by_segment` maps segment id to `high` \| `medium` \| `low`; `quote_refs` as in themes |
 | `saturation` | yes | `{ "new_themes_per_interview": [<int>, ...], "saturated": true \| false }`, see methods.md |
 | `homogeneity` | no | `{ "unanimous_theme_ids": ["T1", ...], "warning": true \| false }`, see methods.md |
+| `checks` | no | written by the tool: `{ "quotes_total", "removed_quotes", "ignored_source_refs", "adjustments", "downweighted_interviews" }`; the report's limitations take the removed-quote count and rule adjustments from here |
 
 Theme object:
 
