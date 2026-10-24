@@ -284,8 +284,10 @@ const OptionChip = forwardRef<
 		valueLabel: string
 		active: boolean
 		showAuto: boolean
+		/** Phones below 480px lay the chips out in a two-column grid, so each chip fills its cell. */
+		fill?: boolean
 	} & ComponentPropsWithoutRef<"button">
->(function OptionChip({ icon, label, valueLabel, active, showAuto, ...buttonProps }, ref) {
+>(function OptionChip({ icon, label, valueLabel, active, showAuto, fill, ...buttonProps }, ref) {
 	const { t } = useTranslation("personaResearch")
 	return (
 		<button
@@ -300,13 +302,21 @@ const OptionChip = forwardRef<
 				active
 					? "bg-muted text-foreground"
 					: "text-muted-foreground hover:bg-muted hover:text-foreground",
+				fill && "max-[479px]:w-full",
 				PRESSABLE,
 			)}
 		>
 			{icon}
 			{/* Short chips so all settings fit one row: the value alone once it is set,
 			    else the setting's name, plus "· Auto" where there is room. */}
-			<span className={cn("max-w-[10em] truncate", active && "font-medium")}>
+			<span
+				className={cn(
+					"max-w-[10em] truncate",
+					active && "font-medium",
+					// In a grid cell the name takes the free width so the chevron sits at the cell's edge.
+					fill && "max-[479px]:flex-1 max-[479px]:text-left",
+				)}
+			>
 				{active ? valueLabel : label}
 			</span>
 			{!active && showAuto ? <span className="opacity-70">· {t("options.auto")}</span> : null}
@@ -429,6 +439,7 @@ function OptionMenu({
 					valueLabel={valueLabel}
 					active={active}
 					showAuto={showAuto}
+					fill
 					onClick={() => onOpenChange(true)}
 				/>
 				<ActionDrawer

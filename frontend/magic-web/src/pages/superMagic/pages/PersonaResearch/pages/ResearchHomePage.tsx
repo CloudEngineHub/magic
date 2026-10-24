@@ -305,6 +305,11 @@ function ResearchHomePage() {
 								<div
 									className={cn(
 										"mt-6 rounded-2xl bg-background shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.14)] ring-1 ring-border transition-shadow focus-within:shadow-[0_10px_30px_-12px_rgb(0_0_0/0.24)] focus-within:ring-foreground/30",
+										// The phone composer is a bottom dock: a grey band (square corners that poke out of
+										// this rounded card) around a white shadowed pill. Flatten both so the input and the
+										// settings below read as one surface. Tied to the dock's markup in MobileComposer.
+										isMobile &&
+											"[&>div:first-child>.rounded-3xl]:!bg-transparent [&>div:first-child>.rounded-3xl]:!shadow-none [&>div:first-child]:!bg-transparent [&>div:first-child]:!p-0",
 										styles.enter,
 									)}
 									style={enterDelay(170)}
@@ -328,9 +333,23 @@ function ResearchHomePage() {
 										onChange={updateOptions}
 										reportTemplate={reportTemplateOption}
 										guideAnchor={ResearchOnboardingAnchor.HomeSettings}
-										className="px-2.5 pb-3 pt-1.5"
+										// Below 480px the chips form a two-column grid instead of ragged wrapped rows.
+										className={cn(
+											"pb-3 pt-1.5",
+											isMobile
+												? "px-3 max-[479px]:grid max-[479px]:grid-cols-2"
+												: "px-2.5",
+										)}
 										pickedCount={store.studyPersonaPicks.length}
-										trailing={<StudyPersonaPicks onPickMore={openLibrary} />}
+										trailing={
+											isMobile ? (
+												<div className="flex justify-end max-[479px]:col-span-2">
+													<StudyPersonaPicks onPickMore={openLibrary} />
+												</div>
+											) : (
+												<StudyPersonaPicks onPickMore={openLibrary} />
+											)
+										}
 									/>
 								</div>
 								{/* What every study promises, in place of decorative value-prop tiles. */}
