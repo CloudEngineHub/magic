@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { SuperMagicStore } from "@/pages/superMagic/stores"
 import type { SuperMagicChunkMessage } from "@/types/chat/intermediate_message"
-import mockStream from "@/pages/superMagic/stores/mock_v1.json"
 import { IntermediateMessageType } from "@/types/chat/intermediate_message"
 import { getToolRemarkPreviewStrategy } from "../registry"
 

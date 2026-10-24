@@ -134,8 +134,7 @@ function readTurnDeliveredTask(messages: SuperMagicMessageItem[]): boolean {
  * 2. *The conversation's tail*, read the way the rest of the workspace reads it: the node behind the
  *    last assistant message answers first, because it is the live field the store's merge writes the
  *    item's `superStatus` from and the item is the fallback for a conversation that arrived without
- *    one (`stores/decision.md`, LF-03 — the loading hook and the read-progress hook read it there
- *    for the same reason). A tool message is skipped rather than taken as the authority.
+ *    one. 加载与阅读进度也使用此回退；工具消息不能作为任务结束的判定依据。
  * 3. *The turn having delivered a task*, above.
  *
  * Each of them can lag the others — the store ships a convergence service for the states where the
