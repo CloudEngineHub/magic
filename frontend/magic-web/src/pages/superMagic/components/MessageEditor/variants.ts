@@ -23,7 +23,7 @@ const messageEditorFolderMentionAlignmentClasses =
 	"[&_.ProseMirror_.magic-mention[data-mention-node-view='folder']]:!align-middle"
 
 const messageEditorContentParagraphClasses =
-	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:whitespace-pre-wrap [&_.ProseMirror_p]:break-all [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:leading-[1.5]"
+	"[&_.ProseMirror_p]:m-0 [&_.ProseMirror_p]:whitespace-pre-wrap [&_.ProseMirror_p]:[overflow-wrap:anywhere] [&_.ProseMirror_p]:p-0 [&_.ProseMirror_p]:leading-[1.5]"
 
 const messageEditorContentSelectionClasses =
 	"[&_.ProseMirror::selection]:bg-blue-200 dark:[&_.ProseMirror::selection]:bg-blue-500/40 [&_.ProseMirror_*::selection]:bg-blue-200 dark:[&_.ProseMirror_*::selection]:bg-blue-500/40"
