@@ -39,6 +39,8 @@ interface UseResearchDetailEventsOptions {
 	routeFile: (file: unknown) => boolean
 	/** Brings the "report and files" output tab into view before a preview opens. */
 	revealFiles: () => void
+	/** Off on phones: the mobile preview popup owns these events there. */
+	enabled?: boolean
 	setActiveFileId: (fileId: string | null) => void
 	setAutoDetail: (detail: unknown) => void
 }
@@ -57,6 +59,7 @@ export function useResearchDetailEvents({
 	revealFiles,
 	setActiveFileId,
 	setAutoDetail,
+	enabled = true,
 }: UseResearchDetailEventsOptions) {
 	const downloadFile = useResearchFileDownload()
 
@@ -117,6 +120,7 @@ export function useResearchDetailEvents({
 	const handleAutoDetailUpdate = useMemoizedFn((detail: unknown) => setAutoDetail(detail))
 
 	useEffect(() => {
+		if (!enabled) return
 		pubsub.subscribe(PubSubEvents.Open_File_Tab, handleOpenFileTab)
 		pubsub.subscribe(PubSubEvents.Open_Playback_Tab, handleOpenPlaybackTab)
 		pubsub.subscribe(PubSubEvents.Open_File_Tab_By_Path, handleOpenFileTabByPath)
@@ -135,6 +139,7 @@ export function useResearchDetailEvents({
 			pubsub.unsubscribe(PubSubEvents.Super_Magic_Update_Auto_Detail, handleAutoDetailUpdate)
 		}
 	}, [
+		enabled,
 		handleActiveFileIdUpdate,
 		handleAutoDetailUpdate,
 		handleOpenFileTab,
